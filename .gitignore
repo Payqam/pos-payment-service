@@ -1,0 +1,43 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# CDK output directories
+cdk.out/
+
+# Environment-specific files
+.env
+.env.local
+.env.*.local
+
+# IDE/editor-specific files
+.vscode/
+.idea/
+*.swp
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# OS-specific files
+*.bak
+*.tmp
+
+# AWS credentials and configuration
+.aws/
+
+# Temporary files and other
+*.temp
+*.cache
