@@ -21,6 +21,10 @@ const envConfigs: EnvConfig = app.node.tryGetContext(envName);
 const stackName = `${process.env.CDK_STACK_NAME_PREFIX}-backend-${envName}${namespace}`;
 
 const stack = new CDKStack(app, stackName, {
+  env: {
+    account: envConfigs.CDK_ACCOUNT,
+    region: envConfigs.CDK_REGION,
+  },
   envName,
   namespace,
   envConfigs,
