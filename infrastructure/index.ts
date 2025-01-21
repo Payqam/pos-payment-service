@@ -2,12 +2,14 @@
 import "source-map-support/register";
 import { App, Tags } from "aws-cdk-lib";
 import { CDKStack } from "./cdk-stack";
+import * as dotenv from "dotenv";
 
 export interface EnvConfig {
   CDK_ACCOUNT: string;
   CDK_REGION: string;
   LOG_LEVEL: "DEBUG" | "INFO" | "WARN" | "ERROR";
 }
+dotenv.config();
 
 const app = new App();
 const envName: string = app.node.tryGetContext("env");
