@@ -33,22 +33,22 @@
     "@aws-cdk/aws-ecs:disableExplicitDeploymentControllerForCircuitBreaker": true,
 
     "DEV": {
-      "CDK_ACCOUNT": "980692338090",
+      "CDK_ACCOUNT": "",
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO"
     },
     "SQA": {
-      "CDK_ACCOUNT": "980692338090",
+      "CDK_ACCOUNT": "",
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO"
     },
     "UAT": {
-      "CDK_ACCOUNT": "980692338090",
+      "CDK_ACCOUNT": "",
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO"
     },
     "PRD": {
-      "CDK_ACCOUNT": "980692338090",
+      "CDK_ACCOUNT": "",
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO"
     }
