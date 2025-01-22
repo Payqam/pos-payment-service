@@ -7,22 +7,31 @@ export interface SecurityGroupsProps {
 
 export class PaymentServiceSecurityGroups extends Construct {
   public readonly lambdaSecurityGroup: ec2.SecurityGroup;
+
   public readonly apiGatewaySecurityGroup: ec2.SecurityGroup;
 
   constructor(scope: Construct, id: string, props: SecurityGroupsProps) {
     super(scope, id);
 
-    this.lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
-      vpc: props.vpc,
-      description: 'Security group for Lambda functions',
-      allowAllOutbound: true,
-    });
+    this.lambdaSecurityGroup = new ec2.SecurityGroup(
+      this,
+      'LambdaSecurityGroup',
+      {
+        vpc: props.vpc,
+        description: 'Security group for Lambda functions',
+        allowAllOutbound: true,
+      }
+    );
 
-    this.apiGatewaySecurityGroup = new ec2.SecurityGroup(this, 'ApiGatewaySecurityGroup', {
-      vpc: props.vpc,
-      description: 'Security group for API Gateway VPC endpoints',
-      allowAllOutbound: true,
-    });
+    this.apiGatewaySecurityGroup = new ec2.SecurityGroup(
+      this,
+      'ApiGatewaySecurityGroup',
+      {
+        vpc: props.vpc,
+        description: 'Security group for API Gateway VPC endpoints',
+        allowAllOutbound: true,
+      }
+    );
 
     // Allow inbound traffic from API Gateway to Lambda
     this.lambdaSecurityGroup.addIngressRule(

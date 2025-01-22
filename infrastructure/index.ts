@@ -2,7 +2,7 @@
 import 'source-map-support/register';
 import { App, Tags } from 'aws-cdk-lib';
 import { CDKStack } from './cdk-stack';
-import * as dotenv from "dotenv";
+import * as dotenv from 'dotenv';
 
 export interface EnvConfig {
   CDK_ACCOUNT: string;
@@ -30,10 +30,10 @@ const stack = new CDKStack(app, stackName, {
   envConfigs,
 });
 
-Tags.of(stack).add("Environment", envName);
-Tags.of(stack).add("Owner", "PayQAM");
-Tags.of(stack).add("SupportGroup", "DevOps");
-Tags.of(stack).add("Name", stackName);
-Tags.of(stack).add("Client", "Shared");
-Tags.of(stack).add("CreatedBy", "QrioMatrix");
-Tags.of(stack).add("Developer", "Nadeesha Dileen");
+Tags.of(stack).add('Environment', envName);
+Tags.of(stack).add('Owner', 'PayQAM');
+Tags.of(stack).add('SupportGroup', 'DevOps');
+Tags.of(stack).add('Name', stackName);
+Tags.of(stack).add('Client', 'Shared');
+Tags.of(stack).add('CreatedBy', 'QrioMatrix');
+Tags.of(stack).add('Developer', 'Nadeesha Dileen');
