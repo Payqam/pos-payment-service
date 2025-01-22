@@ -3,6 +3,7 @@ import { IFunction, ILayerVersion, Runtime } from 'aws-cdk-lib/aws-lambda'
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
 import { Construct } from 'constructs'
 import { join } from 'path'
+import { IVpc } from 'aws-cdk-lib/aws-ec2'
 
 interface PAYQAMLambdaProps {
     path: string
@@ -14,6 +15,7 @@ interface PAYQAMLambdaProps {
         [key: string]: any
     }
     name: string;
+    vpc?: IVpc
 }
 
 export class PAYQAMLambda extends Construct {
@@ -21,7 +23,6 @@ export class PAYQAMLambda extends Construct {
 
     constructor(scope: Construct, id: string, props: PAYQAMLambdaProps) {
         super(scope, id)
-        // Lambda
         this.lambda = this.createLambda(id, props)
     }
 
@@ -34,6 +35,7 @@ export class PAYQAMLambda extends Construct {
             environment: props.environment,
             layers: props.layers ? props.layers : [],
             timeout: Duration.minutes(1),
+            vpc: props.vpc,
             bundling: {
                 externalModules: [
                     'cache-manager',
