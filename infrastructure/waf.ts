@@ -20,12 +20,14 @@ export class PaymentServiceWAF extends Construct {
         {
           name: 'RateLimit',
           priority: 1,
-          overrideAction: { none: {} },
           statement: {
             rateBasedStatement: {
               limit: 2000,
               aggregateKeyType: 'IP',
             },
+          },
+          action: {
+            block: {}
           },
           visibilityConfig: {
             cloudWatchMetricsEnabled: true,
@@ -37,12 +39,15 @@ export class PaymentServiceWAF extends Construct {
         {
           name: 'AWSManagedRulesCommonRuleSet',
           priority: 2,
-          overrideAction: { none: {} },
           statement: {
             managedRuleGroupStatement: {
-              name: 'AWSManagedRulesCommonRuleSet',
               vendorName: 'AWS',
+              name: 'AWSManagedRulesCommonRuleSet',
+              excludedRules: []
             },
+          },
+          overrideAction: {
+            none: {}
           },
           visibilityConfig: {
             cloudWatchMetricsEnabled: true,
@@ -54,12 +59,15 @@ export class PaymentServiceWAF extends Construct {
         {
           name: 'AWSManagedRulesSQLiRuleSet',
           priority: 3,
-          overrideAction: { none: {} },
           statement: {
             managedRuleGroupStatement: {
-              name: 'AWSManagedRulesSQLiRuleSet',
               vendorName: 'AWS',
+              name: 'AWSManagedRulesSQLiRuleSet',
+              excludedRules: []
             },
+          },
+          overrideAction: {
+            none: {}
           },
           visibilityConfig: {
             cloudWatchMetricsEnabled: true,
