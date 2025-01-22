@@ -27,7 +27,7 @@ export class PaymentServiceWAF extends Construct {
             },
           },
           action: {
-            block: {}
+            block: {},
           },
           visibilityConfig: {
             cloudWatchMetricsEnabled: true,
@@ -43,11 +43,11 @@ export class PaymentServiceWAF extends Construct {
             managedRuleGroupStatement: {
               vendorName: 'AWS',
               name: 'AWSManagedRulesCommonRuleSet',
-              excludedRules: []
+              excludedRules: [],
             },
           },
           overrideAction: {
-            none: {}
+            none: {},
           },
           visibilityConfig: {
             cloudWatchMetricsEnabled: true,
@@ -63,11 +63,11 @@ export class PaymentServiceWAF extends Construct {
             managedRuleGroupStatement: {
               vendorName: 'AWS',
               name: 'AWSManagedRulesSQLiRuleSet',
-              excludedRules: []
+              excludedRules: [],
             },
           },
           overrideAction: {
-            none: {}
+            none: {},
           },
           visibilityConfig: {
             cloudWatchMetricsEnabled: true,
