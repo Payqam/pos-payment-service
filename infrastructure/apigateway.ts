@@ -30,7 +30,7 @@ export class ApiGatewayConstruct extends Construct {
         super(scope, id);
 
         // Create the API Gateway
-        this.api = new apigateway.RestApi(this, `PAYQAM-${props.envName}${props.namespace}-ApiGateway`, {
+        this.api = new apigateway.RestApi(this, `PAYQAM-ApiGateway`, {
             restApiName: `PAYQAM-${props.envName}${props.namespace}-Api`,
             description: 'API Gateway dynamically configured with resources and models',
             deployOptions: {
@@ -44,7 +44,7 @@ export class ApiGatewayConstruct extends Construct {
         });
 
         // Create API Key and Usage Plan
-        const apiKey = this.api.addApiKey('ApiKey', {
+        const apiKey = this.api.addApiKey('PAYQAM-ApiKey', {
             apiKeyName: `PAYQAM-${props.envName}${props.namespace}-ApiKey`,
         });
         //TODO: Update usage plan
@@ -92,7 +92,7 @@ export class ApiGatewayConstruct extends Construct {
         }
 
         const requestValidator = this.api.addRequestValidator(
-            `${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
+            `PAYQAM-${props.envName}${props.namespace}-RequestValidator${config.path}-${config.method}`,
             {
                 requestValidatorName: `PAYQAM-${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
                 validateRequestBody: !!requestModel,
