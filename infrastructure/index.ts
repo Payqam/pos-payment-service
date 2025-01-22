@@ -30,10 +30,10 @@ const stack = new CDKStack(app, stackName, {
   envConfigs,
 });
 
-// Tags.of(stack).add("Environment", envName);
+Tags.of(stack).add("Environment", envName);
 Tags.of(stack).add("Owner", "PayQAM");
 Tags.of(stack).add("SupportGroup", "DevOps");
-// Tags.of(stack).add("Name", stackName);
+Tags.of(stack).add("Name", stackName);
 Tags.of(stack).add("Client", "Shared");
 Tags.of(stack).add("CreatedBy", "QrioMatrix");
 Tags.of(stack).add("Developer", "Nadeesha Dileen");
