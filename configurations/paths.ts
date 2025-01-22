@@ -1,5 +1,6 @@
 export const PATHS = {
     FUNCTIONS:  {
-        TRANSACTIONS_PROCESS: '../functions/transaction-process',
+        TRANSACTIONS_PROCESS: '../src/functions/transaction-process',
+        SALESFORCE_SYNC: '../src/functions/salesforce-sync',
     },
 } as const

@@ -1,16 +1,19 @@
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvConfig } from './index';
 import { PaymentServiceVPC } from './vpc';
 import { PaymentServiceSecurityGroups } from './security-groups';
 import { PaymentServiceIAM } from './iam';
 import { PaymentServiceWAF } from './waf';
+import { PaymentServiceSNS } from './sns';
 import getLogger from '../src/internal/logger';
 import {ApiGatewayConstruct, ResourceConfig} from './apigateway';
 import {PAYQAMLambda} from './lambda';
 import {PATHS} from '../configurations/paths';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import {Environment} from "aws-cdk-lib";
+import { SalesforceEventBus } from './salesforce-event-bus'; // Import SalesforceEventBus
 
 const logger = getLogger();
 
@@ -56,6 +59,35 @@ export class CDKStack extends cdk.Stack {
       });
       transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
       transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+
+      // Create Salesforce sync Lambda
+      const salesforceSyncLambda = new PAYQAMLambda(this, 'SalesforceSyncLambda', {
+          name: `SalesforceSync${props.envName}${props.namespace}`,
+          path: `${PATHS.FUNCTIONS.SALESFORCE_SYNC}/handler.ts`,
+          vpc: vpcConstruct.vpc,
+          environment: {
+              LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+              SALESFORCE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-${props.envName}`,
+          },
+      });
+
+      // Add required policies to Salesforce sync Lambda
+      salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+      salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+
+      // Create SNS topic and DLQ for Salesforce events
+      const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
+          salesforceSyncLambda: salesforceSyncLambda.lambda,
+          envName: props.envName,
+          namespace: props.namespace,
+      });
+
+      // Add SNS publish permissions to transaction process Lambda
+      transactionsProcessLambda.lambda.addToRolePolicy(new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ['sns:Publish'],
+          resources: [snsConstruct.eventTopic.topicArn],
+      }));
 
       const resources: ResourceConfig[] = [
           {
