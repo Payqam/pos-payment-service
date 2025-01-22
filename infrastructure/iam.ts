@@ -13,11 +13,17 @@ export class PaymentServiceIAM extends Construct {
     this.lambdaRole = new iam.Role(this, 'PaymentServiceLambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'service-role/AWSLambdaVPCAccessExecutionRole'
+        ),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'service-role/AWSLambdaBasicExecutionRole'
+        ),
       ],
     });
 
-    logger.info('Lambda execution role created', { roleArn: this.lambdaRole.roleArn });
+    logger.info('Lambda execution role created', {
+      roleArn: this.lambdaRole.roleArn,
+    });
   }
 }

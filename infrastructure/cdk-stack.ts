@@ -23,9 +23,13 @@ export class CDKStack extends cdk.Stack {
     const vpcConstruct = new PaymentServiceVPC(this, 'VPC');
 
     // Create Security Groups
-    const securityGroups = new PaymentServiceSecurityGroups(this, 'SecurityGroups', {
-      vpc: vpcConstruct.vpc,
-    });
+    const securityGroups = new PaymentServiceSecurityGroups(
+      this,
+      'SecurityGroups',
+      {
+        vpc: vpcConstruct.vpc,
+      }
+    );
 
     // Create IAM Roles
     const iamConstruct = new PaymentServiceIAM(this, 'IAM');
@@ -34,10 +38,13 @@ export class CDKStack extends cdk.Stack {
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
 
     // Log the role ARN and security groups to ensure it's being used (addresses unused constant warning)
-    logger.info('Lambda execution role created', { roleArn: iamConstruct.lambdaRole.roleArn });
-    logger.info('Security groups created', { 
+    logger.info('Lambda execution role created', {
+      roleArn: iamConstruct.lambdaRole.roleArn,
+    });
+    logger.info('Security groups created', {
       lambdaSecurityGroupId: securityGroups.lambdaSecurityGroup.securityGroupId,
-      apiGatewaySecurityGroupId: securityGroups.apiGatewaySecurityGroup.securityGroupId 
+      apiGatewaySecurityGroupId:
+        securityGroups.apiGatewaySecurityGroup.securityGroupId,
     });
 
     // Add stack outputs
