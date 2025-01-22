@@ -10,6 +10,7 @@ import {ApiGatewayConstruct, ResourceConfig} from './apigateway';
 import {PAYQAMLambda} from './lambda';
 import {PATHS} from '../configurations/paths';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import {Environment} from "aws-cdk-lib";
 
 const logger = getLogger();
 
@@ -22,8 +23,9 @@ interface CDKStackProps extends cdk.StackProps {
 export class CDKStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: CDKStackProps) {
     super(scope, id, props);
+      const env: Environment = props.env as Environment
 
-    // Create VPC
+      // Create VPC
     const vpcConstruct = new PaymentServiceVPC(this, 'VPC');
 
     // Create Security Groups
@@ -32,7 +34,7 @@ export class CDKStack extends cdk.Stack {
     });
 
     // Create IAM Roles
-    const iamConstruct = new PaymentServiceIAM(this, 'IAM');
+    const iamConstruct = new PaymentServiceIAM(this, 'IAM', env);
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
@@ -52,6 +54,8 @@ export class CDKStack extends cdk.Stack {
               LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           },
       });
+      transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+      transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
 
       const resources: ResourceConfig[] = [
           {
