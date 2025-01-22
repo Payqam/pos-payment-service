@@ -1,0 +1,22 @@
+{
+  "name": "pos-payment-service",
+  "version": "0.1.0",
+  "bin": {
+    "pos-payment-service": "bin/pos-payment-service.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.69.0",
+    "constructs": "^10.0.0",
+    "dotenv": "^16.4.7",
+    "source-map-support": "^0.5.21"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7"
+  }
+}
