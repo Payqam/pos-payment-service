@@ -46,7 +46,7 @@ export class CDKStack extends cdk.Stack {
                     schema: {
                         type: apigateway.JsonSchemaType.OBJECT,
                         properties: {
-                            transactionId: {type: apigateway.JsonSchemaType.STRING},
+                            transactionId: {type: apigateway.JsonSchemaType.STRING}, //TODO: Update this according to the actual schema
                             status: {type: apigateway.JsonSchemaType.STRING},
                         },
                     },
@@ -56,6 +56,9 @@ export class CDKStack extends cdk.Stack {
                 path: 'transaction-status',
                 method: 'GET',
                 lambda: transactionsProcessLambda.lambda,
+                requestParameters: {
+                    'method.request.querystring.transactionId': true,       //TODO: Update this according to the actual schema
+                },
                 responseModel: {
                     modelName: 'TransactionStatusResponseModel',
                     schema: {

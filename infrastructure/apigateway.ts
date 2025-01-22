@@ -14,6 +14,7 @@ export interface ResourceConfig {
         modelName: string;
         schema: apigateway.JsonSchema;
     };
+    requestParameters?: { [key: string]: boolean };
 }
 
 export interface ApiGatewayConstructProps {
@@ -95,23 +96,23 @@ export class ApiGatewayConstruct extends Construct {
             {
                 requestValidatorName: `PAYQAM-${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
                 validateRequestBody: !!requestModel,
-                validateRequestParameters: true,
+                validateRequestParameters: !!config.requestParameters, // Enable validation if parameters are defined
             }
         );
-
 
         // Attach resource and method
         resource.addMethod(
             config.method,
-            new apigateway.LambdaIntegration(config.lambda, {proxy: true}),
+            new apigateway.LambdaIntegration(config.lambda, { proxy: true }),
             {
                 apiKeyRequired: true,
-                requestModels: requestModel ? {'application/json': requestModel} : undefined,
+                requestModels: requestModel ? { 'application/json': requestModel } : undefined,
                 requestValidator: requestValidator,
+                requestParameters: config.requestParameters, // Pass query string parameters for validation
                 methodResponses: [
                     {
                         statusCode: '200',
-                        responseModels: responseModel ? {'application/json': responseModel} : undefined,
+                        responseModels: responseModel ? { 'application/json': responseModel } : undefined,
                     },
                 ],
             }
