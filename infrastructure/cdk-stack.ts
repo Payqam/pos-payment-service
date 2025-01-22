@@ -47,6 +47,7 @@ export class CDKStack extends cdk.Stack {
       const transactionsProcessLambda = new PAYQAMLambda(this, 'TransactionsProcessLambda', {
           name: `TransactionsProcess${props.envName}${props.namespace}`,
           path: `${PATHS.FUNCTIONS.TRANSACTIONS_PROCESS}/handler.ts`,
+          vpc: vpcConstruct.vpc,
           environment: {
               LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           },
