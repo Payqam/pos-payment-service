@@ -1,5 +1,4 @@
 import * as cdk from 'aws-cdk-lib';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvConfig } from './index';
 import { PaymentServiceVPC } from './vpc';
@@ -12,8 +11,8 @@ import { ApiGatewayConstruct, ResourceConfig } from './apigateway';
 import { PAYQAMLambda } from './lambda';
 import { PATHS } from '../configurations/paths';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import {Environment} from "aws-cdk-lib";
-import { SalesforceEventBus } from './salesforce-event-bus'; // Import SalesforceEventBus
+import { Environment } from 'aws-cdk-lib';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 const logger = getLogger();
 
@@ -26,6 +25,7 @@ interface CDKStackProps extends cdk.StackProps {
 export class CDKStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: CDKStackProps) {
     super(scope, id, props);
+    const env: Environment = props.env as Environment;
 
     // Create VPC
     const vpcConstruct = new PaymentServiceVPC(this, 'VPC');
@@ -40,7 +40,7 @@ export class CDKStack extends cdk.Stack {
     );
 
     // Create IAM Roles
-    const iamConstruct = new PaymentServiceIAM(this, 'IAM');
+    const iamConstruct = new PaymentServiceIAM(this, 'IAM', env);
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
@@ -72,82 +72,89 @@ export class CDKStack extends cdk.Stack {
     );
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
 
-      // Create Salesforce sync Lambda
-      const salesforceSyncLambda = new PAYQAMLambda(this, 'SalesforceSyncLambda', {
-          name: `SalesforceSync${props.envName}${props.namespace}`,
-          path: `${PATHS.FUNCTIONS.SALESFORCE_SYNC}/handler.ts`,
-          vpc: vpcConstruct.vpc,
-          environment: {
-              LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-              SALESFORCE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-${props.envName}`,
+    // Create Salesforce sync Lambda
+    const salesforceSyncLambda = new PAYQAMLambda(
+      this,
+      'SalesforceSyncLambda',
+      {
+        name: `SalesforceSync${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.SALESFORCE_SYNC}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          SALESFORCE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-${props.envName}`,
+        },
+      }
+    );
+
+    // Add required policies to Salesforce sync Lambda
+    salesforceSyncLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+
+    // Create SNS topic and DLQ for Salesforce events
+    const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
+      salesforceSyncLambda: salesforceSyncLambda.lambda,
+      envName: props.envName,
+      namespace: props.namespace,
+    });
+
+    // Add SNS publish permissions to transaction process Lambda
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['sns:Publish'],
+        resources: [snsConstruct.eventTopic.topicArn],
+      })
+    );
+
+    const resources: ResourceConfig[] = [
+      {
+        path: 'process-payments',
+        method: 'POST',
+        lambda: transactionsProcessLambda.lambda,
+        requestModel: {
+          modelName: 'ProcessPaymentsRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              amount: { type: apigateway.JsonSchemaType.NUMBER }, //TODO: Update this according to the actual schema
+              currency: { type: apigateway.JsonSchemaType.STRING },
+              paymentMethod: { type: apigateway.JsonSchemaType.STRING },
+            },
+            required: ['amount', 'currency', 'paymentMethod'],
           },
-      });
-
-      // Add required policies to Salesforce sync Lambda
-      salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
-      salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-
-      // Create SNS topic and DLQ for Salesforce events
-      const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
-          salesforceSyncLambda: salesforceSyncLambda.lambda,
-          envName: props.envName,
-          namespace: props.namespace,
-      });
-
-      // Add SNS publish permissions to transaction process Lambda
-      transactionsProcessLambda.lambda.addToRolePolicy(new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ['sns:Publish'],
-          resources: [snsConstruct.eventTopic.topicArn],
-      }));
-
-      const resources: ResourceConfig[] = [
-          {
-              path: 'process-payments',
-              method: 'POST',
-              lambda: transactionsProcessLambda.lambda,
-              requestModel: {
-                  modelName: 'ProcessPaymentsRequestModel',
-                  schema: {
-                      type: apigateway.JsonSchemaType.OBJECT,
-                      properties: {
-                          amount: {type: apigateway.JsonSchemaType.NUMBER},//TODO: Update this according to the actual schema
-                          currency: {type: apigateway.JsonSchemaType.STRING},
-                          paymentMethod: {type: apigateway.JsonSchemaType.STRING},
-                      },
-                      required: ['amount', 'currency', 'paymentMethod'],
-                  },
-              },
-              responseModel: {
-                  modelName: 'ProcessPaymentsResponseModel',
-                  schema: {
-                      type: apigateway.JsonSchemaType.OBJECT,
-                      properties: {
-                          transactionId: {type: apigateway.JsonSchemaType.STRING}, //TODO: Update this according to the actual schema
-                          status: {type: apigateway.JsonSchemaType.STRING},
-                      },
-                  },
-              },
+        },
+        responseModel: {
+          modelName: 'ProcessPaymentsResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              status: { type: apigateway.JsonSchemaType.STRING },
+            },
           },
-          {
-              path: 'transaction-status',
-              method: 'GET',
-              lambda: transactionsProcessLambda.lambda,
-              requestParameters: {
-                  'method.request.querystring.transactionId': true,       //TODO: Update this according to the actual schema
-              },
-              responseModel: {
-                  modelName: 'TransactionStatusResponseModel',
-                  schema: {
-                      type: apigateway.JsonSchemaType.OBJECT,
-                      properties: {
-                          transactionId: {type: apigateway.JsonSchemaType.STRING},
-                          status: {type: apigateway.JsonSchemaType.STRING},
-                      },
-                  },
-              },
+        },
+      },
+      {
+        path: 'transaction-status',
+        method: 'GET',
+        lambda: transactionsProcessLambda.lambda,
+        requestParameters: {
+          'method.request.querystring.transactionId': true, //TODO: Update this according to the actual schema
+        },
+        responseModel: {
+          modelName: 'TransactionStatusResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              transactionId: { type: apigateway.JsonSchemaType.STRING },
+              status: { type: apigateway.JsonSchemaType.STRING },
+            },
           },
-      ];
+        },
+      },
+    ];
 
     new ApiGatewayConstruct(this, 'ApiGateway', {
       envName: props.envName,
