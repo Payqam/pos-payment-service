@@ -8,9 +8,9 @@ import { PaymentServiceIAM } from './iam';
 import { PaymentServiceWAF } from './waf';
 import { PaymentServiceSNS } from './sns';
 import getLogger from '../src/internal/logger';
-import {ApiGatewayConstruct, ResourceConfig} from './apigateway';
-import {PAYQAMLambda} from './lambda';
-import {PATHS} from '../configurations/paths';
+import { ApiGatewayConstruct, ResourceConfig } from './apigateway';
+import { PAYQAMLambda } from './lambda';
+import { PATHS } from '../configurations/paths';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import {Environment} from "aws-cdk-lib";
 import { SalesforceEventBus } from './salesforce-event-bus'; // Import SalesforceEventBus
@@ -26,39 +26,51 @@ interface CDKStackProps extends cdk.StackProps {
 export class CDKStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: CDKStackProps) {
     super(scope, id, props);
-      const env: Environment = props.env as Environment
 
-      // Create VPC
+    // Create VPC
     const vpcConstruct = new PaymentServiceVPC(this, 'VPC');
 
     // Create Security Groups
-    const securityGroups = new PaymentServiceSecurityGroups(this, 'SecurityGroups', {
-      vpc: vpcConstruct.vpc,
-    });
+    const securityGroups = new PaymentServiceSecurityGroups(
+      this,
+      'SecurityGroups',
+      {
+        vpc: vpcConstruct.vpc,
+      }
+    );
 
     // Create IAM Roles
-    const iamConstruct = new PaymentServiceIAM(this, 'IAM', env);
+    const iamConstruct = new PaymentServiceIAM(this, 'IAM');
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
 
     // Log the role ARN and security groups to ensure it's being used (addresses unused constant warning)
-    logger.info('Lambda execution role created', { roleArn: iamConstruct.lambdaRole.roleArn });
+    logger.info('Lambda execution role created', {
+      roleArn: iamConstruct.lambdaRole.roleArn,
+    });
     logger.info('Security groups created', {
       lambdaSecurityGroupId: securityGroups.lambdaSecurityGroup.securityGroupId,
-      apiGatewaySecurityGroupId: securityGroups.apiGatewaySecurityGroup.securityGroupId
+      apiGatewaySecurityGroupId:
+        securityGroups.apiGatewaySecurityGroup.securityGroupId,
     });
 
-      const transactionsProcessLambda = new PAYQAMLambda(this, 'TransactionsProcessLambda', {
-          name: `TransactionsProcess${props.envName}${props.namespace}`,
-          path: `${PATHS.FUNCTIONS.TRANSACTIONS_PROCESS}/handler.ts`,
-          vpc: vpcConstruct.vpc,
-          environment: {
-              LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-          },
-      });
-      transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-      transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    const transactionsProcessLambda = new PAYQAMLambda(
+      this,
+      'TransactionsProcessLambda',
+      {
+        name: `TransactionsProcess${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.TRANSACTIONS_PROCESS}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        },
+      }
+    );
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
+    transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
 
       // Create Salesforce sync Lambda
       const salesforceSyncLambda = new PAYQAMLambda(this, 'SalesforceSyncLambda', {
@@ -137,11 +149,11 @@ export class CDKStack extends cdk.Stack {
           },
       ];
 
-      new ApiGatewayConstruct(this, 'ApiGateway', {
-          envName: props.envName,
-          namespace: props.namespace,
-          resources,
-      });
+    new ApiGatewayConstruct(this, 'ApiGateway', {
+      envName: props.envName,
+      namespace: props.namespace,
+      resources,
+    });
 
     // Add stack outputs
     new cdk.CfnOutput(this, 'env', {
