@@ -5,11 +5,14 @@ import { PaymentServiceVPC } from './vpc';
 import { PaymentServiceSecurityGroups } from './security-groups';
 import { PaymentServiceIAM } from './iam';
 import { PaymentServiceWAF } from './waf';
+import { PaymentServiceSNS } from './sns';
 import getLogger from '../src/internal/logger';
 import { ApiGatewayConstruct, ResourceConfig } from './apigateway';
 import { PAYQAMLambda } from './lambda';
 import { PATHS } from '../configurations/paths';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import { Environment } from 'aws-cdk-lib';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { createLambdaLogGroup } from './log-groups';
 
 const logger = getLogger();
@@ -23,6 +26,7 @@ interface CDKStackProps extends cdk.StackProps {
 export class CDKStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: CDKStackProps) {
     super(scope, id, props);
+    const env: Environment = props.env as Environment;
 
     // Create VPC
     const vpcConstruct = new PaymentServiceVPC(this, 'VPC');
@@ -37,7 +41,7 @@ export class CDKStack extends cdk.Stack {
     );
 
     // Create IAM Roles
-    const iamConstruct = new PaymentServiceIAM(this, 'IAM');
+    const iamConstruct = new PaymentServiceIAM(this, 'IAM', env);
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
@@ -74,18 +78,52 @@ export class CDKStack extends cdk.Stack {
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);
 
-    logger.info('transactions process lambda log group created');
+    // Create Salesforce sync Lambda
+    const salesforceSyncLambda = new PAYQAMLambda(
+      this,
+      'SalesforceSyncLambda',
+      {
+        name: `SalesforceSync${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.SALESFORCE_SYNC}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          SALESFORCE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-${props.envName}`,
+        },
+      }
+    );
 
-    const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
-      name: `OrangeWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.WEBHOOK_ORANGE}/handler.ts`,
-      vpc: vpcConstruct.vpc,
-      environment: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-      },
+    // Add required policies to Salesforce sync Lambda
+    salesforceSyncLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+
+    // Create SNS topic and DLQ for Salesforce events
+    const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
+      salesforceSyncLambda: salesforceSyncLambda.lambda,
+      envName: props.envName,
+      namespace: props.namespace,
     });
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-    createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+
+    // Add SNS publish permissions to transaction process Lambda
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['sns:Publish'],
+        resources: [snsConstruct.eventTopic.topicArn],
+      })
+    );
+
+      const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
+          name: `OrangeWebhook-${props.envName}${props.namespace}`,
+          path: `${PATHS.FUNCTIONS.WEBHOOK_ORANGE}/handler.ts`,
+          vpc: vpcConstruct.vpc,
+          environment: {
+              LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          },
+      });
+      orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+      createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
     const resources: ResourceConfig[] = [
       {
