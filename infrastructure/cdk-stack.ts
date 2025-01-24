@@ -74,6 +74,19 @@ export class CDKStack extends cdk.Stack {
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);
 
+    logger.info('transactions process lambda log group created');
+
+    const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
+      name: `OrangeWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.WEBHOOK_ORANGE}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+      },
+    });
+    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+
     const resources: ResourceConfig[] = [
       {
         path: 'process-payments',
@@ -101,6 +114,11 @@ export class CDKStack extends cdk.Stack {
             },
           },
         },
+      },
+      {
+        path: 'webhook-orange',
+        method: 'POST',
+        lambda: orangeWebhookLambda.lambda,
       },
       {
         path: 'transaction-status',
