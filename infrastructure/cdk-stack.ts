@@ -13,6 +13,7 @@ import { PATHS } from '../configurations/paths';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Environment } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { createLambdaLogGroup } from './log-groups';
 
 const logger = getLogger();
 
@@ -59,7 +60,7 @@ export class CDKStack extends cdk.Stack {
       this,
       'TransactionsProcessLambda',
       {
-        name: `TransactionsProcess${props.envName}${props.namespace}`,
+        name: `TransactionsProcess-${props.envName}${props.namespace}`,
         path: `${PATHS.FUNCTIONS.TRANSACTIONS_PROCESS}/handler.ts`,
         vpc: vpcConstruct.vpc,
         environment: {
@@ -67,10 +68,15 @@ export class CDKStack extends cdk.Stack {
         },
       }
     );
+    logger.info('transactions process lambda created', {
+      lambdaArn: transactionsProcessLambda.lambda.functionArn,
+    });
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.dynamoDBPolicy
     );
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+
+    createLambdaLogGroup(this, transactionsProcessLambda.lambda);
 
     // Create Salesforce sync Lambda
     const salesforceSyncLambda = new PAYQAMLambda(
