@@ -135,11 +135,22 @@ export class CDKStack extends cdk.Stack {
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
+              merchantId: { type: apigateway.JsonSchemaType.STRING },
               amount: { type: apigateway.JsonSchemaType.NUMBER }, //TODO: Update this according to the actual schema
-              currency: { type: apigateway.JsonSchemaType.STRING },
+              customerPhone: { type: apigateway.JsonSchemaType.STRING },
+              transactionType: { type: apigateway.JsonSchemaType.STRING },
               paymentMethod: { type: apigateway.JsonSchemaType.STRING },
+              metadata: { type: apigateway.JsonSchemaType.OBJECT },
+              cardData: { type: apigateway.JsonSchemaType.OBJECT },
             },
-            required: ['amount', 'currency', 'paymentMethod'],
+            required: [
+              'merchantId',
+              'amount',
+              'customerPhone',
+              'transactionType',
+              'paymentMethod',
+              'metadata',
+            ],
           },
         },
         responseModel: {
