@@ -1,10 +1,8 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
 import { API } from '../../../configurations/api';
+import getLogger from '../../internal/logger';
 
-const logger = new Logger({
-  serviceName: process.env.POWERTOOLS_SERVICE_NAME,
-});
+const logger = getLogger();
 
 async function handlePaymentIntentSucceeded(paymentIntent: never) {
   // TODO: Implement payment success handling
