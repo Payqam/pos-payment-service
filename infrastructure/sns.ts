@@ -12,9 +12,9 @@ import { IFunction } from 'aws-cdk-lib/aws-lambda';
  * @property namespace - Namespace for resource naming
  */
 interface PaymentServiceSNSProps {
-    salesforceSyncLambda: IFunction;
-    envName: string;
-    namespace: string;
+  salesforceSyncLambda: IFunction;
+  envName: string;
+  namespace: string;
 }
 
 /**
@@ -23,59 +23,60 @@ interface PaymentServiceSNSProps {
  * 1. SNS Topic - For publishing payment events (created, updated, etc.)
  * 2. DLQ - For handling failed message processing
  * 3. Lambda Subscription - Routes events to Salesforce sync Lambda
- * 
+ *
  * Event Flow:
  * Transaction Processor -> SNS Topic -> Salesforce Sync Lambda -> (DLQ if failed)
  */
 export class PaymentServiceSNS extends Construct {
-    public readonly eventTopic: sns.ITopic;
-    public readonly dlq: sqs.IQueue;
+  public readonly eventTopic: sns.ITopic;
 
-    constructor(scope: Construct, id: string, props: PaymentServiceSNSProps) {
-        super(scope, id);
+  public readonly dlq: sqs.IQueue;
 
-        // Create DLQ for failed message processing
-        // Messages that fail processing will be sent here for investigation
-        this.dlq = new sqs.Queue(this, 'SalesforceDLQ', {
-            queueName: `salesforce-dlq-${props.envName}-${props.namespace}`,
-            retentionPeriod: cdk.Duration.days(14),  // Keep failed messages for 2 weeks
-            encryptionMasterKey: new cdk.aws_kms.Key(this, 'DLQKey', {
-                enableKeyRotation: true,
-                description: 'KMS key for Salesforce DLQ encryption',
-            }),
-        });
+  constructor(scope: Construct, id: string, props: PaymentServiceSNSProps) {
+    super(scope, id);
 
-        // Create SNS Topic for payment events
-        // This topic decouples payment processing from Salesforce sync
-        this.eventTopic = new sns.Topic(this, 'SalesforceEventTopic', {
-            topicName: `salesforce-events-${props.envName}-${props.namespace}`,
-            displayName: 'Salesforce Event Topic',
-            masterKey: new cdk.aws_kms.Key(this, 'TopicKey', {
-                enableKeyRotation: true,
-                description: 'KMS key for SNS topic encryption',
-            }),
-        });
+    // Create DLQ for failed message processing
+    // Messages that fail processing will be sent here for investigation
+    this.dlq = new sqs.Queue(this, 'SalesforceDLQ', {
+      queueName: `salesforce-dlq-${props.envName}-${props.namespace}`,
+      retentionPeriod: cdk.Duration.days(14), // Keep failed messages for 2 weeks
+      encryptionMasterKey: new cdk.aws_kms.Key(this, 'DLQKey', {
+        enableKeyRotation: true,
+        description: 'KMS key for Salesforce DLQ encryption',
+      }),
+    });
 
-        // Add Lambda subscription with DLQ and message filtering
-        this.eventTopic.addSubscription(
-            new subscriptions.LambdaSubscription(props.salesforceSyncLambda, {
-                deadLetterQueue: this.dlq,  // Failed messages go to DLQ
-                filterPolicy: {
-                    // Only process specific payment events
-                    eventType: sns.SubscriptionFilter.stringFilter({
-                        allowlist: [
-                            'PAYMENT_STATUS_UPDATE',  // When payment status changes
-                            'PAYMENT_CREATED',        // When new payment is created
-                        ],
-                    }),
-                },
-            })
-        );
+    // Create SNS Topic for payment events
+    // This topic decouples payment processing from Salesforce sync
+    this.eventTopic = new sns.Topic(this, 'SalesforceEventTopic', {
+      topicName: `salesforce-events-${props.envName}-${props.namespace}`,
+      displayName: 'Salesforce Event Topic',
+      masterKey: new cdk.aws_kms.Key(this, 'TopicKey', {
+        enableKeyRotation: true,
+        description: 'KMS key for SNS topic encryption',
+      }),
+    });
 
-        // Add resource tags for better organization
-        cdk.Tags.of(this.eventTopic).add('Service', 'PayQAM');
-        cdk.Tags.of(this.eventTopic).add('Environment', props.envName);
-        cdk.Tags.of(this.dlq).add('Service', 'PayQAM');
-        cdk.Tags.of(this.dlq).add('Environment', props.envName);
-    }
+    // Add Lambda subscription with DLQ and message filtering
+    this.eventTopic.addSubscription(
+      new subscriptions.LambdaSubscription(props.salesforceSyncLambda, {
+        deadLetterQueue: this.dlq, // Failed messages go to DLQ
+        filterPolicy: {
+          // Only process specific payment events
+          eventType: sns.SubscriptionFilter.stringFilter({
+            allowlist: [
+              'PAYMENT_STATUS_UPDATE', // When payment status changes
+              'PAYMENT_CREATED', // When new payment is created
+            ],
+          }),
+        },
+      })
+    );
+
+    // Add resource tags for better organization
+    cdk.Tags.of(this.eventTopic).add('Service', 'PayQAM');
+    cdk.Tags.of(this.eventTopic).add('Environment', props.envName);
+    cdk.Tags.of(this.dlq).add('Service', 'PayQAM');
+    cdk.Tags.of(this.dlq).add('Environment', props.envName);
+  }
 }
