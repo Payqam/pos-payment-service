@@ -3,12 +3,10 @@ import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import getLogger from '../../internal/logger';
 
 const logger = getLogger();
 const secretsManager = new SecretsManagerClient({});
-const dynamoDB = new DynamoDBClient({});
 
 interface SalesforceCredentials {
   clientId: string;
@@ -16,6 +14,22 @@ interface SalesforceCredentials {
   username: string;
   password: string;
   instanceUrl: string;
+}
+
+async function handlePaymentStatusUpdate(
+  message: never,
+  credentials: SalesforceCredentials
+) {
+  // TODO: Implement Salesforce API call to update payment status
+  logger.info('Handling payment status update', { message, credentials });
+}
+
+async function handlePaymentCreated(
+  message: never,
+  credentials: SalesforceCredentials
+) {
+  // TODO: Implement Salesforce API call to create payment record
+  logger.info('Handling payment created', { message, credentials });
 }
 
 export const handler: SNSHandler = async (event: SNSEvent) => {
@@ -49,10 +63,10 @@ export const handler: SNSHandler = async (event: SNSEvent) => {
       // TODO: Implement Salesforce API calls based on message type
       switch (message.eventType) {
         case 'PAYMENT_STATUS_UPDATE':
-          await handlePaymentStatusUpdate(message, credentials);
+          await handlePaymentStatusUpdate(message as never, credentials);
           break;
         case 'PAYMENT_CREATED':
-          await handlePaymentCreated(message, credentials);
+          await handlePaymentCreated(message as never, credentials);
           break;
         default:
           logger.warn('Unknown event type', { eventType: message.eventType });
@@ -63,19 +77,3 @@ export const handler: SNSHandler = async (event: SNSEvent) => {
     throw error;
   }
 };
-
-async function handlePaymentStatusUpdate(
-  message: any,
-  credentials: SalesforceCredentials
-) {
-  // TODO: Implement Salesforce API call to update payment status
-  logger.info('Handling payment status update', { message });
-}
-
-async function handlePaymentCreated(
-  message: any,
-  credentials: SalesforceCredentials
-) {
-  // TODO: Implement Salesforce API call to create payment record
-  logger.info('Handling payment created', { message });
-}
