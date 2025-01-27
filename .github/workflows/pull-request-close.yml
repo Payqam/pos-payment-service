@@ -1,0 +1,13 @@
+name: Pull Request Close
+run-name: ${{ github.actor }} has merged/closed pull request
+on:
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: This workflow is currently unavailable
+        run: echo "This workflow is a placeholder and cannot be executed."
