@@ -1,6 +1,6 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
-import { API } from '../../../configurations/api';
-import getLogger from '../../internal/logger';
+import { API } from '../../../../configurations/api';
+import getLogger from '../../../internal/logger/index';
 
 const logger = getLogger();
 
