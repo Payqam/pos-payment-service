@@ -99,6 +99,24 @@ export class CDKStack extends cdk.Stack {
     );
     salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
 
+    // Create Stripe webhook Lambda
+    const stripeWebhookLambda = new PAYQAMLambda(this, 'StripeWebhookLambda', {
+      name: `StripeWebhook${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.STRIPE_WEBHOOK}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        STRIPE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Stripe-${props.envName}`,
+      },
+    });
+
+    // Add required policies to Stripe webhook Lambda
+    stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    stripeWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+
     // Create SNS topic and DLQ for Salesforce events
     const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
       salesforceSyncLambda: salesforceSyncLambda.lambda,
@@ -172,6 +190,40 @@ export class CDKStack extends cdk.Stack {
             properties: {
               transactionId: { type: apigateway.JsonSchemaType.STRING },
               status: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/stripe',
+        method: 'POST',
+        lambda: stripeWebhookLambda.lambda,
+        requestModel: {
+          modelName: 'StripeWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              id: { type: apigateway.JsonSchemaType.STRING },
+              object: { type: apigateway.JsonSchemaType.STRING },
+              api_version: { type: apigateway.JsonSchemaType.STRING },
+              created: { type: apigateway.JsonSchemaType.NUMBER },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  object: { type: apigateway.JsonSchemaType.OBJECT },
+                },
+              },
+              type: { type: apigateway.JsonSchemaType.STRING },
+            },
+            required: ['id', 'object', 'type', 'data'],
+          },
+        },
+        responseModel: {
+          modelName: 'StripeWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              received: { type: apigateway.JsonSchemaType.BOOLEAN },
             },
           },
         },
