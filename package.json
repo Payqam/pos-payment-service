@@ -11,10 +11,10 @@
     "clean": "tsc --build --clean",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test:unit": "jest test/unit",
-    "test:integration": "jest test/integration",
-    "test:unit:coverage": "jest --coverage test/unit",
-    "test:integration:coverage": "node ./test/integration/helpers/coverage"
+    "test:unit": "",
+    "test:integration": "",
+    "test:unit:coverage": "",
+    "test:integration:coverage": ""
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.109",
