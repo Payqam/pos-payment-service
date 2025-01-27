@@ -37,6 +37,12 @@
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service"
+    },
+    "SQA": {
+      "CDK_ACCOUNT": "061051235502",
+      "CDK_REGION": "us-east-1",
+      "LOG_LEVEL": "INFO",
+      "CDK_STACK_NAME_PREFIX": "pos-payment-service"
     }
   }
 }
