@@ -1,0 +1,74 @@
+name: Pull Request Checks
+run-name: ${{ github.actor }} is running checks on pull request
+on: pull_request
+
+jobs:
+  pull-request-checks:
+    runs-on: ubuntu-latest
+    environment: SQA
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Setup
+        id: setup
+        run: |
+          npm i -g zx
+          zx ./scripts/setup.mjs
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Configure AWS Credentials for deployment
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{vars.AWS_REGION}}
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        if: ${{ vars.RUN_UNIT_TESTS }}
+        run: npm run test:unit:coverage
+      - name: Sonar Scan
+        if: ${{ vars.RUN_SONAR_SCAN }}
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Quality Gate
+        if: ${{ vars.RUN_SONAR_SCAN }}
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        # Force to fail step after specific time.
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Build
+        run: zx ./scripts/build.mjs
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Deploy
+        id: deploy
+        run: zx ./scripts/deploy.mjs
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Integration Tests
+        if: ${{vars.RUN_INTEGRATION_TESTS }}
+        run: npm run test:integration
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Integration Test Coverage
+        if: ${{ vars.RUN_INTEGRATION_TESTS }}
+        run: npm run test:integration:coverage
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Remove .npmrc
+        if: always()
+        run: rm -f ~/.npmrc
