@@ -72,7 +72,18 @@ export class ApiGatewayConstruct extends Construct {
     config: ResourceConfig,
     props: ApiGatewayConstructProps
   ) {
-    const resource = this.api.root.addResource(config.path);
+    // Handle nested paths
+    const pathParts = config.path.split('/');
+    let currentResource = this.api.root;
+
+    // Create nested resources
+    pathParts.forEach((part) => {
+      let resource = currentResource.getResource(part);
+      if (!resource) {
+        resource = currentResource.addResource(part);
+      }
+      currentResource = resource;
+    });
 
     let requestModel: apigateway.IModel | undefined;
     let responseModel: apigateway.IModel | undefined;
@@ -96,34 +107,37 @@ export class ApiGatewayConstruct extends Construct {
     }
 
     const requestValidator = this.api.addRequestValidator(
-      `PAYQAM-${props.envName}${props.namespace}-RequestValidator${config.path}-${config.method}`,
+      `PAYQAM-${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
       {
         requestValidatorName: `PAYQAM-${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
         validateRequestBody: !!requestModel,
-        validateRequestParameters: !!config.requestParameters, // Enable validation if parameters are defined
+        validateRequestParameters: !!config.requestParameters,
       }
     );
 
-    // Attach resource and method
-    resource.addMethod(
-      config.method,
-      new apigateway.LambdaIntegration(config.lambda, { proxy: true }),
-      {
-        apiKeyRequired: true,
-        requestModels: requestModel
-          ? { 'application/json': requestModel }
-          : undefined,
-        requestValidator: requestValidator,
-        requestParameters: config.requestParameters, // Pass query string parameters for validation
-        methodResponses: [
-          {
-            statusCode: '200',
-            responseModels: responseModel
-              ? { 'application/json': responseModel }
-              : undefined,
-          },
-        ],
-      }
-    );
+    // Add method to the resource
+    const integration = new apigateway.LambdaIntegration(config.lambda);
+
+    // Create method options
+    const methodOptions: apigateway.MethodOptions = {
+      requestValidator,
+      apiKeyRequired: true,
+      requestModels: requestModel
+        ? { 'application/json': requestModel }
+        : undefined,
+      requestParameters: config.requestParameters,
+      methodResponses: responseModel
+        ? [
+            {
+              statusCode: '200',
+              responseModels: {
+                'application/json': responseModel,
+              },
+            },
+          ]
+        : undefined,
+    };
+
+    currentResource.addMethod(config.method, integration, methodOptions);
   }
 }
