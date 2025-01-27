@@ -6,8 +6,37 @@ on:
       - closed
 
 jobs:
-  placeholder:
+  pull-request-close:
     runs-on: ubuntu-latest
+    environment: SQA
     steps:
-      - name: This workflow is currently unavailable
-        run: echo "This workflow is a placeholder and cannot be executed."
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Setup
+        id: setup
+        run: |
+          npm i -g zx
+          zx ./scripts/setup.mjs
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Configure AWS Credentials for deployment
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{vars.AWS_REGION}}
+      - name: Build
+        run: zx ./scripts/build.mjs
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
+      - name: Destroy Deployment
+        run: zx ./scripts/destroy.mjs
+        env:
+          NAMESPACE: ${{ github.event.number }}
+          ENV: SQA
