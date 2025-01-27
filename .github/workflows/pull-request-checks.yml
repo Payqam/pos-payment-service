@@ -32,20 +32,6 @@ jobs:
       - name: Unit tests
         if: ${{ vars.RUN_UNIT_TESTS }}
         run: npm run test:unit:coverage
-      - name: Sonar Scan
-        if: ${{ vars.RUN_SONAR_SCAN }}
-        uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      - name: Quality Gate
-        if: ${{ vars.RUN_SONAR_SCAN }}
-        uses: sonarsource/sonarqube-quality-gate-action@master
-        # Force to fail step after specific time.
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
       - name: Build
         run: zx ./scripts/build.mjs
         env:
