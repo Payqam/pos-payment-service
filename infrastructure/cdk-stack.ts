@@ -14,6 +14,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Environment } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { createLambdaLogGroup } from './log-groups';
+import { ElastiCacheConstruct } from './elasticache';
 
 const logger = getLogger();
 
@@ -37,6 +38,8 @@ export class CDKStack extends cdk.Stack {
       'SecurityGroups',
       {
         vpc: vpcConstruct.vpc,
+        envName: props.envName,
+        namespace: props.namespace,
       }
     );
 
@@ -142,6 +145,14 @@ export class CDKStack extends cdk.Stack {
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+
+    // Create ElastiCache cluster
+    const cache = new ElastiCacheConstruct(this, 'Cache', {
+      envName: props.envName,
+      namespace: props.namespace,
+      vpc: vpcConstruct.vpc,
+      securityGroup: securityGroups.cacheSecurityGroup,
+    });
 
     const resources: ResourceConfig[] = [
       {
@@ -265,6 +276,11 @@ export class CDKStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'webAclId', {
       value: wafConstruct.webAcl.attrId,
+      description: 'WAF Web ACL ID',
+    });
+
+    new cdk.CfnOutput(this, 'elastiCacheId', {
+      value: cache.cluster.attrId,
       description: 'WAF Web ACL ID',
     });
   }
