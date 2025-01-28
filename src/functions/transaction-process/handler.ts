@@ -9,13 +9,17 @@ import {
   processMTNPayment,
   processOrangePayment,
 } from './payment-providers';
-import getLogger from '../../internal/logger';
-
-const logger = getLogger();
+import { Logger, LoggerService } from '@mu-ts/logger';
+import { registerRedactFilter } from '../../../utils/redactUtil';
 
 // Transaction fee constants
 const CARD_FEE = 100; // Fee for card transactions in CFA
 const MOBILE_MONEY_FEE = 50; // Fee for mobile money transactions in CFA
+
+const sensitiveFields = ['paymentMethod', 'cvv', 'endpoint', 'apiKey'];
+registerRedactFilter(sensitiveFields);
+
+const logger: Logger = LoggerService.named('transaction-process');
 
 // Payment processing function
 const processPayment = async (transaction: {
@@ -33,7 +37,7 @@ const processPayment = async (transaction: {
       }
       logger.info('Processing card payment');
       const cardAmount = amount - CARD_FEE;
-      return processCardPayment(cardAmount, CARD_FEE, cardData);
+      return processCardPayment(cardAmount, CARD_FEE, cardData, logger);
     }
     case 'MOMO': {
       if (!customerPhone) {
@@ -43,7 +47,12 @@ const processPayment = async (transaction: {
       }
       logger.info('Processing MTN Mobile Money payment');
       const mtnAmount = amount + MOBILE_MONEY_FEE;
-      return processMTNPayment(mtnAmount, MOBILE_MONEY_FEE, customerPhone);
+      return processMTNPayment(
+        mtnAmount,
+        MOBILE_MONEY_FEE,
+        customerPhone,
+        logger
+      );
     }
     case 'ORANGE': {
       if (!customerPhone) {
@@ -56,7 +65,8 @@ const processPayment = async (transaction: {
       return processOrangePayment(
         orangeAmount,
         MOBILE_MONEY_FEE,
-        customerPhone
+        customerPhone,
+        logger
       );
     }
     default: {
@@ -69,7 +79,9 @@ export const handler: APIGatewayProxyHandler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   try {
-    logger.info('Received event:', JSON.stringify(event, null, 2));
+    logger.info('Received event:', event);
+    const parsedBody = JSON.parse(event.body || '{}');
+    logger.info('Parsed body:', parsedBody);
 
     const body = JSON.parse(event.body || '{}');
 
