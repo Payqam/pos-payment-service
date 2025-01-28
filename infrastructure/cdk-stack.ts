@@ -241,10 +241,12 @@ export class CDKStack extends cdk.Stack {
       },
     ];
 
+    // Create API Gateway with WAF association
     new ApiGatewayConstruct(this, 'ApiGateway', {
       envName: props.envName,
       namespace: props.namespace,
       resources,
+      webAcl: wafConstruct.webAcl,
     });
 
     // Add stack outputs
