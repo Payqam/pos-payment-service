@@ -10,7 +10,11 @@
     "cdk": "cdk",
     "clean": "tsc --build --clean",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:unit": "",
+    "test:integration": "",
+    "test:unit:coverage": "",
+    "test:integration:coverage": ""
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.109",
