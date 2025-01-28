@@ -86,6 +86,9 @@ export class PaymentServiceIAM extends Construct {
       ],
       resources: [
         `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-*`,
+        `arn:aws:secretsmanager:${env.region}:${env.account}:secret:STRIPE_API_SECRET-*`,
+        `arn:aws:secretsmanager:${env.region}:${env.account}:secret:MTN_API_SECRET-*`,
+        `arn:aws:secretsmanager:${env.region}:${env.account}:secret:ORANGE_API_SECRET-*`,
       ],
     });
   }
