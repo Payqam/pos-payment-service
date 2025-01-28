@@ -1,0 +1,140 @@
+name: UAT Deployment
+run-name: UAT Deployment
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  uat-deployment:
+    runs-on: ubuntu-latest
+    environment: UAT
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Setup
+        id: setup
+        run: |
+          npm i -g zx
+          zx ./scripts/setup.mjs
+        env:
+          ENV: UAT
+          NAMESPACE: ''
+      - name: Configure AWS Credentials for deployment
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{vars.AWS_REGION}}
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        if: ${{ vars.RUN_UNIT_TESTS }}
+        run: npm run test:unit:coverage
+        env:
+          DD_API_KEY: ${{ vars.DATADOG_API_KEY }}
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: true
+          NODE_OPTIONS: '-r dd-trace/ci/init'
+          DD_ENV: UAT
+          DD_SERVICE: ${{ github.repository }}
+      - name: Sonar Scan
+        if: ${{ inputs.RUN_SONAR_SCAN }}
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Quality Gate
+        if: ${{ inputs.RUN_SONAR_SCAN }}
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        # Force to fail step after specific time.
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Build
+        run: zx ./scripts/build.mjs
+        env:
+          ENV_SECRETS: ${{ secrets.ENV_SECRETS }}
+          ENV_VARS: ${{ inputs.ENV_VARS }}
+          ENV: UAT
+      - name: Deploy
+        id: deploy
+        run: zx ./scripts/deploy.mjs
+        env:
+          ENV_SECRETS: ${{ secrets.ENV_SECRETS }}
+          ENV_VARS: ${{ inputs.ENV_VARS }}
+          ENV: UAT
+          NAMESPACE: ''
+      - name: Generate release tag
+        id: generate_release_tag
+        uses: alexvingg/next-release-tag@v1.0.4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag_prefix: ''
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.generate_release_tag.outputs.release_tag }}
+          release_name: Release ${{ steps.generate_release_tag.outputs.release_tag }}
+      - name: E2E Tests
+        if: ${{ inputs.TYPE == 'frontend' && inputs.RUN_E2E_TESTS }}
+        uses: cypress-io/github-action@v6
+        with:
+          install: false
+        env:
+          CYPRESS_PR_NUMBER: ''
+          CYPRESS_ENVIRONMENT: uat
+      - name: Store E2E Artifacts
+        if: ${{ inputs.TYPE == 'frontend' && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: 'cypress/videos'
+      - name: Integration tests
+        if: ${{ inputs.TYPE == 'backend' && inputs.RUN_INTEGRATION_TESTS }}
+        run: npm run test:integration
+        env:
+          DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: true
+          NODE_OPTIONS: '-r dd-trace/ci/init'
+          DD_ENV: UAT
+          DD_SERVICE: ${{ github.repository }}
+          ENV: UAT
+          NAMESPACE: ''
+      - name: Integration Test Coverage
+        if: ${{ inputs.TYPE == 'backend' && inputs.RUN_INTEGRATION_TESTS }}
+        run: npm run test:integration:coverage
+        env:
+          ENV: UAT
+          NAMESPACE: ''
+      - name: Setup Datadog Agent
+        if: ${{ inputs.TYPE == 'backend' && inputs.ENABLE_DATADOG }}
+        uses: datadog/agent-github-action@v1.3
+        with:
+          api_key: ${{ secrets.DATADOG_API_KEY }}
+        env:
+          DD_DOGSTATSD_NON_LOCAL_TRAFFIC: 1
+          DD_DOGSTATSD_STATS_ENABLE: true
+      - name: Initialize Datadog for Tests
+        id: getDDIp
+        if: ${{ inputs.TYPE == 'backend' && inputs.ENABLE_DATADOG }}
+        run: |
+          echo "ddIP=$( docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' datadog-agent )" >> $GITHUB_OUTPUT
+      - name: Performance Tests
+        if: ${{ inputs.TYPE == 'backend' }}
+        uses: grafana/k6-action@v0.2.0
+        with:
+          filename: test/performance/index.js
+          flags: --out statsd --tag test_run_id=${{ github.repository }}-main
+        env:
+          K6_STATSD_ENABLE_TAGS: true
+          K6_STATSD_ADDR: ${{steps.getDDIp.outputs.ddIP}}:8125
+      - name: Remove .npmrc
+        if: always()
+        run: rm -f ~/.npmrc
