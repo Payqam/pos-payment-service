@@ -1,6 +1,6 @@
-import { Construct } from "constructs";
-import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
-import * as cdk from "aws-cdk-lib";
+import { Construct } from 'constructs';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as cdk from 'aws-cdk-lib';
 
 export interface DynamoDBConstructProps {
   envName: string;
@@ -19,7 +19,7 @@ export class DynamoDBConstruct extends Construct {
     this.table = new dynamodb.Table(this, `${props.namespace}-Table`, {
       tableName: `${props.namespace}-${props.envName}-${props.tableName}`,
       partitionKey: {
-        name: "transactionId",
+        name: 'transactionId',
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -29,9 +29,9 @@ export class DynamoDBConstruct extends Construct {
 
     // Add GSI1 with merchantId as partition key
     this.table.addGlobalSecondaryIndex({
-      indexName: "GSI1",
+      indexName: 'GSI1',
       partitionKey: {
-        name: "merchantId",
+        name: 'merchantId',
         type: dynamodb.AttributeType.STRING,
       },
       projectionType: dynamodb.ProjectionType.ALL,
