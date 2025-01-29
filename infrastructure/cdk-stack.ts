@@ -288,14 +288,14 @@ export class CDKStack extends cdk.Stack {
       description: 'VPC ID',
     });
 
-    new cdk.CfnOutput(this, 'webAclId', {
+    new cdk.CfnOutput(this, 'wafAclId', {
       value: wafConstruct.webAcl.attrId,
       description: 'WAF Web ACL ID',
     });
 
-    new cdk.CfnOutput(this, 'elastiCacheId', {
-      value: cache.cluster.attrId,
-      description: 'ElastiCache ID',
+    new cdk.CfnOutput(this, 'elastiCacheCluster', {
+      value: cache.cluster.ref,
+      description: 'ElastiCache Cluster Name',
     });
   }
 }

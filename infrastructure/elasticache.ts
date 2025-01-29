@@ -64,6 +64,7 @@ export class ElastiCacheConstruct extends Construct {
       vpcSecurityGroupIds: [props.securityGroup.securityGroupId],
       cacheSubnetGroupName: subnetGroup.ref,
       cacheParameterGroupName: this.parameterGroup.ref,
+      clusterName: `payqam-${props.envName}${props.namespace}-cache`,
 
       // Automatic backup configuration
       snapshotRetentionLimit: 7, // Keep backups for 7 days
@@ -75,6 +76,13 @@ export class ElastiCacheConstruct extends Construct {
       autoMinorVersionUpgrade: true,
       engineVersion: '6.x',
 
+      // Network settings
+      azMode: 'cross-az', // Enable cross-AZ deployment for HA
+      preferredAvailabilityZone: props.vpc.privateSubnets[0].availabilityZone,
+      preferredAvailabilityZones: props.vpc.privateSubnets
+        .slice(0, 2)
+        .map((subnet) => subnet.availabilityZone),
+
       // Tags
       tags: [
         {
@@ -84,6 +92,10 @@ export class ElastiCacheConstruct extends Construct {
         {
           key: 'Service',
           value: 'PayQAM',
+        },
+        {
+          key: 'Name',
+          value: `payqam-${props.envName}${props.namespace}-cache`,
         },
       ],
     });
