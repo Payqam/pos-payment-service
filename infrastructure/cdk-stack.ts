@@ -281,7 +281,7 @@ export class CDKStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'elastiCacheId', {
       value: cache.cluster.attrId,
-      description: 'WAF Web ACL ID',
+      description: 'ElastiCache ID',
     });
   }
 }
