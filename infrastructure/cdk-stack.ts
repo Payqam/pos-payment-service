@@ -15,6 +15,7 @@ import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { createLambdaLogGroup } from './log-groups';
 import { SecretsManagerHelper } from './secretsmanager';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { DynamoDBConstruct } from './dynamodb';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -46,6 +47,14 @@ export class CDKStack extends cdk.Stack {
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
+
+    // Create DynamoDB table
+    const dynamoDBConstruct = new DynamoDBConstruct(this, 'DynamoDB', {
+      envName: props.envName,
+      namespace: props.namespace,
+      tableName: 'Transactions',
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Only for development, use RETAIN for production
+    });
 
     // Log the role ARN and security groups to ensure it's being used (addresses unused constant warning)
     logger.info('Lambda execution role created', {
@@ -183,6 +192,11 @@ export class CDKStack extends cdk.Stack {
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+
+    // Grant DynamoDB permissions to Lambda functions
+    dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
 
     const resources: ResourceConfig[] = [
       {

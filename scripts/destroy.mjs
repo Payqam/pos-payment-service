@@ -14,7 +14,7 @@ SECRETS.forEach((secret) => {
 // Read the environment variable values from the JSON file
 const envVarsPath = path.join(
   __dirname,
-  `../configurations/${env}.config.json`
+  `../configurations/workflow/${env}.config.json`
 );
 
 // Set up env variables
