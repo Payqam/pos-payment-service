@@ -3,6 +3,7 @@ export const PATHS = {
     TRANSACTIONS_PROCESS: '../src/functions/transaction-process',
     SALESFORCE_SYNC: '../src/functions/salesforce-sync',
     STRIPE_WEBHOOK: '../src/functions/webhook/stripe',
-    WEBHOOK_ORANGE: '../src/functions/webhook/orange',
+    ORANGE_WEBHOOK: '../src/functions/webhook/orange',
+    MTN_WEBHOOK: '../src/functions/webhook/mtn',
   },
 } as const;
