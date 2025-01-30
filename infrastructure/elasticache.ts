@@ -68,8 +68,8 @@ export class ElastiCacheConstruct extends Construct {
 
       // Automatic backup configuration
       snapshotRetentionLimit: 7, // Keep backups for 7 days
-      snapshotWindow: '00:00-03:00', // UTC time
-      preferredMaintenanceWindow: 'sun:23:00-mon:01:30',
+      snapshotWindow: '03:00-04:00', // UTC time - 1-hour window for snapshots
+      preferredMaintenanceWindow: 'sun:05:00-sun:06:00', // UTC time - After snapshots
 
       // Performance and security settings
       port: 6379,
