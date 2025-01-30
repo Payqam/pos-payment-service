@@ -6,7 +6,6 @@ import { PaymentServiceSecurityGroups } from './security-groups';
 import { PaymentServiceIAM } from './iam';
 import { PaymentServiceWAF } from './waf';
 import { PaymentServiceSNS } from './sns';
-import getLogger from '../src/internal/logger';
 import { ApiGatewayConstruct, ResourceConfig } from './apigateway';
 import { PAYQAMLambda } from './lambda';
 import { PATHS } from '../configurations/paths';
@@ -14,9 +13,11 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Environment } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { createLambdaLogGroup } from './log-groups';
+import { SecretsManagerHelper } from './secretsmanager';
+import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 
-const logger = getLogger();
+const logger: Logger = LoggerService.named('cdk-stack');
 
 interface CDKStackProps extends cdk.StackProps {
   envName: string;
@@ -65,6 +66,40 @@ export class CDKStack extends cdk.Stack {
         securityGroups.apiGatewaySecurityGroup.securityGroupId,
     });
 
+    const stripeConfig = {
+      secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores Stripe API keys and endpoint',
+      secretValues: {
+        endpoint: 'https://api.stripe.com',
+        apiKey: 'sk_test_your_key_here',
+      },
+    };
+
+    // Define secret values for MTN
+    const mtnConfig = {
+      secretName: `MTN_API_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores MTN Mobile Money API keys and endpoint',
+      secretValues: {
+        endpoint: 'https://api.mtn.com',
+        apiKey: 'mtn_test_your_key_here',
+      },
+    };
+
+    // Define secret values for Orange
+    const orangeConfig = {
+      secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores Orange Money API keys and endpoint',
+      secretValues: {
+        endpoint: 'https://api.orange.com',
+        apiKey: 'orange_test_your_key_here',
+      },
+    };
+
+    // Create secrets using the helper
+    const stripeSecret = SecretsManagerHelper.createSecret(this, stripeConfig);
+    const mtnSecret = SecretsManagerHelper.createSecret(this, mtnConfig);
+    const orangeSecret = SecretsManagerHelper.createSecret(this, orangeConfig);
+
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -74,6 +109,9 @@ export class CDKStack extends cdk.Stack {
         vpc: vpcConstruct.vpc,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_API_SECRET: mtnSecret.secretName,
+          ORANGE_API_SECRET: orangeSecret.secretName,
         },
       }
     );
@@ -84,6 +122,9 @@ export class CDKStack extends cdk.Stack {
       iamConstruct.dynamoDBPolicy
     );
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);
 
@@ -280,6 +321,21 @@ export class CDKStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'webAclId', {
       value: wafConstruct.webAcl.attrId,
       description: 'WAF Web ACL ID',
+    });
+
+    new cdk.CfnOutput(this, 'StripeSecretArn', {
+      value: stripeSecret.secretArn,
+      description: 'The ARN of the Stripe Secret',
+    });
+
+    new cdk.CfnOutput(this, 'MTNSecretArn', {
+      value: mtnSecret.secretArn,
+      description: 'The ARN of the MTN Secret',
+    });
+
+    new cdk.CfnOutput(this, 'OrangeSecretArn', {
+      value: orangeSecret.secretArn,
+      description: 'The ARN of the Orange Secret',
     });
   }
 }
