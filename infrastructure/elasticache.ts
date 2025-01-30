@@ -60,7 +60,7 @@ export class ElastiCacheConstruct extends Construct {
     this.cluster = new elasticache.CfnCacheCluster(this, 'PaymentCache', {
       engine: 'redis',
       cacheNodeType: 'cache.t3.micro', // Start small, can scale up
-      numCacheNodes: 2, // Primary + Replica for HA
+      numCacheNodes: 1, // Single node to reduce IP usage
       vpcSecurityGroupIds: [props.securityGroup.securityGroupId],
       cacheSubnetGroupName: subnetGroup.ref,
       cacheParameterGroupName: this.parameterGroup.ref,
@@ -77,11 +77,7 @@ export class ElastiCacheConstruct extends Construct {
       engineVersion: '6.x',
 
       // Network settings
-      azMode: 'cross-az', // Enable cross-AZ deployment for HA
-      preferredAvailabilityZone: props.vpc.privateSubnets[0].availabilityZone,
-      preferredAvailabilityZones: props.vpc.privateSubnets
-        .slice(0, 2)
-        .map((subnet) => subnet.availabilityZone),
+      preferredAvailabilityZone: props.vpc.privateSubnets[0].availabilityZone, // Use single AZ
 
       // Tags
       tags: [
