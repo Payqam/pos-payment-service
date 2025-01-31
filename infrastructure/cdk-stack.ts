@@ -16,6 +16,7 @@ import { createLambdaLogGroup } from './log-groups';
 import { SecretsManagerHelper } from './secretsmanager';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
+import { ElastiCacheConstruct } from './elasticache';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -39,6 +40,8 @@ export class CDKStack extends cdk.Stack {
       'SecurityGroups',
       {
         vpc: vpcConstruct.vpc,
+        envName: props.envName,
+        namespace: props.namespace,
       }
     );
 
@@ -200,6 +203,14 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
 
+    // Create ElastiCache cluster
+    const cache = new ElastiCacheConstruct(this, 'Cache', {
+      envName: props.envName,
+      namespace: props.namespace,
+      vpc: vpcConstruct.vpc,
+      securityGroup: securityGroups.cacheSecurityGroup,
+    });
+
     const resources: ResourceConfig[] = [
       {
         path: 'process-payments',
@@ -324,9 +335,14 @@ export class CDKStack extends cdk.Stack {
       description: 'VPC ID',
     });
 
-    new cdk.CfnOutput(this, 'webAclId', {
+    new cdk.CfnOutput(this, 'wafAclId', {
       value: wafConstruct.webAcl.attrId,
       description: 'WAF Web ACL ID',
+    });
+
+    new cdk.CfnOutput(this, 'elastiCacheCluster', {
+      value: cache.cluster.ref,
+      description: 'ElastiCache Cluster Name',
     });
   }
 }

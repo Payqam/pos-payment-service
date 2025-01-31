@@ -3,9 +3,9 @@ import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
-import getLogger from '../../internal/logger';
+import { Logger, LoggerService } from '@mu-ts/logger';
 
-const logger = getLogger();
+const logger: Logger = LoggerService.named('salesforce-sync');
 const secretsManager = new SecretsManagerClient({});
 
 interface SalesforceCredentials {
