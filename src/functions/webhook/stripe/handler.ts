@@ -1,8 +1,8 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { API } from '../../../../configurations/api';
-import getLogger from '../../../internal/logger/index';
+import { Logger, LoggerService } from '@mu-ts/logger';
 
-const logger = getLogger();
+const logger: Logger = LoggerService.named('stripe-webhook');
 
 async function handlePaymentIntentSucceeded(paymentIntent: never) {
   // TODO: Implement payment success handling
