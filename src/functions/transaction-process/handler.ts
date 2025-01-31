@@ -15,6 +15,7 @@ export class TransactionProcessService {
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
+    this.logger.info('init()');
   }
 
   public async processTransaction(
