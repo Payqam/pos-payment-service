@@ -70,8 +70,9 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.stripe.com',
-        apiKey: 'sk_test_your_key_here',
+        apiKey:
+          'sk_test_51Qm8InLS3EJLWOAq6ABFL74kuYjpwmQJPuH8ZkAz7ryYtfryx6ajDk03W1p5xjF1wAYiVTkpQ1UYDS0rT7BIbJ0t00gK4i4Kjf',
+        signingSecret: 'whsec_42iQ4HjWzNZL2hn0It3UhklnhAOVtfwx',
       },
     };
 
@@ -157,6 +158,7 @@ export class CDKStack extends cdk.Stack {
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         STRIPE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Stripe-${props.envName}`,
+        STRIPE_API_SECRET: stripeSecret.secretName,
       },
     });
 
@@ -203,6 +205,7 @@ export class CDKStack extends cdk.Stack {
         path: 'process-payments',
         method: 'POST',
         lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
         requestModel: {
           modelName: 'ProcessPaymentsRequestModel',
           schema: {
@@ -241,11 +244,13 @@ export class CDKStack extends cdk.Stack {
         path: 'webhook-orange',
         method: 'POST',
         lambda: orangeWebhookLambda.lambda,
+        apiKeyRequired: true,
       },
       {
         path: 'transaction-status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
         requestParameters: {
           'method.request.querystring.transactionId': true, //TODO: Update this according to the actual schema
         },
@@ -264,6 +269,7 @@ export class CDKStack extends cdk.Stack {
         path: 'webhooks/stripe',
         method: 'POST',
         lambda: stripeWebhookLambda.lambda,
+        apiKeyRequired: false,
         requestModel: {
           modelName: 'StripeWebhookRequestModel',
           schema: {
@@ -321,21 +327,6 @@ export class CDKStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'webAclId', {
       value: wafConstruct.webAcl.attrId,
       description: 'WAF Web ACL ID',
-    });
-
-    new cdk.CfnOutput(this, 'StripeSecretArn', {
-      value: stripeSecret.secretArn,
-      description: 'The ARN of the Stripe Secret',
-    });
-
-    new cdk.CfnOutput(this, 'MTNSecretArn', {
-      value: mtnSecret.secretArn,
-      description: 'The ARN of the MTN Secret',
-    });
-
-    new cdk.CfnOutput(this, 'OrangeSecretArn', {
-      value: orangeSecret.secretArn,
-      description: 'The ARN of the Orange Secret',
     });
   }
 }
