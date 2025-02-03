@@ -27,6 +27,21 @@ export class PaymentServiceIAM extends Construct {
     this.dynamoDBPolicy = this.createDynamoDBPolicy(env);
     this.snsPolicy = this.createSNSPolicy(env);
     this.secretsManagerPolicy = this.createSecretsManagerPolicy(env);
+
+    // Add ElastiCache permissions
+    this.lambdaRole.addToPolicy(
+      new PolicyStatement({
+        actions: [
+          'elasticache:DescribeCacheClusters',
+          'elasticache:ListTagsForResource',
+          'elasticache:DescribeReservedCacheNodes',
+          'elasticache:DescribeCacheParameterGroups',
+          'elasticache:DescribeCacheSecurityGroups',
+          'elasticache:DescribeCacheSubnetGroups',
+        ],
+        resources: ['*'],
+      })
+    );
   }
 
   // Create Lambda execution role with basic permissions
@@ -86,6 +101,9 @@ export class PaymentServiceIAM extends Construct {
       ],
       resources: [
         `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-*`,
+        `arn:aws:secretsmanager:${env.region}:${env.account}:secret:STRIPE_API_SECRET-*`,
+        `arn:aws:secretsmanager:${env.region}:${env.account}:secret:MTN_API_SECRET-*`,
+        `arn:aws:secretsmanager:${env.region}:${env.account}:secret:ORANGE_API_SECRET-*`,
       ],
     });
   }

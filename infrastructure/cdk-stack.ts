@@ -6,7 +6,6 @@ import { PaymentServiceSecurityGroups } from './security-groups';
 import { PaymentServiceIAM } from './iam';
 import { PaymentServiceWAF } from './waf';
 import { PaymentServiceSNS } from './sns';
-import getLogger from '../src/internal/logger';
 import { ApiGatewayConstruct, ResourceConfig } from './apigateway';
 import { PAYQAMLambda } from './lambda';
 import { PATHS } from '../configurations/paths';
@@ -14,9 +13,12 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Environment } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { createLambdaLogGroup } from './log-groups';
+import { SecretsManagerHelper } from './secretsmanager';
+import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
+import { ElastiCacheConstruct } from './elasticache';
 
-const logger = getLogger();
+const logger: Logger = LoggerService.named('cdk-stack');
 
 interface CDKStackProps extends cdk.StackProps {
   envName: string;
@@ -38,6 +40,8 @@ export class CDKStack extends cdk.Stack {
       'SecurityGroups',
       {
         vpc: vpcConstruct.vpc,
+        envName: props.envName,
+        namespace: props.namespace,
       }
     );
 
@@ -65,6 +69,40 @@ export class CDKStack extends cdk.Stack {
         securityGroups.apiGatewaySecurityGroup.securityGroupId,
     });
 
+    const stripeConfig = {
+      secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores Stripe API keys and endpoint',
+      secretValues: {
+        apiKey: process.env.STRIPE_API_SECRET as string,
+        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
+      },
+    };
+
+    // Define secret values for MTN
+    const mtnConfig = {
+      secretName: `MTN_API_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores MTN Mobile Money API keys and endpoint',
+      secretValues: {
+        endpoint: 'https://api.mtn.com',
+        apiKey: 'mtn_test_your_key_here',
+      },
+    };
+
+    // Define secret values for Orange
+    const orangeConfig = {
+      secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores Orange Money API keys and endpoint',
+      secretValues: {
+        endpoint: 'https://api.orange.com',
+        apiKey: 'orange_test_your_key_here',
+      },
+    };
+
+    // Create secrets using the helper
+    const stripeSecret = SecretsManagerHelper.createSecret(this, stripeConfig);
+    const mtnSecret = SecretsManagerHelper.createSecret(this, mtnConfig);
+    const orangeSecret = SecretsManagerHelper.createSecret(this, orangeConfig);
+
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -74,6 +112,9 @@ export class CDKStack extends cdk.Stack {
         vpc: vpcConstruct.vpc,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_API_SECRET: mtnSecret.secretName,
+          ORANGE_API_SECRET: orangeSecret.secretName,
         },
       }
     );
@@ -84,6 +125,9 @@ export class CDKStack extends cdk.Stack {
       iamConstruct.dynamoDBPolicy
     );
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);
 
@@ -116,6 +160,7 @@ export class CDKStack extends cdk.Stack {
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         STRIPE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Stripe-${props.envName}`,
+        STRIPE_API_SECRET: stripeSecret.secretName,
       },
     });
 
@@ -141,9 +186,10 @@ export class CDKStack extends cdk.Stack {
       })
     );
 
+    // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.WEBHOOK_ORANGE}/handler.ts`,
+      path: `${PATHS.FUNCTIONS.ORANGE_WEBHOOK}/handler.ts`,
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
@@ -152,16 +198,38 @@ export class CDKStack extends cdk.Stack {
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
+    // Create MTN webhook Lambda
+    const mtnWebhookLambda = new PAYQAMLambda(this, 'MTNWebhookLambda', {
+      name: `MTNWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.MTN_WEBHOOK}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+      },
+    });
+    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    createLambdaLogGroup(this, mtnWebhookLambda.lambda);
+
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
+
+    // Create ElastiCache cluster
+    const cache = new ElastiCacheConstruct(this, 'Cache', {
+      envName: props.envName,
+      namespace: props.namespace,
+      vpc: vpcConstruct.vpc,
+      securityGroup: securityGroups.cacheSecurityGroup,
+    });
 
     const resources: ResourceConfig[] = [
       {
         path: 'process-payments',
         method: 'POST',
         lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
         requestModel: {
           modelName: 'ProcessPaymentsRequestModel',
           schema: {
@@ -200,11 +268,13 @@ export class CDKStack extends cdk.Stack {
         path: 'webhook-orange',
         method: 'POST',
         lambda: orangeWebhookLambda.lambda,
+        apiKeyRequired: true,
       },
       {
         path: 'transaction-status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
         requestParameters: {
           'method.request.querystring.transactionId': true, //TODO: Update this according to the actual schema
         },
@@ -223,6 +293,7 @@ export class CDKStack extends cdk.Stack {
         path: 'webhooks/stripe',
         method: 'POST',
         lambda: stripeWebhookLambda.lambda,
+        apiKeyRequired: false,
         requestModel: {
           modelName: 'StripeWebhookRequestModel',
           schema: {
@@ -277,9 +348,14 @@ export class CDKStack extends cdk.Stack {
       description: 'VPC ID',
     });
 
-    new cdk.CfnOutput(this, 'webAclId', {
+    new cdk.CfnOutput(this, 'wafAclId', {
       value: wafConstruct.webAcl.attrId,
       description: 'WAF Web ACL ID',
+    });
+
+    new cdk.CfnOutput(this, 'elastiCacheCluster', {
+      value: cache.cluster.ref,
+      description: 'ElastiCache Cluster Name',
     });
   }
 }
