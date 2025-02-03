@@ -3,6 +3,7 @@ import {
   PolicyStatement,
   Role,
   ServicePrincipal,
+  Effect,
 } from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { Environment } from 'aws-cdk-lib';
@@ -30,20 +31,35 @@ export class PaymentServiceIAM extends Construct {
   }
 
   // Create Lambda execution role with basic permissions
-  private createLambdaRole() {
-    return new Role(this, 'LambdaExecutionRole', {
+  private createLambdaRole(): Role {
+    const role = new Role(this, 'LambdaRole', {
       assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Execution role for PayQAM Lambda functions',
-      // Add AWS managed policies for Lambda VPC access and basic execution
-      managedPolicies: [
-        ManagedPolicy.fromAwsManagedPolicyName(
-          'service-role/AWSLambdaVPCAccessExecutionRole'
-        ),
-        ManagedPolicy.fromAwsManagedPolicyName(
-          'service-role/AWSLambdaBasicExecutionRole'
-        ),
-      ],
+      description: 'Lambda execution role for PAYQAM POS Payment Service',
     });
+
+    // Add basic Lambda execution policy
+    role.addManagedPolicy(
+      ManagedPolicy.fromAwsManagedPolicyName(
+        'service-role/AWSLambdaBasicExecutionRole',
+      ),
+    );
+
+    // Add X-Ray write permissions
+    role.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: [
+          'xray:PutTraceSegments',
+          'xray:PutTelemetryRecords',
+          'xray:GetSamplingRules',
+          'xray:GetSamplingTargets',
+          'xray:GetSamplingStatisticSummaries',
+        ],
+        resources: ['*'],
+      }),
+    );
+
+    return role;
   }
 
   // DynamoDB policy for transaction data access
