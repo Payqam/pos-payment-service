@@ -55,6 +55,7 @@ export class CDKStack extends cdk.Stack {
     // Create X-Ray configuration
     new PaymentServiceXRay(this, 'XRay', {
       envName: props.envName,
+      namespace: props.namespace,
     });
 
     // Create DynamoDB table
