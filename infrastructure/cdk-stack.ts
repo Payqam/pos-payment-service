@@ -17,6 +17,7 @@ import { SecretsManagerHelper } from './secretsmanager';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElastiCacheConstruct } from './elasticache';
+import { PaymentServiceXRay } from './xray';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -50,6 +51,12 @@ export class CDKStack extends cdk.Stack {
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
+
+    // Create X-Ray configuration
+    new PaymentServiceXRay(this, 'XRay', {
+      envName: props.envName,
+      namespace: props.namespace,
+    });
 
     // Create DynamoDB table
     const dynamoDBConstruct = new DynamoDBConstruct(this, 'DynamoDB', {
