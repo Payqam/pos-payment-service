@@ -73,9 +73,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        apiKey:
-          'sk_test_51Qm8InLS3EJLWOAq6ABFL74kuYjpwmQJPuH8ZkAz7ryYtfryx6ajDk03W1p5xjF1wAYiVTkpQ1UYDS0rT7BIbJ0t00gK4i4Kjf',
-        signingSecret: 'whsec_42iQ4HjWzNZL2hn0It3UhklnhAOVtfwx',
+        apiKey: process.env.STRIPE_API_SECRET as string,
+        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
       },
     };
 
