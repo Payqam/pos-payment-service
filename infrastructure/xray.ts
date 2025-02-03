@@ -10,6 +10,7 @@ export class PaymentServiceXRay extends Construct {
   constructor(scope: Construct, id: string, props: PaymentServiceXRayProps) {
     super(scope, id);
 
+    //TODO: uncomment when sampling rule is ready
     // // Create sampling rule
     // new xray.CfnSamplingRule(this, 'PaymentServiceSamplingRule', {
     //   ruleName: `PaymentService-${props.envName}-SamplingRule`,
