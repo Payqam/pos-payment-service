@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test:unit": "jest test/unit",
-    "test:integration": "",
+    "test:integration": "jest test/integration",
     "test:unit:coverage": "",
     "test:integration:coverage": ""
   },
