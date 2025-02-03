@@ -14,6 +14,7 @@ export interface ResourceConfig {
   path: string;
   method: string;
   lambda: IFunction;
+  apiKeyRequired: boolean;
   requestModel?: {
     modelName: string;
     schema: apigateway.JsonSchema;
@@ -168,7 +169,7 @@ export class ApiGatewayConstruct extends Construct {
     // Configure method options with validation and models
     const methodOptions: apigateway.MethodOptions = {
       requestValidator,
-      apiKeyRequired: true,
+      apiKeyRequired: config.apiKeyRequired ?? false,
       requestModels: requestModel
         ? { 'application/json': requestModel }
         : undefined,

@@ -73,8 +73,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.stripe.com',
-        apiKey: 'sk_test_your_key_here',
+        apiKey: process.env.STRIPE_API_SECRET as string,
+        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
       },
     };
 
@@ -160,6 +160,7 @@ export class CDKStack extends cdk.Stack {
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         STRIPE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Stripe-${props.envName}`,
+        STRIPE_API_SECRET: stripeSecret.secretName,
       },
     });
 
@@ -228,6 +229,7 @@ export class CDKStack extends cdk.Stack {
         path: 'process-payments',
         method: 'POST',
         lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
         requestModel: {
           modelName: 'ProcessPaymentsRequestModel',
           schema: {
@@ -266,11 +268,13 @@ export class CDKStack extends cdk.Stack {
         path: 'webhook-orange',
         method: 'POST',
         lambda: orangeWebhookLambda.lambda,
+        apiKeyRequired: true,
       },
       {
         path: 'transaction-status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
         requestParameters: {
           'method.request.querystring.transactionId': true, //TODO: Update this according to the actual schema
         },
@@ -289,6 +293,7 @@ export class CDKStack extends cdk.Stack {
         path: 'webhooks/stripe',
         method: 'POST',
         lambda: stripeWebhookLambda.lambda,
+        apiKeyRequired: false,
         requestModel: {
           modelName: 'StripeWebhookRequestModel',
           schema: {
@@ -351,21 +356,6 @@ export class CDKStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'elastiCacheCluster', {
       value: cache.cluster.ref,
       description: 'ElastiCache Cluster Name',
-    });
-
-    new cdk.CfnOutput(this, 'StripeSecretArn', {
-      value: stripeSecret.secretArn,
-      description: 'The ARN of the Stripe Secret',
-    });
-
-    new cdk.CfnOutput(this, 'MTNSecretArn', {
-      value: mtnSecret.secretArn,
-      description: 'The ARN of the MTN Secret',
-    });
-
-    new cdk.CfnOutput(this, 'OrangeSecretArn', {
-      value: orangeSecret.secretArn,
-      description: 'The ARN of the Orange Secret',
     });
   }
 }
