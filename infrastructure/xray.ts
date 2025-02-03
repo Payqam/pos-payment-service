@@ -32,7 +32,6 @@ export class PaymentServiceXRay extends Construct {
       alias: `alias/xray-encryption-${props.envName}${props.namespace}`,
     });
 
-
     // Add encryption configuration
     new xray.CfnGroup(this, 'PaymentServiceXRayGroup', {
       groupName: `PaymentService-${props.envName}${props.namespace}`,
