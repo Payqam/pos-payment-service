@@ -50,7 +50,7 @@ export class CDKStack extends cdk.Stack {
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
 
     // Create X-Ray configuration
-    const xrayConstruct = new PaymentServiceXRay(this, 'XRay', {
+    new PaymentServiceXRay(this, 'XRay', {
       envName: props.envName,
     });
 

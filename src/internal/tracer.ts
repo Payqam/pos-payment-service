@@ -23,7 +23,7 @@ export function getInstrumentedClients() {
 // Helper function to create custom subsegments
 export function createCustomSegment<T>(
   name: string,
-  operation: () => Promise<T>,
+  operation: () => Promise<T>
 ): Promise<T> {
   const segment = tracer.getSegment();
   const subsegment = segment?.addNewSubsegment(name);

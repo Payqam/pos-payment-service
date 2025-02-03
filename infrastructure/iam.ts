@@ -40,8 +40,8 @@ export class PaymentServiceIAM extends Construct {
     // Add basic Lambda execution policy
     role.addManagedPolicy(
       ManagedPolicy.fromAwsManagedPolicyName(
-        'service-role/AWSLambdaBasicExecutionRole',
-      ),
+        'service-role/AWSLambdaBasicExecutionRole'
+      )
     );
 
     // Add X-Ray write permissions
@@ -56,7 +56,7 @@ export class PaymentServiceIAM extends Construct {
           'xray:GetSamplingStatisticSummaries',
         ],
         resources: ['*'],
-      }),
+      })
     );
 
     return role;

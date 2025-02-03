@@ -24,7 +24,7 @@ export class PaymentServiceXRay extends Construct {
     // });
 
     // Create encryption key for X-Ray traces
-    const encryptionKey = new cdk.aws_kms.Key(this, 'XRayEncryptionKey', {
+    new cdk.aws_kms.Key(this, 'XRayEncryptionKey', {
       enableKeyRotation: true,
       description: 'KMS key for X-Ray trace encryption',
       alias: `alias/xray-encryption-${props.envName}`,
