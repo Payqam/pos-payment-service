@@ -28,6 +28,21 @@ export class PaymentServiceIAM extends Construct {
     this.dynamoDBPolicy = this.createDynamoDBPolicy(env);
     this.snsPolicy = this.createSNSPolicy(env);
     this.secretsManagerPolicy = this.createSecretsManagerPolicy(env);
+
+    // Add ElastiCache permissions
+    this.lambdaRole.addToPolicy(
+      new PolicyStatement({
+        actions: [
+          'elasticache:DescribeCacheClusters',
+          'elasticache:ListTagsForResource',
+          'elasticache:DescribeReservedCacheNodes',
+          'elasticache:DescribeCacheParameterGroups',
+          'elasticache:DescribeCacheSecurityGroups',
+          'elasticache:DescribeCacheSubnetGroups',
+        ],
+        resources: ['*'],
+      })
+    );
   }
 
   // Create Lambda execution role with basic permissions

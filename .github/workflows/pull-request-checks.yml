@@ -37,6 +37,8 @@ jobs:
         env:
           NAMESPACE: ${{ github.event.number }}
           ENV: SQA
+          STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
+          STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
       - name: Deploy
         id: deploy
         run: zx ./scripts/deploy.mjs

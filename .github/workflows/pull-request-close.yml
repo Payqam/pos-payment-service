@@ -35,6 +35,8 @@ jobs:
         env:
           NAMESPACE: ${{ github.event.number }}
           ENV: SQA
+          STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
+          STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
       - name: Destroy Deployment
         run: zx ./scripts/destroy.mjs
         env:
