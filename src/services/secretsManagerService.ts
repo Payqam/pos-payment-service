@@ -8,7 +8,7 @@ export class SecretsManagerService {
   private readonly logger: Logger;
 
   constructor() {
-    this.smClient = new SMClient();
+    this.smClient = SMClient.getInstance();
     this.logger = LoggerService.named(this.constructor.name);
     this.logger.info('SecretsManagerService initialized');
   }
