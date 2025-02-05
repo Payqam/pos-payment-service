@@ -4,7 +4,7 @@ import { PaymentService } from './paymentService';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 
-const sensitiveFields = ['id', 'destinationId', 'cardName'];
+const sensitiveFields = ['id, destinationId', 'cardName'];
 registerRedactFilter(sensitiveFields);
 
 export class TransactionProcessService {
@@ -35,7 +35,7 @@ export class TransactionProcessService {
       const body = JSON.parse(event.body);
       this.logger.info('Parsed body:', body);
 
-      const { amount, paymentMethod, cardData, customerPhone } = body;
+      const { amount, paymentMethod, cardData, customerPhone, metaData } = body;
 
       if (!amount || !paymentMethod) {
         return {
@@ -52,6 +52,7 @@ export class TransactionProcessService {
         paymentMethod,
         cardData,
         customerPhone,
+        metaData,
       });
 
       return {
