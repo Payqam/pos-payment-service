@@ -3,7 +3,7 @@ run-name: NON-PROD Deployment
 on:
   push:
     branches:
-      - "main"
+      - 'main'
 jobs:
   run-quality-checks:
     runs-on: ubuntu-latest

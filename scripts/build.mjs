@@ -28,4 +28,5 @@ for (const key in envVarsData) {
   }
 }
 
+// Build the project
 await $`npm run build`;

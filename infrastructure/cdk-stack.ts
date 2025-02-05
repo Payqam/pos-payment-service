@@ -17,6 +17,7 @@ import { SecretsManagerHelper } from './secretsmanager';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElastiCacheConstruct } from './elasticache';
+import { PaymentServiceXRay } from './xray';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -50,6 +51,12 @@ export class CDKStack extends cdk.Stack {
 
     // Create WAF
     const wafConstruct = new PaymentServiceWAF(this, 'WAF');
+
+    // Create X-Ray configuration
+    new PaymentServiceXRay(this, 'XRay', {
+      envName: props.envName,
+      namespace: props.namespace,
+    });
 
     // Create DynamoDB table
     const dynamoDBConstruct = new DynamoDBConstruct(this, 'DynamoDB', {
@@ -188,9 +195,10 @@ export class CDKStack extends cdk.Stack {
       })
     );
 
+    // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.WEBHOOK_ORANGE}/handler.ts`,
+      path: `${PATHS.FUNCTIONS.ORANGE_WEBHOOK}/handler.ts`,
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
@@ -199,11 +207,24 @@ export class CDKStack extends cdk.Stack {
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
+    // Create MTN webhook Lambda
+    const mtnWebhookLambda = new PAYQAMLambda(this, 'MTNWebhookLambda', {
+      name: `MTNWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.MTN_WEBHOOK}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+      },
+    });
+    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    createLambdaLogGroup(this, mtnWebhookLambda.lambda);
+
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
 
     // Create ElastiCache cluster
     const cache = new ElastiCacheConstruct(this, 'Cache', {

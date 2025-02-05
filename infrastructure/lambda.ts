@@ -1,5 +1,10 @@
 import { Duration } from 'aws-cdk-lib';
-import { IFunction, ILayerVersion, Runtime } from 'aws-cdk-lib/aws-lambda';
+import {
+  IFunction,
+  ILayerVersion,
+  Runtime,
+  Tracing,
+} from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
 import { join } from 'path';
@@ -32,16 +37,24 @@ export class PAYQAMLambda extends Construct {
       functionName: `PAYQAM-${props.name}`,
       runtime: Runtime.NODEJS_18_X,
       handler: 'handler',
-      environment: props.environment,
+      environment: {
+        ...props.environment,
+        NODE_OPTIONS: '--enable-source-maps',
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
+      },
       layers: props.layers ? props.layers : [],
       timeout: Duration.minutes(1),
       vpc: props.vpc,
+      tracing: Tracing.ACTIVE,
+
       bundling: {
         externalModules: [
           'cache-manager',
           'class-validator',
           'class-transformer',
+          'aws-xray-sdk-core',
         ],
+        sourceMap: true,
       },
     });
     return lambda as IFunction;
