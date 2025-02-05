@@ -55,7 +55,7 @@ export class CDKStack extends cdk.Stack {
     const dynamoDBConstruct = new DynamoDBConstruct(this, 'DynamoDB', {
       envName: props.envName,
       namespace: props.namespace,
-      tableName: 'Transactions',
+      tableName: `PAYQAM-Transactions-${props.envName}${props.namespace}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Only for development, use RETAIN for production
     });
 
@@ -115,6 +115,7 @@ export class CDKStack extends cdk.Stack {
           STRIPE_API_SECRET: stripeSecret.secretName,
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
         },
       }
     );
@@ -161,6 +162,7 @@ export class CDKStack extends cdk.Stack {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         STRIPE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Stripe-${props.envName}`,
         STRIPE_API_SECRET: stripeSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
       },
     });
 
@@ -199,6 +201,7 @@ export class CDKStack extends cdk.Stack {
 
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
 
@@ -222,11 +225,11 @@ export class CDKStack extends cdk.Stack {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
               merchantId: { type: apigateway.JsonSchemaType.STRING },
-              amount: { type: apigateway.JsonSchemaType.NUMBER }, //TODO: Update this according to the actual schema
+              amount: { type: apigateway.JsonSchemaType.NUMBER },
               customerPhone: { type: apigateway.JsonSchemaType.STRING },
               transactionType: { type: apigateway.JsonSchemaType.STRING },
               paymentMethod: { type: apigateway.JsonSchemaType.STRING },
-              metadata: { type: apigateway.JsonSchemaType.OBJECT },
+              metaData: { type: apigateway.JsonSchemaType.OBJECT },
               cardData: { type: apigateway.JsonSchemaType.OBJECT },
             },
             required: [
@@ -235,7 +238,7 @@ export class CDKStack extends cdk.Stack {
               'customerPhone',
               'transactionType',
               'paymentMethod',
-              'metadata',
+              'metaData',
             ],
           },
         },
