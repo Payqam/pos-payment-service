@@ -1,27 +1,27 @@
 import stripe from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
-
-interface CardData {
-  id: string;
-  cardName: string;
-  destinationId: string;
-}
+import { DynamoDBService } from '../../../services/dynamodbService';
+import { CardData } from '../../../model';
 
 export class CardPaymentService {
   private readonly logger: Logger;
 
   private readonly secretsManagerService: SecretsManagerService;
 
+  private readonly dbService: DynamoDBService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
+    this.dbService = new DynamoDBService();
     this.logger.info('init()');
   }
 
   public async processCardPayment(
     amount: number,
-    cardData: CardData
+    cardData: CardData,
+    metaData?: Record<string, string>
   ): Promise<string> {
     this.logger.info('Processing card payment', { amount, cardData });
 
@@ -48,6 +48,24 @@ export class CardPaymentService {
     });
 
     this.logger.info('Payment intent created', paymentIntent);
+    const record = {
+      transactionId: paymentIntent?.id as string,
+      amount,
+      paymentMethod: 'CARD',
+      createdOn: Math.floor(Date.now() / 1000),
+      status: 'PENDING',
+      paymentProviderResponse: paymentIntent,
+      metaData: metaData,
+      fee: feeAmount,
+    };
+
+    try {
+      await this.dbService.createPaymentRecord(record);
+      this.logger.info('Payment record created in DynamoDB', record);
+    } catch (error) {
+      this.logger.error('Error creating payment record', error);
+      throw error;
+    }
     return 'Card payment successful';
   }
 }

@@ -4,19 +4,7 @@ import {
   MtnPaymentService,
   OrangePaymentService,
 } from './providers';
-
-interface CardData {
-  id: string;
-  cardName: string;
-  destinationId: string;
-}
-
-interface PaymentRequest {
-  amount: number;
-  paymentMethod: string;
-  cardData?: CardData;
-  customerPhone?: string;
-}
+import { PaymentRequest } from '../../model';
 
 export class PaymentService {
   private readonly logger: Logger;
@@ -35,13 +23,17 @@ export class PaymentService {
   }
 
   async processPayment(transaction: PaymentRequest): Promise<string> {
-    const { amount, paymentMethod, cardData, customerPhone } = transaction;
-
+    const { amount, paymentMethod, cardData, customerPhone, metaData } =
+      transaction;
     switch (paymentMethod) {
       case 'CARD':
         if (!cardData) throw new Error('Missing card data for card payment');
         this.logger.info('Processing card payment', { amount, cardData });
-        return this.cardPaymentService.processCardPayment(amount, cardData);
+        return this.cardPaymentService.processCardPayment(
+          amount,
+          cardData,
+          metaData
+        );
 
       case 'MOMO':
         if (!customerPhone)

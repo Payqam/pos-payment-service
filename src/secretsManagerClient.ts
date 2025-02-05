@@ -6,6 +6,8 @@ import {
 import { Logger, LoggerService } from '@mu-ts/logger';
 
 export class SMClient {
+  private static instance: SMClient;
+
   private readonly SecretsManagerClient: SecretsManagerClient;
 
   private readonly logger: Logger;
@@ -16,6 +18,16 @@ export class SMClient {
     });
     this.logger = LoggerService.named(this.constructor.name);
     this.logger.info('init()');
+  }
+
+  /**
+   * Returns the singleton instance of the SMClient.
+   */
+  public static getInstance(): SMClient {
+    if (!SMClient.instance) {
+      SMClient.instance = new SMClient();
+    }
+    return SMClient.instance;
   }
 
   public send(
