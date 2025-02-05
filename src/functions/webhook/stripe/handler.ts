@@ -156,7 +156,6 @@ export class StripeWebhookService {
 
     const updateData = {
       status: 'FAILED',
-      amount: paymentIntent.amount,
       paymentProviderResponse: paymentIntent,
     };
 
