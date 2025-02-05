@@ -17,7 +17,7 @@ export class DynamoDBConstruct extends Construct {
 
     // Create the main DynamoDB table
     this.table = new dynamodb.Table(this, `${props.namespace}-Table`, {
-      tableName: `${props.namespace}-${props.envName}-${props.tableName}`,
+      tableName: `${props.tableName}`,
       partitionKey: {
         name: 'transactionId',
         type: dynamodb.AttributeType.STRING,
