@@ -90,8 +90,19 @@ export class CDKStack extends cdk.Stack {
       secretName: `MTN_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores MTN Mobile Money API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.mtn.com',
-        apiKey: 'mtn_test_your_key_here',
+        collection: {
+          subscriptionKey: process.env
+            .MTN_COLLECTION_SUBSCRIPTION_KEY as string,
+          apiUser: process.env.MTN_COLLECTION_API_USER as string,
+          apiKey: process.env.MTN_COLLECTION_API_KEY as string,
+        },
+        disbursement: {
+          subscriptionKey: process.env
+            .MTN_DISBURSEMENT_SUBSCRIPTION_KEY as string,
+          apiUser: process.env.MTN_DISBURSEMENT_API_USER as string,
+          apiKey: process.env.MTN_DISBURSEMENT_API_KEY as string,
+        },
+        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
       },
     };
 
@@ -214,9 +225,14 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
       },
     });
     mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, mtnWebhookLambda.lambda);
 
     // Grant DynamoDB permissions to Lambda functions
@@ -330,6 +346,44 @@ export class CDKStack extends cdk.Stack {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
               received: { type: apigateway.JsonSchemaType.BOOLEAN },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/mtn',
+        method: 'POST',
+        lambda: mtnWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+                required: ['transactionId', 'status', 'amount', 'currency'],
+              },
+            },
+            required: ['type', 'data'],
+          },
+        },
+        responseModel: {
+          modelName: 'MTNWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
             },
           },
         },

@@ -3,20 +3,50 @@ import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
+/**
+ * MTN API credentials structure with separate configurations for collection and disbursement.
+ * This separation is required as MTN provides different API keys for each service.
+ */
 interface MTNCredentials {
-  subscriptionKey: string;
-  apiUser: string;
-  apiKey: string;
+  collection: {
+    subscriptionKey: string;
+    apiUser: string;
+    apiKey: string;
+  };
+  disbursement: {
+    subscriptionKey: string;
+    apiUser: string;
+    apiKey: string;
+  };
   targetEnvironment: string;
+  webhookSecret: string;
 }
 
+/**
+ * MTN API token response structure
+ */
 interface MTNToken {
   access_token: string;
   expires_in: number;
   token_type: string;
 }
 
+/**
+ * Enum defining the types of transactions supported by MTN Mobile Money.
+ * - PAYMENT: For collecting money from customers
+ * - TRANSFER: For disbursing money to merchants
+ */
+export enum TransactionType {
+  PAYMENT = 'payment',
+  TRANSFER = 'transfer',
+}
+
+/**
+ * Service class for handling MTN Mobile Money payment operations.
+ * Supports both collection (customer payments) and disbursement (merchant transfers) operations.
+ */
 export class MtnPaymentService {
   private readonly logger: Logger;
 
@@ -25,8 +55,6 @@ export class MtnPaymentService {
   private readonly dbService: DynamoDBService;
 
   private readonly baseUrl: string;
-
-  private axiosInstance: AxiosInstance | null = null;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
@@ -37,24 +65,40 @@ export class MtnPaymentService {
     this.logger.info('init()');
   }
 
-  private async getAxiosInstance(): Promise<AxiosInstance> {
-    if (!this.axiosInstance) {
-      const credentials = await this.getMTNCredentials();
-      const token = await this.generateToken(credentials);
+  /**
+   * Creates a new axios instance for the specified transaction type.
+   * A new instance is created for each call to ensure we're using fresh tokens.
+   *
+   * @param type - The type of transaction (PAYMENT or TRANSFER)
+   * @returns An axios instance configured with the appropriate credentials and token
+   */
+  private async createAxiosInstance(
+    type: TransactionType
+  ): Promise<AxiosInstance> {
+    const credentials = await this.getMTNCredentials();
+    const token = await this.generateToken(credentials, type);
+    const creds =
+      type === TransactionType.PAYMENT
+        ? credentials.collection
+        : credentials.disbursement;
 
-      this.axiosInstance = axios.create({
-        baseURL: this.baseUrl,
-        headers: {
-          Authorization: `Bearer ${token.access_token}`,
-          'X-Target-Environment': credentials.targetEnvironment,
-          'Ocp-Apim-Subscription-Key': credentials.subscriptionKey,
-          'X-Reference-Id': uuidv4(),
-        },
-      });
-    }
-    return this.axiosInstance;
+    return axios.create({
+      baseURL: this.baseUrl,
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        'X-Target-Environment': credentials.targetEnvironment,
+        'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
+        'X-Reference-Id': uuidv4(),
+      },
+    });
   }
 
+  /**
+   * Retrieves MTN API credentials from AWS Secrets Manager.
+   * The secret contains separate credentials for collection and disbursement operations.
+   *
+   * @returns The MTN credentials object
+   */
   private async getMTNCredentials(): Promise<MTNCredentials> {
     const secret = await this.secretsManagerService.getSecret(
       process.env.MTN_API_SECRET as string
@@ -62,15 +106,35 @@ export class MtnPaymentService {
     return secret as unknown as MTNCredentials;
   }
 
-  private async generateToken(credentials: MTNCredentials): Promise<MTNToken> {
+  /**
+   * Generates an access token for MTN API operations.
+   * Different tokens are generated for collection and disbursement operations.
+   *
+   * @param credentials - The MTN credentials object
+   * @param type - The type of transaction (PAYMENT or TRANSFER)
+   * @returns A token object containing the access token and expiry
+   */
+  private async generateToken(
+    credentials: MTNCredentials,
+    type: TransactionType
+  ): Promise<MTNToken> {
     try {
+      const apiPath =
+        type === TransactionType.PAYMENT
+          ? '/collection/token/'
+          : '/disbursement/token/';
+      const creds =
+        type === TransactionType.PAYMENT
+          ? credentials.collection
+          : credentials.disbursement;
+
       const response = await axios.post(
-        `${this.baseUrl}/collection/token/`,
+        `${this.baseUrl}${apiPath}`,
         {},
         {
           headers: {
-            'Ocp-Apim-Subscription-Key': credentials.subscriptionKey,
-            Authorization: `Basic ${Buffer.from(credentials.apiUser + ':' + credentials.apiKey).toString('base64')}`,
+            'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
+            Authorization: `Basic ${Buffer.from(creds.apiUser + ':' + creds.apiKey).toString('base64')}`,
           },
         }
       );
@@ -81,6 +145,41 @@ export class MtnPaymentService {
     }
   }
 
+  /**
+   * Validates the signature of an incoming webhook request.
+   *
+   * @param payload - The request payload
+   * @param signature - The signature to validate
+   * @returns True if the signature is valid, false otherwise
+   */
+  public async validateWebhookSignature(
+    payload: string,
+    signature: string
+  ): Promise<boolean> {
+    try {
+      const credentials = await this.getMTNCredentials();
+      const hmac = crypto.createHmac('sha256', credentials.webhookSecret);
+      const calculatedSignature = hmac.update(payload).digest('hex');
+      return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(calculatedSignature)
+      );
+    } catch (error) {
+      this.logger.error('Error validating webhook signature', error);
+      throw new Error('Failed to validate webhook signature');
+    }
+  }
+
+  /**
+   * Processes a payment request from a customer.
+   * Creates a payment request via MTN's collection API and stores the transaction in DynamoDB.
+   *
+   * @param amount - The payment amount
+   * @param mobileNo - Customer's mobile number (MSISDN format)
+   * @param currency - Payment currency (default: EUR)
+   * @param metaData - Optional metadata for the transaction
+   * @returns The transaction ID for tracking
+   */
   public async processPayment(
     amount: number,
     mobileNo: string,
@@ -94,10 +193,11 @@ export class MtnPaymentService {
     });
 
     try {
-      const axiosInstance = await this.getAxiosInstance();
+      const axiosInstance = await this.createAxiosInstance(
+        TransactionType.PAYMENT
+      );
       const transactionId = uuidv4();
 
-      // Create payment request
       const response = await axiosInstance.post(
         '/collection/v1_0/requesttopay',
         {
@@ -113,7 +213,6 @@ export class MtnPaymentService {
         }
       );
 
-      // Store transaction in DynamoDB
       const record = {
         transactionId,
         amount,
@@ -136,29 +235,57 @@ export class MtnPaymentService {
     }
   }
 
-  public async checkTransactionStatus(transactionId: string): Promise<string> {
+  /**
+   * Checks the status of a transaction (payment or transfer).
+   *
+   * @param transactionId - The ID of the transaction to check
+   * @param type - The type of transaction (PAYMENT or TRANSFER)
+   * @returns The current status of the transaction
+   */
+  public async checkTransactionStatus(
+    transactionId: string,
+    type: TransactionType
+  ): Promise<string> {
     try {
-      const axiosInstance = await this.getAxiosInstance();
-      const response = await axiosInstance.get(
-        `/collection/v1_0/requesttopay/${transactionId}`
-      );
+      const axiosInstance = await this.createAxiosInstance(type);
+      const endpoint =
+        type === TransactionType.PAYMENT
+          ? `/collection/v1_0/requesttopay/${transactionId}`
+          : `/disbursement/v1_0/transfer/${transactionId}`;
 
+      const response = await axiosInstance.get(endpoint);
       return response.data.status;
     } catch (error) {
-      this.logger.error('Error checking transaction status', error);
+      this.logger.error('Error checking transaction status', {
+        error,
+        transactionId,
+        type,
+      });
       throw error;
     }
   }
 
+  /**
+   * Initiates a transfer to a merchant.
+   * Uses MTN's disbursement API to send money to a specified mobile number.
+   *
+   * @param amount - The amount to transfer
+   * @param recipientMobileNo - Recipient's mobile number (MSISDN format)
+   * @param currency - Transfer currency (default: EUR)
+   * @returns The transfer ID for tracking
+   */
   public async initiateTransfer(
     amount: number,
     recipientMobileNo: string,
     currency: string = 'EUR'
   ): Promise<string> {
     try {
-      const axiosInstance = await this.getAxiosInstance();
+      const axiosInstance = await this.createAxiosInstance(
+        TransactionType.TRANSFER
+      );
       const transferId = uuidv4();
 
+      // Response
       await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,
@@ -178,9 +305,17 @@ export class MtnPaymentService {
     }
   }
 
+  /**
+   * Checks the status of a transfer.
+   *
+   * @param transferId - The ID of the transfer to check
+   * @returns The current status of the transfer
+   */
   public async checkTransferStatus(transferId: string): Promise<string> {
     try {
-      const axiosInstance = await this.getAxiosInstance();
+      const axiosInstance = await this.createAxiosInstance(
+        TransactionType.TRANSFER
+      );
       const response = await axiosInstance.get(
         `/disbursement/v1_0/transfer/${transferId}`
       );
