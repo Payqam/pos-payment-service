@@ -1,3 +1,33 @@
+/**
+ * Daily Disbursement Handler
+ *
+ * This lambda function is triggered by a CloudWatch Event Rule to process daily disbursements
+ * for successful MTN Mobile Money transactions. The process includes:
+ *
+ * 1. Querying successful transactions for the current day
+ * 2. Grouping transactions by merchant
+ * 3. For each merchant:
+ *    - Calculating total amount to be disbursed
+ *    - Initiating transfer via MTN's disbursement API
+ *    - Updating transaction records with settlement status
+ *
+ * Configuration:
+ * - Execution Time: Set via DISBURSEMENT_TIME environment variable in "HH:mm" format
+ * - Default: "02:00" (2 AM)
+ *
+ * Error Handling:
+ * - Failed merchant disbursements are logged but don't stop the process
+ * - Each merchant's disbursement is processed independently
+ * - Transaction updates use Promise.all for parallel processing
+ *
+ * Monitoring:
+ * - CloudWatch logs track:
+ *   * Start/end of disbursement process
+ *   * Successful disbursements with amounts
+ *   * Failed disbursements with error details
+ *   * Empty disbursement runs
+ */
+
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBService } from '../../services/dynamodbService';
 import { MtnPaymentService } from '../transaction-process/providers';
@@ -6,206 +36,86 @@ const logger: Logger = LoggerService.named('daily-disbursement-handler');
 const dbService = new DynamoDBService();
 const mtnService = new MtnPaymentService();
 
-interface MerchantTransaction {
-  transactionId: string;
-  amount: number;
-  currency: string;
-  mobileNo: string;
-  status: string;
-  createdOn: number;
-}
-
-interface MerchantSettlement {
-  merchantId: string;
-  mobileNo: string;
-  totalAmount: number;
-  currency: string;
-  transactions: string[];
-}
-
-interface DisbursementEvent {
-  startTime?: number;
-}
-
-/**
- * Queries successful transactions within the specified time range.
- * Uses StatusTimeIndex GSI for efficient querying.
- *
- * @param startTime - Start timestamp in seconds
- * @param endTime - End timestamp in seconds
- * @returns Array of successful transactions
- */
-async function querySuccessfulTransactions(
-  startTime: number,
-  endTime: number
-): Promise<MerchantTransaction[]> {
+export const handler = async (): Promise<void> => {
   try {
-    const transactions = await dbService.queryByStatusAndTime(
-      'SUCCESS',
-      startTime,
-      endTime
-    );
+    logger.info('Starting daily disbursement process');
 
-    logger.info('Retrieved successful transactions', {
-      count: transactions.length,
-      startTime,
-      endTime,
-    });
+    // Calculate time range for today's transactions
+    const now = Math.floor(Date.now() / 1000);
+    const startOfDay = now - (now % 86400); // Beginning of current day
+    const endOfDay = startOfDay + 86400; // End of current day
 
-    return transactions as MerchantTransaction[];
-  } catch (error) {
-    logger.error('Failed to query successful transactions', {
-      startTime,
-      endTime,
-      error,
-    });
-    throw error;
-  }
-}
+    // Query successful MTN transactions for today
+    const successfulTransactions =
+      await dbService.queryByPaymentMethodAndStatus(
+        'mtn',
+        'SUCCESS',
+        startOfDay,
+        endOfDay
+      );
 
-/**
- * Groups transactions by merchant and calculates total settlement amount.
- * Uses mobile number as the merchant identifier.
- *
- * @param transactions - Array of successful transactions
- * @returns Array of merchant settlements
- */
-function groupTransactionsByMerchant(
-  transactions: MerchantTransaction[]
-): MerchantSettlement[] {
-  const merchantMap = new Map<string, MerchantSettlement>();
-
-  for (const tx of transactions) {
-    const { mobileNo, amount, currency, transactionId } = tx;
-
-    if (!merchantMap.has(mobileNo)) {
-      merchantMap.set(mobileNo, {
-        merchantId: mobileNo,
-        mobileNo,
-        totalAmount: 0,
-        currency,
-        transactions: [],
-      });
+    if (!successfulTransactions.length) {
+      logger.info('No successful transactions found for disbursement');
+      return;
     }
 
-    const settlement = merchantMap.get(mobileNo)!;
-    settlement.totalAmount += amount;
-    settlement.transactions.push(transactionId);
-  }
-
-  return Array.from(merchantMap.values());
-}
-
-/**
- * Processes settlement for a single merchant.
- * Initiates MTN transfer and updates transaction records.
- *
- * @param settlement - Merchant settlement details
- */
-async function processSettlement(
-  settlement: MerchantSettlement
-): Promise<void> {
-  const { merchantId, mobileNo, totalAmount, currency, transactions } =
-    settlement;
-
-  try {
-    logger.info('Processing settlement for merchant', {
-      merchantId,
-      totalAmount,
-      currency,
-      transactionCount: transactions.length,
-    });
-
-    // Initiate transfer via MTN
-    const transferId = await mtnService.initiateTransfer(
-      totalAmount,
-      mobileNo,
-      currency
-    );
-
-    // Update all transactions with settlement info
-    await Promise.all(
-      transactions.map((txId) =>
-        dbService.updatePaymentRecord(
-          { transactionId: txId },
-          {
-            settlementStatus: 'PENDING',
-            settlementId: transferId,
-            settlementDate: Math.floor(Date.now() / 1000),
-          }
-        )
-      )
-    );
-
-    logger.info('Successfully initiated settlement for merchant', {
-      merchantId,
-      transferId,
-    });
-  } catch (error) {
-    logger.error('Failed to process settlement for merchant', {
-      merchantId,
-      error,
-    });
-    throw error;
-  }
-}
-
-/**
- * Groups successful transactions by merchant and initiates disbursement.
- *
- * Flow:
- * 1. Queries successful transactions for the specified date range
- * 2. Groups transactions by merchant
- * 3. Calculates total amount for each merchant
- * 4. Initiates MTN transfer for each merchant
- * 5. Updates transaction records with settlement status
- *
- * Required environment variables:
- * - TRANSACTIONS_TABLE: DynamoDB table name
- * - MTN_API_SECRET: Path to MTN API secret in Secrets Manager
- *
- * @param event - Lambda event containing date range for settlement
- * @returns Summary of disbursement operations
- */
-export const handler = async (
-  event: DisbursementEvent
-): Promise<{
-  total: number;
-  successful: number;
-  failed: number;
-}> => {
-  try {
-    logger.info('Starting daily disbursement process', { event });
-
-    // Get date range from event or default to last 24 hours
-    const endTime = Math.floor(Date.now() / 1000);
-    const startTime = event.startTime || endTime - 24 * 60 * 60;
-
-    // Query successful transactions
-    const transactions = await querySuccessfulTransactions(startTime, endTime);
-
     // Group transactions by merchant
-    const merchantSettlements = groupTransactionsByMerchant(transactions);
-    logger.info('Grouped transactions by merchant', {
-      merchantCount: merchantSettlements.length,
-    });
-
-    // Process settlements for each merchant
-    const results = await Promise.allSettled(
-      merchantSettlements.map(processSettlement)
+    const merchantGroups = dbService.groupTransactionsByMerchant(
+      successfulTransactions
     );
 
-    // Analyze results
-    const summary = {
-      total: results.length,
-      successful: results.filter((r) => r.status === 'fulfilled').length,
-      failed: results.filter((r) => r.status === 'rejected').length,
-    };
+    // Process disbursement for each merchant
+    for (const [merchantId, transactions] of Object.entries(merchantGroups)) {
+      try {
+        // Calculate total amount for merchant
+        const totalAmount = transactions.reduce(
+          (sum, tx) => sum + tx.amount,
+          0
+        );
+        const currency = transactions[0].currency; // Assuming same currency for all transactions
+        const mobileNo = transactions[0].mobileNo; // Get merchant's mobile number from first transaction
 
-    logger.info('Completed daily disbursement process', summary);
-    return summary;
+        // Initiate transfer to merchant
+        const transferId = await mtnService.initiateTransfer(
+          totalAmount,
+          mobileNo,
+          currency
+        );
+
+        // Update all transactions with settlement info
+        await Promise.all(
+          transactions.map((tx) =>
+            dbService.updatePaymentRecord(
+              { transactionId: tx.transactionId },
+              {
+                settlementStatus: 'PENDING',
+                settlementId: transferId,
+                settlementDate: Math.floor(Date.now() / 1000),
+              }
+            )
+          )
+        );
+
+        logger.info('Created disbursement for merchant', {
+          merchantId,
+          transferId,
+          totalAmount,
+          currency,
+          transactionCount: transactions.length,
+        });
+      } catch (error) {
+        logger.error('Error processing disbursement for merchant', {
+          merchantId,
+          error,
+        });
+        // Continue with next merchant even if one fails
+        continue;
+      }
+    }
+
+    logger.info('Completed daily disbursement process');
   } catch (error) {
-    logger.error('Error in daily disbursement process', error);
+    logger.error('Error in daily disbursement process', { error });
     throw error;
   }
 };

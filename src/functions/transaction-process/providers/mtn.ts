@@ -88,6 +88,8 @@ export class MtnPaymentService {
         'X-Target-Environment': credentials.targetEnvironment,
         'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
         'X-Reference-Id': uuidv4(),
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
       },
     });
   }
@@ -157,6 +159,7 @@ export class MtnPaymentService {
   public async processPayment(
     amount: number,
     mobileNo: string,
+    merchantId: string,
     currency: string = 'EUR',
     metaData?: Record<string, string>
   ): Promise<string> {
@@ -170,6 +173,7 @@ export class MtnPaymentService {
       const axiosInstance = await this.createAxiosInstance(
         TransactionType.PAYMENT
       );
+      // TODO: Do we need the external ID?
       const transactionId = uuidv4();
 
       const response = await axiosInstance.post(
@@ -197,6 +201,7 @@ export class MtnPaymentService {
         paymentProviderResponse: response.data,
         metaData,
         mobileNo,
+        merchantId,
       };
 
       await this.dbService.createPaymentRecord(record);
