@@ -7,6 +7,8 @@ import {
   UpdateCommandOutput,
   GetCommand,
   GetCommandOutput,
+  QueryCommand,
+  QueryCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
 
 export class DynamoDBDocClient {
@@ -55,12 +57,24 @@ export class DynamoDBDocClient {
   }
 
   /**
-   * sends an AWS SDK command using the DynamoDB Document Client.
+   * Sends an AWS SDK command using the DynamoDB Document Client.
    *
    * @param command - The command to be sent.
    * @returns The result of the command.
    */
   public async getItem(command: GetCommand): Promise<GetCommandOutput> {
+    return this.docClient.send(command);
+  }
+
+  /**
+   * Sends a Query command using the DynamoDB Document Client.
+   *
+   * @param command - The Query command to be sent.
+   * @returns The result of the query command.
+   */
+  public async queryCommand(
+    command: QueryCommand
+  ): Promise<QueryCommandOutput> {
     return this.docClient.send(command);
   }
 }

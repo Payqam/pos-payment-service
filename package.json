@@ -45,6 +45,7 @@
     "@aws-sdk/client-sns": "^3.x",
     "@aws-sdk/client-xray": "^3.731.1",
     "@aws-sdk/lib-dynamodb": "^3.738.0",
+    "@aws-sdk/util-dynamodb": "^3.741.0",
     "@mu-ts/logger": "^3.2.3",
     "aws-cdk": "^2.162.1",
     "aws-cdk-lib": "2.162.1",

@@ -18,6 +18,8 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElastiCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -235,12 +237,37 @@ export class CDKStack extends cdk.Stack {
     mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, mtnWebhookLambda.lambda);
 
+    // Create Daily Disbursement Lambda
+    const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
+      name: `Disbursement-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.DISBURSEMENT}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+      },
+    });
+    disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    disbursementLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    disbursementLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, disbursementLambda.lambda);
+
+    // Create EventBridge rule for daily disbursement
+    new events.Rule(this, 'DailyDisbursementRule', {
+      schedule: events.Schedule.cron({ minute: '0', hour: '1' }), // Run at 1 AM UTC daily
+      targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
+    });
+
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
 
     // Create ElastiCache cluster
     const cache = new ElastiCacheConstruct(this, 'Cache', {

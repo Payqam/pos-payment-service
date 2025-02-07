@@ -36,6 +36,20 @@ export class DynamoDBConstruct extends Construct {
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+
+    // Add StatusTimeIndex for efficient status and time-based queries
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'StatusTimeIndex',
+      partitionKey: {
+        name: 'status',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'createdOn',
+        type: dynamodb.AttributeType.NUMBER,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
   }
 
   // Helper method to grant read/write permissions to other resources

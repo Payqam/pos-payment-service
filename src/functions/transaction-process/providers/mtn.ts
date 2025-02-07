@@ -3,7 +3,6 @@ import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
-import * as crypto from 'crypto';
 
 /**
  * MTN API credentials structure with separate configurations for collection and disbursement.
@@ -146,31 +145,6 @@ export class MtnPaymentService {
   }
 
   /**
-   * Validates the signature of an incoming webhook request.
-   *
-   * @param payload - The request payload
-   * @param signature - The signature to validate
-   * @returns True if the signature is valid, false otherwise
-   */
-  public async validateWebhookSignature(
-    payload: string,
-    signature: string
-  ): Promise<boolean> {
-    try {
-      const credentials = await this.getMTNCredentials();
-      const hmac = crypto.createHmac('sha256', credentials.webhookSecret);
-      const calculatedSignature = hmac.update(payload).digest('hex');
-      return crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(calculatedSignature)
-      );
-    } catch (error) {
-      this.logger.error('Error validating webhook signature', error);
-      throw new Error('Failed to validate webhook signature');
-    }
-  }
-
-  /**
    * Processes a payment request from a customer.
    * Creates a payment request via MTN's collection API and stores the transaction in DynamoDB.
    *
@@ -301,28 +275,6 @@ export class MtnPaymentService {
       return transferId;
     } catch (error) {
       this.logger.error('Error initiating transfer', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Checks the status of a transfer.
-   *
-   * @param transferId - The ID of the transfer to check
-   * @returns The current status of the transfer
-   */
-  public async checkTransferStatus(transferId: string): Promise<string> {
-    try {
-      const axiosInstance = await this.createAxiosInstance(
-        TransactionType.TRANSFER
-      );
-      const response = await axiosInstance.get(
-        `/disbursement/v1_0/transfer/${transferId}`
-      );
-
-      return response.data.status;
-    } catch (error) {
-      this.logger.error('Error checking transfer status', error);
       throw error;
     }
   }
