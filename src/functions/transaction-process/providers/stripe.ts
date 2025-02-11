@@ -3,6 +3,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { CardData } from '../../../model';
+import { CacheService } from '../../../services/cacheService';
 
 export class CardPaymentService {
   private readonly logger: Logger;
@@ -11,10 +12,13 @@ export class CardPaymentService {
 
   private readonly dbService: DynamoDBService;
 
+  private readonly cacheService: CacheService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
+    this.cacheService = new CacheService();
     this.logger.info('init()');
   }
 
@@ -62,10 +66,13 @@ export class CardPaymentService {
     try {
       await this.dbService.createPaymentRecord(record);
       this.logger.info('Payment record created in DynamoDB', record);
+      const key = `payment:${record.transactionId}`;
+      await this.cacheService.setValue(key, record, 3600);
+      this.logger.info('Payment record stored in Redis', { key });
+      return 'Card payment successful';
     } catch (error) {
       this.logger.error('Error creating payment record', error);
       throw error;
     }
-    return 'Card payment successful';
   }
 }

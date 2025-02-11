@@ -16,7 +16,7 @@ import { createLambdaLogGroup } from './log-groups';
 import { SecretsManagerHelper } from './secretsmanager';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
-import { ElastiCacheConstruct } from './elasticache';
+import { ElasticCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
 import { KMSHelper } from './kms';
 
@@ -128,6 +128,15 @@ export class CDKStack extends cdk.Stack {
     const { key: stripeKMSKey, alias: stripeAlias } =
       KMSHelper.createKey(this, kmsConfig);
 
+
+    // Create ElastiCache cluster
+    const cache = new ElasticCacheConstruct(this, 'Cache', {
+      envName: props.envName,
+      namespace: props.namespace,
+      vpc: vpcConstruct.vpc,
+      securityGroup: securityGroups.cacheSecurityGroup,
+    });
+
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -135,12 +144,14 @@ export class CDKStack extends cdk.Stack {
         name: `TransactionsProcess-${props.envName}${props.namespace}`,
         path: `${PATHS.FUNCTIONS.TRANSACTIONS_PROCESS}/handler.ts`,
         vpc: vpcConstruct.vpc,
+        securityGroup: securityGroups.lambdaSecurityGroup,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           STRIPE_API_SECRET: stripeSecret.secretName,
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
         },
       }
     );
@@ -243,14 +254,6 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
-
-    // Create ElastiCache cluster
-    const cache = new ElastiCacheConstruct(this, 'Cache', {
-      envName: props.envName,
-      namespace: props.namespace,
-      vpc: vpcConstruct.vpc,
-      securityGroup: securityGroups.cacheSecurityGroup,
-    });
 
     const resources: ResourceConfig[] = [
       {
