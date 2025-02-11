@@ -128,19 +128,27 @@ export class SecretsManagerHelper {
    */
   private static validateSecretValues(values: SecretValueObject): void {
     Object.entries(values).forEach(([key, value]) => {
+      // Skip validation for null or undefined values
+      if (value === null || value === undefined) {
+        throw new Error(
+          `Invalid secret value for key ${key}. Value cannot be null or undefined.`
+        );
+      }
+
+      const valueType = typeof value;
       if (
-        typeof value !== 'string' &&
-        typeof value !== 'number' &&
-        typeof value !== 'boolean' &&
-        typeof value !== 'object'
+        valueType !== 'string' &&
+        valueType !== 'number' &&
+        valueType !== 'boolean' &&
+        valueType !== 'object'
       ) {
         throw new Error(
-          `Invalid secret value type for key ${key}. Must be string, number, boolean, or object.`
+          `Invalid secret value type for key ${key}. Must be string, number, boolean, or object. Got ${valueType}`
         );
       }
 
       // Recursively validate nested objects
-      if (typeof value === 'object' && value !== null) {
+      if (valueType === 'object') {
         this.validateSecretValues(value as SecretValueObject);
       }
     });
