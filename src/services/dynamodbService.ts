@@ -1,4 +1,6 @@
 import {
+  GetCommand,
+  GetCommandOutput,
   NativeAttributeValue,
   PutCommand,
   UpdateCommand,
@@ -191,6 +193,26 @@ export class DynamoDBService {
         transactionId,
         error,
       });
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves an item from the DynamoDB table using GetItemCommand.
+   *
+   * @param key - The primary key of the record to retrieve.
+   * @returns The retrieved item wrapped in a GetItemCommandOutput.
+   */
+  public async getItem<T>(key: T): Promise<GetCommandOutput> {
+    const params = {
+      TableName: this.tableName,
+      Key: key as Record<string, NativeAttributeValue>,
+    };
+    try {
+      const result = await this.dbClient.getItem(new GetCommand(params));
+      return result as GetCommandOutput;
+    } catch (error) {
+      this.logger.error('Error retrieving record from DynamoDB', error);
       throw error;
     }
   }

@@ -50,7 +50,7 @@ export class PaymentService {
         return this.mtnPaymentService.processPayment(
           amount,
           customerPhone,
-          merchantId
+          merchantId as string
         );
 
       case 'ORANGE':

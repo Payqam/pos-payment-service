@@ -60,7 +60,7 @@ export class CardPaymentService {
   public async processCardPayment(
     amount: number,
     cardData: CardData,
-    metaData?: Record<string, never>
+    metaData?: Record<string, string> | undefined
   ): Promise<string> {
     this.logger.info('Processing card payment', {
       amount,

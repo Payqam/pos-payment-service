@@ -6,7 +6,7 @@ export interface CreatePaymentRecord {
   createdOn: number;
   status: string;
   paymentProviderResponse?: Record<string, never>;
-  metaData?: Record<string, never>;
+  metaData?: Record<string, never> | Record<string, string>;
   mobileNo?: string;
   merchantId?: string;
   fee?: number;

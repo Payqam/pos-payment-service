@@ -10,7 +10,7 @@ interface PaymentRequest {
   cardData?: CardData;
   customerPhone?: string;
   metaData?: Record<string, string>;
-  merchantId: string;
+  merchantId?: string;
 }
 
 export { CardData, PaymentRequest };
