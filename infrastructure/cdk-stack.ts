@@ -20,7 +20,6 @@ import { ElastiCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -255,7 +254,7 @@ export class CDKStack extends cdk.Stack {
     mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, mtnWebhookLambda.lambda);
 
-    // Create Daily Disbursement Lambda
+    // Create Daily Disbursement Lambda with configurable execution time
     const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
       name: `Disbursement-${props.envName}${props.namespace}`,
       path: `${PATHS.FUNCTIONS.DISBURSEMENT}/handler.ts`,
@@ -264,6 +263,14 @@ export class CDKStack extends cdk.Stack {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         MTN_API_SECRET: mtnSecret.secretName,
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        /**
+         * Time to run daily disbursement in "HH:mm" format (24-hour)
+         * Examples:
+         * - "02:00" for 2 AM
+         * - "14:30" for 2:30 PM
+         * - "23:45" for 11:45 PM
+         */
+        DISBURSEMENT_TIME: props.disbursementTime || '02:00',
       },
     });
     disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
@@ -273,61 +280,21 @@ export class CDKStack extends cdk.Stack {
     disbursementLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, disbursementLambda.lambda);
 
-    // Create EventBridge rule for daily disbursement
-    new events.Rule(this, 'DailyDisbursementRule', {
-      schedule: events.Schedule.cron({ minute: '0', hour: '1' }), // Run at 1 AM UTC daily
-      targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
-    });
-
-    // Add scheduled disbursement lambda with configurable execution time
-    const scheduledDisbursementLambda = new lambda.Function(
-      this,
-      'ScheduledDisbursementLambda',
-      {
-        functionName: `${props.namespace}-scheduled-disbursement`,
-        runtime: lambda.Runtime.NODEJS_18_X,
-        handler: 'functions/disbursement/handler.handler',
-        code: lambda.Code.fromAsset('dist'),
-        timeout: cdk.Duration.minutes(15),
-        memorySize: 1024,
-        environment: {
-          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-          /**
-           * Time to run daily disbursement in "HH:mm" format (24-hour)
-           * Examples:
-           * - "02:00" for 2 AM
-           * - "14:30" for 2:30 PM
-           * - "23:45" for 11:45 PM
-           */
-          DISBURSEMENT_TIME: props.disbursementTime || '02:00',
-        },
-      }
-    );
-
     // Create CloudWatch Event Rule to trigger disbursement lambda at configured time
     new events.Rule(this, 'DisbursementSchedule', {
       description:
         'Triggers the daily disbursement process at the configured time',
       schedule: events.Schedule.cron({
-        minute: process.env.DISBURSEMENT_TIME?.split(':')[1] || '0',
-        hour: process.env.DISBURSEMENT_TIME?.split(':')[0] || '2',
-        // Run every day
+        minute: props.disbursementTime?.split(':')[1] || '0',
+        hour: props.disbursementTime?.split(':')[0] || '2',
         day: '*',
         month: '*',
         year: '*',
       }),
-      targets: [new targets.LambdaFunction(scheduledDisbursementLambda)],
+      targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
     });
 
-    // Grant permissions
-    dynamoDBConstruct.grantReadWrite(scheduledDisbursementLambda);
-
     // Grant DynamoDB permissions to Lambda functions
-    dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
 
     // Create ElastiCache cluster
