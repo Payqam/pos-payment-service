@@ -69,10 +69,10 @@ export class CardPaymentService {
       const key = `payment:${record.transactionId}`;
       await this.cacheService.setValue(key, record, 3600);
       this.logger.info('Payment record stored in Redis', { key });
+      return 'Card payment successful';
     } catch (error) {
       this.logger.error('Error creating payment record', error);
       throw error;
     }
-    return 'Card payment successful';
   }
 }

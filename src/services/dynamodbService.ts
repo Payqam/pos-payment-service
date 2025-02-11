@@ -8,7 +8,7 @@ import {
 import { DynamoDBDocClient } from '../dynamodbClient';
 import { CreatePaymentRecord } from '../model';
 import { buildUpdateExpression } from '../../utils/updateUtils';
-import { removeNullValues } from '../../utils/removeNullVavlues';
+import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
 import { Logger, LoggerService } from '@mu-ts/logger';
 
