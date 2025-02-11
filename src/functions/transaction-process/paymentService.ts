@@ -5,6 +5,7 @@ import {
   OrangePaymentService,
 } from './providers';
 import { PaymentRequest } from '../../model';
+import { EnhancedError, ErrorCategory } from '../../../utils/errorHandler';
 
 export class PaymentService {
   private readonly logger: Logger;
@@ -25,9 +26,16 @@ export class PaymentService {
   async processPayment(transaction: PaymentRequest): Promise<string> {
     const { amount, paymentMethod, cardData, customerPhone, metaData } =
       transaction;
+
     switch (paymentMethod) {
       case 'CARD':
-        if (!cardData) throw new Error('Missing card data for card payment');
+        if (!cardData) {
+          throw new EnhancedError(
+            'MISSING_CARD_DATA',
+            ErrorCategory.VALIDATION_ERROR,
+            'Missing card data for card payment'
+          );
+        }
         this.logger.info('Processing card payment', { amount, cardData });
         return this.cardPaymentService.processCardPayment(
           amount,
@@ -36,23 +44,33 @@ export class PaymentService {
         );
 
       case 'MOMO':
-        if (!customerPhone)
-          throw new Error(
+        if (!customerPhone) {
+          throw new EnhancedError(
+            'MISSING_PHONE',
+            ErrorCategory.VALIDATION_ERROR,
             'Missing customer phone number for MTN Mobile Money payment'
           );
+        }
         this.logger.info('Processing MTN Mobile Money payment');
         return this.mtnPaymentService.processPayment(amount, customerPhone);
 
       case 'ORANGE':
-        if (!customerPhone)
-          throw new Error(
+        if (!customerPhone) {
+          throw new EnhancedError(
+            'MISSING_PHONE',
+            ErrorCategory.VALIDATION_ERROR,
             'Missing customer phone number for Orange Money payment'
           );
+        }
         this.logger.info('Processing Orange Money payment');
         return this.orangePaymentService.processPayment(amount, customerPhone);
 
       default:
-        throw new Error(`Unsupported payment method: ${paymentMethod}`);
+        throw new EnhancedError(
+          'UNSUPPORTED_PAYMENT_METHOD',
+          ErrorCategory.VALIDATION_ERROR,
+          `Unsupported payment method: ${paymentMethod}`
+        );
     }
   }
 }
