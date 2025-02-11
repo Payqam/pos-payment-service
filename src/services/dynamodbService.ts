@@ -18,6 +18,8 @@ interface AdditionalTransactionFields {
   settlementStatus?: string;
   settlementId?: string;
   settlementDate?: number;
+  fee?: number;
+  settlementAmount?: number;
   [key: string]: unknown;
 }
 
@@ -35,9 +37,9 @@ export interface CreatePaymentRecord {
   transactionId: string;
   status: string;
   amount: number;
-  currency: string;
-  mobileNo: string;
-  merchantId: string;
+  currency?: string;
+  mobileNo?: string;
+  merchantId?: string;
   paymentMethod: string;
   paymentProviderResponse?: Record<string, unknown>;
   metaData?: Record<string, unknown>;
@@ -90,6 +92,8 @@ export class DynamoDBService {
       settlementStatus: item.settlementStatus,
       settlementId: item.settlementId,
       settlementDate: item.settlementDate,
+      fee: item.fee,
+      settlementAmount: item.settlementAmount,
     };
   }
 

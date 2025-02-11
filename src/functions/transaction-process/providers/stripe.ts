@@ -1,8 +1,13 @@
-import stripe from 'stripe';
+import { Stripe } from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { CardData } from '../../../model';
+import { CreatePaymentRecord } from '../../../model';
+
+const PAYQAM_FEE_PERCENTAGE = parseFloat(
+  process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
+);
 
 export class CardPaymentService {
   private readonly logger: Logger;
@@ -11,6 +16,8 @@ export class CardPaymentService {
 
   private readonly dbService: DynamoDBService;
 
+  private stripeClient: Stripe;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
@@ -18,54 +25,109 @@ export class CardPaymentService {
     this.logger.info('init()');
   }
 
+  /**
+   * Initializes the Stripe client with API key from Secrets Manager
+   */
+  private async initStripeClient(): Promise<void> {
+    if (!this.stripeClient) {
+      const stripeSecret = await this.secretsManagerService.getSecret(
+        process.env.STRIPE_API_SECRET as string
+      );
+      this.stripeClient = new Stripe(stripeSecret.apiKey, {
+        apiVersion: '2025-01-27.acacia',
+      });
+    }
+  }
+
+  /**
+   * Calculates PayQAM's fee and the merchant's settlement amount
+   *
+   * @param amount - Original payment amount
+   * @returns Object containing fee and settlement amounts
+   */
+  private calculateFeeAndSettlement(amount: number): {
+    fee: number;
+    settlementAmount: number;
+  } {
+    const feePercentage = PAYQAM_FEE_PERCENTAGE / 100;
+    const fee = Math.round(amount * feePercentage); // Round to nearest cent
+    return {
+      fee,
+      settlementAmount: amount - fee,
+    };
+  }
+
   public async processCardPayment(
     amount: number,
     cardData: CardData,
-    metaData?: Record<string, string>
+    metaData?: Record<string, never>
   ): Promise<string> {
-    this.logger.info('Processing card payment', { amount, cardData });
+    this.logger.info('Processing card payment', {
+      amount,
+      cardType: cardData.cardName,
+      hasDestinationId: !!cardData.destinationId,
+    });
 
-    const stripeSecret = await this.secretsManagerService.getSecret(
-      process.env.STRIPE_API_SECRET as string
-    );
-    const stripeClient = new stripe(stripeSecret.apiKey);
+    await this.initStripeClient();
 
-    const feeAmount = ['visa', 'mastercard', 'amex'].includes(cardData.cardName)
-      ? 250
-      : 19;
-    const transferAmount = Math.max(amount - feeAmount, 0);
+    const { fee, settlementAmount } = this.calculateFeeAndSettlement(amount);
 
-    const paymentIntent = await stripeClient.paymentIntents.create({
+    this.logger.info('Calculated payment amounts', {
+      originalAmount: amount,
+      fee,
+      settlementAmount,
+      feePercentage: PAYQAM_FEE_PERCENTAGE,
+    });
+
+    const paymentIntent = await this.stripeClient.paymentIntents.create({
       amount,
       currency: 'usd',
       payment_method: cardData.id,
       confirm: true,
       transfer_data: {
-        amount: transferAmount,
+        amount: settlementAmount,
         destination: cardData.destinationId,
       },
       automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
     });
 
-    this.logger.info('Payment intent created', paymentIntent);
-    const record = {
-      transactionId: paymentIntent?.id as string,
+    this.logger.info('Payment intent created', {
+      paymentIntentId: paymentIntent?.id,
+      status: paymentIntent?.status,
+      settlementAmount,
+    });
+
+    const record: CreatePaymentRecord = {
+      transactionId: paymentIntent.id,
       amount,
       paymentMethod: 'CARD',
       createdOn: Math.floor(Date.now() / 1000),
-      status: 'PENDING',
-      paymentProviderResponse: paymentIntent,
-      metaData: metaData,
-      fee: feeAmount,
+      status: paymentIntent.status,
+      paymentProviderResponse: paymentIntent as unknown as Record<
+        string,
+        never
+      >,
+      metaData,
+      fee,
+      settlementAmount,
+      currency: 'usd',
     };
 
     try {
       await this.dbService.createPaymentRecord(record);
-      this.logger.info('Payment record created in DynamoDB', record);
+      this.logger.info('Payment record created in DynamoDB', {
+        transactionId: record.transactionId,
+        status: record.status,
+        amount: record.amount,
+        fee: record.fee,
+      });
     } catch (error) {
-      this.logger.error('Error creating payment record', error);
+      this.logger.error('Error creating payment record', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId: record.transactionId,
+      });
       throw error;
     }
-    return 'Card payment successful';
+    return record.transactionId;
   }
 }

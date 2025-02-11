@@ -3,6 +3,11 @@ import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import { CreatePaymentRecord } from '../../../model';
+
+const PAYQAM_FEE_PERCENTAGE = parseFloat(
+  process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
+);
 
 /**
  * MTN API credentials structure with separate configurations for collection and disbursement.
@@ -62,6 +67,24 @@ export class MtnPaymentService {
     this.baseUrl =
       process.env.MTN_API_BASE_URL || 'https://sandbox.momodeveloper.mtn.com';
     this.logger.info('init()');
+  }
+
+  /**
+   * Calculates PayQAM's fee and the merchant's settlement amount
+   *
+   * @param amount - Original payment amount
+   * @returns Object containing fee and settlement amounts
+   */
+  private calculateFeeAndSettlement(amount: number): {
+    fee: number;
+    settlementAmount: number;
+  } {
+    const feePercentage = PAYQAM_FEE_PERCENTAGE / 100;
+    const fee = Math.round(amount * feePercentage); // Round to nearest cent
+    return {
+      fee,
+      settlementAmount: amount - fee,
+    };
   }
 
   /**
@@ -141,7 +164,9 @@ export class MtnPaymentService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Error generating MTN token', error);
+      this.logger.error('Error generating MTN token', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       throw new Error('Failed to generate MTN token');
     }
   }
@@ -152,6 +177,7 @@ export class MtnPaymentService {
    *
    * @param amount - The payment amount
    * @param mobileNo - Customer's mobile number (MSISDN format)
+   * @param merchantId - ID of the merchant receiving the payment
    * @param currency - Payment currency (default: EUR)
    * @param metaData - Optional metadata for the transaction
    * @returns The transaction ID for tracking
@@ -161,20 +187,28 @@ export class MtnPaymentService {
     mobileNo: string,
     merchantId: string,
     currency: string = 'EUR',
-    metaData?: Record<string, string>
+    metaData?: Record<string, never>
   ): Promise<string> {
     this.logger.info('Processing MTN Mobile Money payment', {
       amount,
-      mobileNo,
       currency,
+      merchantId,
     });
 
     try {
       const axiosInstance = await this.createAxiosInstance(
         TransactionType.PAYMENT
       );
-      // TODO: Do we need the external ID?
       const transactionId = uuidv4();
+
+      const { fee, settlementAmount } = this.calculateFeeAndSettlement(amount);
+
+      this.logger.info('Calculated payment amounts', {
+        originalAmount: amount,
+        fee,
+        settlementAmount,
+        feePercentage: PAYQAM_FEE_PERCENTAGE,
+      });
 
       const response = await axiosInstance.post(
         '/collection/v1_0/requesttopay',
@@ -191,7 +225,7 @@ export class MtnPaymentService {
         }
       );
 
-      const record = {
+      const record: CreatePaymentRecord = {
         transactionId,
         amount,
         currency,
@@ -202,14 +236,25 @@ export class MtnPaymentService {
         metaData,
         mobileNo,
         merchantId,
+        fee,
+        settlementAmount,
       };
 
       await this.dbService.createPaymentRecord(record);
-      this.logger.info('Payment record created in DynamoDB', record);
+      this.logger.info('Payment record created in DynamoDB', {
+        transactionId,
+        status: record.status,
+        amount: record.amount,
+        fee: record.fee,
+      });
 
       return transactionId;
     } catch (error) {
-      this.logger.error('Error processing MTN payment', error);
+      this.logger.error('Error processing MTN payment', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        amount,
+        merchantId,
+      });
       throw error;
     }
   }
@@ -236,7 +281,7 @@ export class MtnPaymentService {
       return response.data.status;
     } catch (error) {
       this.logger.error('Error checking transaction status', {
-        error,
+        error: error instanceof Error ? error.message : 'Unknown error',
         transactionId,
         type,
       });
@@ -264,7 +309,6 @@ export class MtnPaymentService {
       );
       const transferId = uuidv4();
 
-      // Response
       await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,
@@ -279,7 +323,11 @@ export class MtnPaymentService {
 
       return transferId;
     } catch (error) {
-      this.logger.error('Error initiating transfer', error);
+      this.logger.error('Error initiating transfer', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        amount,
+        recipientMobileNo,
+      });
       throw error;
     }
   }

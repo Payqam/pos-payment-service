@@ -237,6 +237,8 @@ export class CDKStack extends cdk.Stack {
         MTN_API_SECRET: mtnSecret.secretName,
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
         TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
+        PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
       },
     });
     mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);

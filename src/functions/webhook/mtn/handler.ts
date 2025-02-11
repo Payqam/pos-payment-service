@@ -11,6 +11,13 @@ const mtnService = new MtnPaymentService();
 const dbService = new DynamoDBService();
 const snsClient = new SNSClient({ region: process.env.AWS_REGION });
 
+// Environment variables
+const INSTANT_DISBURSEMENT_ENABLED =
+  process.env.INSTANT_DISBURSEMENT_ENABLED === 'true';
+const PAYQAM_FEE_PERCENTAGE = parseFloat(
+  process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
+);
+
 /**
  * Structure of the webhook event received from MTN.
  * MTN sends different event types for payments and transfers,
@@ -47,6 +54,97 @@ interface PaymentRecordUpdate {
     status: string;
     reason?: string;
   };
+  settlementStatus?: string;
+  settlementId?: string;
+  settlementDate?: number;
+  fee?: number;
+}
+
+/**
+ * Calculates the merchant's settlement amount after deducting PayQAM's fee
+ *
+ * @param amount - Original payment amount
+ * @returns The amount to be disbursed to the merchant
+ */
+function calculateSettlementAmount(amount: number): number {
+  const feePercentage = PAYQAM_FEE_PERCENTAGE / 100;
+  const fee = amount * feePercentage;
+  return amount - fee;
+}
+
+/**
+ * Processes instant disbursement for a successful payment.
+ * This is called when INSTANT_DISBURSEMENT_ENABLED is true and a payment is successful.
+ *
+ * @param transactionId - ID of the successful transaction
+ * @param amount - Original payment amount
+ * @returns The settlement transaction ID if successful
+ */
+async function processInstantDisbursement(
+  transactionId: string,
+  amount: number
+): Promise<string | null> {
+  try {
+    logger.info('Processing instant disbursement', {
+      transactionId,
+      amount,
+    });
+
+    // Get transaction details from DynamoDB
+    const transaction = await dbService.getTransactionById(transactionId);
+    if (!transaction || !transaction.merchantId || !transaction.mobileNo) {
+      logger.error('Invalid transaction data for instant disbursement', {
+        transactionId,
+        hasMerchantId: !!transaction?.merchantId,
+        hasMobileNo: !!transaction?.mobileNo,
+      });
+      return null;
+    }
+
+    // Calculate settlement amount
+    const settlementAmount = calculateSettlementAmount(amount);
+    const fee = amount - settlementAmount;
+
+    logger.info('Calculated settlement amount', {
+      originalAmount: amount,
+      settlementAmount,
+      fee,
+      feePercentage: PAYQAM_FEE_PERCENTAGE,
+    });
+
+    // Initiate transfer to merchant
+    const transferId = await mtnService.initiateTransfer(
+      settlementAmount,
+      transaction.mobileNo,
+      transaction.currency || 'EUR'
+    );
+
+    logger.info('Instant disbursement initiated', {
+      transactionId,
+      transferId,
+      settlementAmount,
+      merchantId: transaction.merchantId,
+    });
+
+    // Update transaction record with settlement info
+    await dbService.updatePaymentRecord(
+      { transactionId },
+      {
+        settlementStatus: 'INITIATED',
+        settlementId: transferId,
+        settlementDate: Math.floor(Date.now() / 1000),
+        fee,
+      }
+    );
+
+    return transferId;
+  } catch (error) {
+    logger.error('Failed to process instant disbursement', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      transactionId,
+    });
+    return null;
+  }
 }
 
 /**
@@ -57,12 +155,17 @@ interface PaymentRecordUpdate {
  * 1. Validates the webhook payload
  * 2. Verifies the transaction status with MTN API
  * 3. Updates the transaction record in DynamoDB
- * 4. Publishes a notification to SNS
+ * 4. If payment is successful and instant disbursement is enabled:
+ *    - Initiates immediate transfer to merchant
+ *    - Updates transaction with settlement status
+ * 5. Publishes a notification to SNS
  *
  * Required environment variables:
  * - TRANSACTIONS_TABLE: DynamoDB table name
  * - TRANSACTION_STATUS_TOPIC_ARN: SNS topic ARN
  * - MTN_API_SECRET: Path to MTN API secret in Secrets Manager
+ * - INSTANT_DISBURSEMENT_ENABLED: If 'true', processes disbursement immediately on successful payment
+ * - PAYQAM_FEE_PERCENTAGE: Percentage of transaction amount that PayQAM keeps as fee
  *
  * @param event - API Gateway proxy event
  * @returns API Gateway proxy response
@@ -86,6 +189,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     const transactionType = webhookEvent.type.includes('transfer')
       ? TransactionType.TRANSFER
       : TransactionType.PAYMENT;
+
+    logger.info('Processing webhook event', {
+      transactionId,
+      status,
+      type: webhookEvent.type,
+      transactionType,
+    });
 
     // Verify transaction status with MTN API to prevent webhook spoofing
     const verifiedStatus = await mtnService.checkTransactionStatus(
@@ -117,6 +227,24 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
     await dbService.updatePaymentRecord(key, updateFields);
 
+    // If payment is successful and instant disbursement is enabled, process disbursement
+    let settlementId: string | null = null;
+    if (
+      INSTANT_DISBURSEMENT_ENABLED &&
+      transactionType === TransactionType.PAYMENT &&
+      status === 'SUCCESS'
+    ) {
+      logger.info('Initiating instant disbursement', {
+        transactionId,
+        amount: webhookEvent.data.amount,
+      });
+
+      settlementId = await processInstantDisbursement(
+        transactionId,
+        parseFloat(webhookEvent.data.amount)
+      );
+    }
+
     // Publish status update to SNS for downstream processing
     const snsMessage = {
       transactionId,
@@ -126,6 +254,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       currency: webhookEvent.data.currency,
       reason: webhookEvent.data.reason,
       timestamp: new Date().toISOString(),
+      settlementId,
     };
 
     await snsClient.send(
@@ -145,15 +274,22 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       transactionId,
       status,
       type: webhookEvent.type,
+      settlementId,
     });
 
     return {
       statusCode: 200,
       headers: API.DEFAULT_HEADERS,
-      body: JSON.stringify({ message: 'Webhook processed successfully' }),
+      body: JSON.stringify({
+        message: 'Webhook processed successfully',
+        settlementId,
+      }),
     };
   } catch (error) {
-    logger.error('Error processing webhook', error);
+    logger.error('Error processing webhook', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return {
       statusCode: 500,
       headers: API.DEFAULT_HEADERS,
