@@ -118,7 +118,17 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       securityGroup: securityGroups.cacheSecurityGroup,
     });
-
+    const { key } = KMSHelper.createKey(this, {
+      keyName: 'TransactionsEncryption',
+      description: 'KMS Key for Transactions Processing',
+      accountId: env.account as string,
+      stage: props.envName,
+      namespace: props.namespace,
+      serviceName: 'transactions-transport',
+      externalRoleArns: [],
+      iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
+      region: env.region as string,
+    });
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -134,6 +144,7 @@ export class CDKStack extends cdk.Stack {
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
+          KMS_TRANSPORT_KEY: key.keyArn,
         },
       }
     );
@@ -148,17 +159,6 @@ export class CDKStack extends cdk.Stack {
       iamConstruct.secretsManagerPolicy
     );
     // Define configs for KMS
-    const { key } = KMSHelper.createKey(this, {
-      keyName: 'TransactionsEncryption',
-      description: 'KMS Key for Transactions Processing',
-      accountId: env.account as string,
-      stage: props.envName,
-      namespace: props.namespace,
-      serviceName: 'transactions-transport',
-      externalRoleArns: [],
-      iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
-      region: env.region as string,
-    });
     key.grantDecrypt(transactionsProcessLambda.lambda);
     KMSHelper.grantDecryptPermission(
       key,
@@ -209,6 +209,7 @@ export class CDKStack extends cdk.Stack {
       iamConstruct.secretsManagerPolicy
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, stripeWebhookLambda.lambda);
 
     // Create SNS topic and DLQ for Salesforce events
     const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
