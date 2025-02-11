@@ -18,6 +18,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElastiCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
+import { KMSHelper } from './kms';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -105,10 +106,27 @@ export class CDKStack extends cdk.Stack {
       },
     };
 
+    // Define configs for KMS
+    const kmsConfig = {
+      keyName: `KMS-${props.envName}${props.namespace}`,
+      description: 'Stores KMS keys',
+      accountId: env.account,
+      stage: props.envName,
+      serviceName: 'PaymentService',
+      externalRoleArns: [iamConstruct.lambdaRole.roleArn],
+      enableKeyRotation: true,
+      enabled: true,
+      rotationPeriod: 365,
+    };
+
     // Create secrets using the helper
     const stripeSecret = SecretsManagerHelper.createSecret(this, stripeConfig);
     const mtnSecret = SecretsManagerHelper.createSecret(this, mtnConfig);
     const orangeSecret = SecretsManagerHelper.createSecret(this, orangeConfig);
+
+    // Create KMS key
+    const { key: stripeKMSKey, alias: stripeAlias } =
+      KMSHelper.createKey(this, kmsConfig);
 
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
