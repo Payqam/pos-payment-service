@@ -106,28 +106,10 @@ export class CDKStack extends cdk.Stack {
       },
     };
 
-    // Define configs for KMS
-    const kmsConfig = {
-      keyName: `KMS-${props.envName}${props.namespace}`,
-      description: 'Stores KMS keys',
-      accountId: env.account,
-      stage: props.envName,
-      serviceName: 'PaymentService',
-      externalRoleArns: [iamConstruct.lambdaRole.roleArn],
-      enableKeyRotation: true,
-      enabled: true,
-      rotationPeriod: 365,
-    };
-
     // Create secrets using the helper
     const stripeSecret = SecretsManagerHelper.createSecret(this, stripeConfig);
     const mtnSecret = SecretsManagerHelper.createSecret(this, mtnConfig);
     const orangeSecret = SecretsManagerHelper.createSecret(this, orangeConfig);
-
-    // Create KMS key
-    const { key: stripeKMSKey, alias: stripeAlias } =
-      KMSHelper.createKey(this, kmsConfig);
-
 
     // Create ElastiCache cluster
     const cache = new ElasticCacheConstruct(this, 'Cache', {
@@ -164,6 +146,25 @@ export class CDKStack extends cdk.Stack {
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
+    );
+    // Define configs for KMS
+    const { key } = KMSHelper.createKey(this, {
+      keyName: 'TransactionsEncryption',
+      description: 'KMS Key for Transactions Processing',
+      accountId: env.account as string,
+      stage: props.envName,
+      namespace: props.namespace,
+      serviceName: 'transactions-transport',
+      externalRoleArns: [],
+      iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
+      region: env.region as string,
+    });
+    key.grantDecrypt(transactionsProcessLambda.lambda);
+    KMSHelper.grantDecryptPermission(
+      key,
+      transactionsProcessLambda.lambda,
+      env.region as string,
+      env.account as string
     );
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);

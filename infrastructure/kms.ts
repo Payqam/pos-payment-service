@@ -2,7 +2,11 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { Duration } from 'aws-cdk-lib';
+import { IFunction } from 'aws-cdk-lib/aws-lambda';
 
+/**
+ * Configuration for a KMS key
+ */
 export interface KMSKeyConfig {
   keyName: string;
   description: string;
@@ -13,46 +17,47 @@ export interface KMSKeyConfig {
   enableKeyRotation?: boolean;
   enabled?: boolean;
   rotationDays?: number;
+  namespace: string;
+  iamUserArn?: string;
+  region: string;
 }
-
-export interface KeyPolicyStatementConfig {
-  sid: string;
-  actions: string[];
-  principals: string[];
-  resources?: string[];
-}
-
+/**
+ * Helper class to create and manage KMS keys
+ */
 export class KMSHelper {
-  private static createKeyPolicyStatement(config: KeyPolicyStatementConfig): iam.PolicyStatement {
-    return new iam.PolicyStatement({
-      sid: config.sid,
-      effect: iam.Effect.ALLOW,
-      actions: config.actions,
-      principals: config.principals.map(principal => new iam.ArnPrincipal(principal)),
-      resources: config.resources || ['*'],
-    });
-  }
-
-  private static getDefaultPolicyStatements(accountId: string, externalRoleArns: string[]): iam.PolicyStatement[] {
+  private static getDefaultPolicyStatements(
+    accountId: string,
+    externalRoleArns: string[],
+    iamUserArn: string,
+    region: string
+  ): iam.PolicyStatement[] {
     const statements: iam.PolicyStatement[] = [];
 
-    // Add root account permissions
-    statements.push(
-      KMSHelper.createKeyPolicyStatement({
-        sid: 'Enable IAM User Permissions',
-        actions: ['kms:*'],
-        principals: [`arn:aws:iam::${accountId}:root`],
-      })
-    );
-
-    // Add external role permissions
-    statements.push(
-      KMSHelper.createKeyPolicyStatement({
-        sid: 'Allow External Account Get Lambda Access',
-        actions: ['kms:Decrypt'],
-        principals: externalRoleArns,
-      })
-    );
+    /**
+     * Add external role permissions
+     */
+    if (externalRoleArns && externalRoleArns.length > 0) {
+      statements.push(
+        new iam.PolicyStatement({
+          sid: 'AllowExternalAccountDecryptAccess',
+          effect: iam.Effect.ALLOW,
+          actions: ['kms:Encrypt'],
+          principals: externalRoleArns.map((arn) => new iam.ArnPrincipal(arn)),
+          resources: [`arn:aws:kms:${region}:${accountId}:key/*`],
+        })
+      );
+    }
+    if (iamUserArn) {
+      statements.push(
+        new iam.PolicyStatement({
+          sid: 'AllowIAMUserEncrypt',
+          effect: iam.Effect.ALLOW,
+          actions: ['kms:Encrypt'],
+          principals: [new iam.ArnPrincipal(iamUserArn)],
+          resources: [`arn:aws:kms:${region}:${accountId}:key/*`],
+        })
+      );
+    }
 
     return statements;
   }
@@ -71,13 +76,16 @@ export class KMSHelper {
       rotationPeriod: Duration.days(config.rotationDays ?? 365),
     });
 
-    // Add the policy statements
-    const statements = KMSHelper.getDefaultPolicyStatements(config.accountId, config.externalRoleArns);
-    statements.forEach(statement => key.addToResourcePolicy(statement));
+    const statements = KMSHelper.getDefaultPolicyStatements(
+      config.accountId,
+      config.externalRoleArns,
+      config.iamUserArn as string,
+      config.region
+    );
+    statements.forEach((statement) => key.addToResourcePolicy(statement));
 
-    // Create the alias
     const alias = new kms.Alias(scope, `${config.keyName}Alias`, {
-      aliasName: `alias/${config.stage}-${config.serviceName}-transport`,
+      aliasName: `alias/PAYQAM-${config.serviceName}-${config.stage}${config.namespace}`,
       targetKey: key,
     });
 
@@ -85,13 +93,29 @@ export class KMSHelper {
   }
 
   /**
-   * Adds a custom policy statement to an existing KMS key
+   * Grants decryption permissions to a given Lambda function
    */
-  public static addKeyPolicyStatement(
+  public static grantDecryptPermission(
     key: kms.Key,
-    statementConfig: KeyPolicyStatementConfig
-  ): void {
-    const statement = KMSHelper.createKeyPolicyStatement(statementConfig);
-    key.addToResourcePolicy(statement);
+    lambdaFunction: IFunction,
+    region: string,
+    accountId: string
+  ) {
+    // key.grantDecrypt(lambdaFunction);
+    if (lambdaFunction.role) {
+      key.addToResourcePolicy(
+        new iam.PolicyStatement({
+          sid: 'AllowLambdaDecrypt',
+          effect: iam.Effect.ALLOW,
+          actions: ['kms:Decrypt'],
+          principals: [lambdaFunction.role],
+          resources: [`arn:aws:kms:${region}:${accountId}:key/*`],
+        })
+      );
+    } else {
+      console.warn(
+        `Lambda function ${lambdaFunction.functionName} does not have a role assigned.`
+      );
+    }
   }
-} 
+}
