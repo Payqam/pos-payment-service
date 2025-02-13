@@ -373,15 +373,6 @@ export class CDKStack extends cdk.Stack {
 
       subscriptionFilter.node.addDependency(logGroupName);
     });
-
-    // Create ElastiCache cluster
-    const cache = new ElastiCacheConstruct(this, 'Cache', {
-      envName: props.envName,
-      namespace: props.namespace,
-      vpc: vpcConstruct.vpc,
-      securityGroup: securityGroups.cacheSecurityGroup,
-    });
-
     const resources: ResourceConfig[] = [
       {
         path: 'process-payments',
