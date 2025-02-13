@@ -185,21 +185,38 @@ export class MtnPaymentService {
           ? credentials.collection
           : credentials.disbursement;
 
-      const headers = {
-        'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
-        Authorization: `Basic ${Buffer.from(creds.apiUser + ':' + creds.apiKey).toString('base64')}`,
+      // Create axios config matching the working test implementation
+      const config = {
+        baseURL: this.baseUrl,
+        auth: {
+          username: creds.apiUser,
+          password: creds.apiKey,
+        },
+        headers: {
+          'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
+          'Content-Type': 'application/json',
+        },
       };
 
-      const response = await axios.post(
-        `${this.baseUrl}${apiPath}`,
-        {},
-        { headers }
-      );
+      this.logger.debug('Generating MTN token with config', {
+        baseURL: config.baseURL,
+        apiPath,
+        subscriptionKey: creds.subscriptionKey,
+      });
+
+      const response = await axios.post(apiPath, {}, config);
+
+      this.logger.info('Successfully generated MTN token', {
+        tokenType: response.data.token_type,
+        expiresIn: response.data.expires_in,
+      });
+
       return response.data;
     } catch (error) {
       this.logger.error('Error generating MTN token', {
         error: error instanceof Error ? error.message : 'Unknown error',
         type,
+        baseURL: this.baseUrl,
       });
       throw new Error('Failed to generate MTN token');
     }
