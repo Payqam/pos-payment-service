@@ -185,7 +185,6 @@ export class MtnPaymentService {
           ? credentials.collection
           : credentials.disbursement;
 
-      // Create axios config matching the working test implementation
       const config = {
         baseURL: this.baseUrl,
         auth: {
@@ -198,14 +197,9 @@ export class MtnPaymentService {
         },
       };
 
-      this.logger.debug('Generating MTN token with config', {
-        baseURL: config.baseURL,
-        apiPath,
-        subscriptionKey: creds.subscriptionKey,
-      });
-
       const response = await axios.post(apiPath, {}, config);
 
+      // Only log scalar values from the token response
       this.logger.info('Successfully generated MTN token', {
         tokenType: response.data.token_type,
         expiresIn: response.data.expires_in,
@@ -213,6 +207,7 @@ export class MtnPaymentService {
 
       return response.data;
     } catch (error) {
+      // Only log the error message, not the full error object
       this.logger.error('Error generating MTN token', {
         error: error instanceof Error ? error.message : 'Unknown error',
         type,
@@ -240,6 +235,7 @@ export class MtnPaymentService {
     currency: string = 'EUR',
     metaData?: Record<string, never>
   ): Promise<string> {
+    // Only log scalar values, not objects that might contain circular refs
     this.logger.info('Processing MTN Mobile Money payment', {
       amount,
       currency,
@@ -261,6 +257,7 @@ export class MtnPaymentService {
         feePercentage: PAYQAM_FEE_PERCENTAGE,
       });
 
+      // Comment out response logging to avoid circular refs
       const response = await axiosInstance.post(
         '/collection/v1_0/requesttopay',
         {
@@ -283,7 +280,7 @@ export class MtnPaymentService {
         paymentMethod: 'MTN_MOBILE',
         createdOn: Math.floor(Date.now() / 1000),
         status: 'PENDING',
-        paymentProviderResponse: response.data,
+        paymentProviderResponse: response.data, // Only store the data, not the full response
         metaData,
         mobileNo,
         merchantId,
@@ -292,6 +289,7 @@ export class MtnPaymentService {
       };
 
       await this.dbService.createPaymentRecord(record);
+      // Only log scalar values from the record
       this.logger.info('Payment record created in DynamoDB', {
         transactionId,
         status: record.status,
@@ -301,6 +299,7 @@ export class MtnPaymentService {
 
       return transactionId;
     } catch (error) {
+      // Only log the error message, not the full error object
       this.logger.error('Error processing MTN payment', {
         error: error instanceof Error ? error.message : 'Unknown error',
         amount,
