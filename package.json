@@ -46,6 +46,7 @@
     "@aws-sdk/client-xray": "^3.731.1",
     "@aws-sdk/lib-dynamodb": "^3.738.0",
     "@mu-ts/logger": "^3.2.3",
+    "@slack/webhook": "^7.0.4",
     "aws-cdk": "^2.162.1",
     "aws-cdk-lib": "2.162.1",
     "aws-xray-sdk-core": "^3.5.3",

@@ -8,6 +8,7 @@ export interface EnvConfig {
   CDK_ACCOUNT: string;
   CDK_REGION: string;
   LOG_LEVEL: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  SLACK_WEBHOOK_URL: string;
 }
 dotenv.config();
 
@@ -17,6 +18,7 @@ const namespace: string = app.node.tryGetContext('namespace')
   ? `-${app.node.tryGetContext('namespace')}`
   : '';
 const envConfigs: EnvConfig = app.node.tryGetContext(envName);
+const slackWebhookUrl = envConfigs.SLACK_WEBHOOK_URL;
 
 const stackName = `${process.env.CDK_STACK_NAME_PREFIX}-backend-${envName}${namespace}`;
 
@@ -28,6 +30,7 @@ const stack = new CDKStack(app, stackName, {
   envName,
   namespace,
   envConfigs,
+  slackWebhookUrl,
 });
 
 Tags.of(stack).add('Environment', envName);
