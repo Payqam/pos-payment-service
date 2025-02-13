@@ -44,6 +44,14 @@ jobs:
           NAMESPACE: ${{ steps.short-sha.outputs.sha }}
           STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
           STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
+      - name: Deploy
+        id: deploy
+        run: zx ./scripts/deploy.mjs
+        env:
+          ENV: DEV
+          NAMESPACE: ${{ steps.short-sha.outputs.sha }}
+          STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
+          STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
           MTN_COLLECTION_SUBSCRIPTION_KEY: ${{ secrets.MTN_COLLECTION_SUBSCRIPTION_KEY }}
           MTN_COLLECTION_API_USER: ${{ secrets.MTN_COLLECTION_API_USER }}
           MTN_COLLECTION_API_KEY: ${{ secrets.MTN_COLLECTION_API_KEY }}
@@ -51,12 +59,6 @@ jobs:
           MTN_DISBURSEMENT_API_USER: ${{ secrets.MTN_DISBURSEMENT_API_USER }}
           MTN_DISBURSEMENT_API_KEY: ${{ secrets.MTN_DISBURSEMENT_API_KEY }}
           MTN_TARGET_ENVIRONMENT: ${{ vars.MTN_TARGET_ENVIRONMENT }}
-      - name: Deploy
-        id: deploy
-        run: zx ./scripts/deploy.mjs
-        env:
-          ENV: DEV
-          NAMESPACE: ${{ steps.short-sha.outputs.sha }}
       - name: Destroy Deployment
         if: ${{ steps.deploy.outcome == 'success' && always() }}
         run: zx ./scripts/destroy.mjs
