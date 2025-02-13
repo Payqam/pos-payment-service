@@ -11,10 +11,6 @@
  *    - Initiating transfer via MTN's disbursement API
  *    - Updating transaction records with settlement status
  *
- * Configuration:
- * - Execution Time: Set via DISBURSEMENT_TIME environment variable in "HH:mm" format
- * - Default: "02:00" (2 AM)
- *
  * Error Handling:
  * - Failed merchant disbursements are logged but don't stop the process
  * - Each merchant's disbursement is processed independently

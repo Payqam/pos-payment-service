@@ -44,6 +44,13 @@ jobs:
           NAMESPACE: ${{ steps.short-sha.outputs.sha }}
           STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
           STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
+          MTN_COLLECTION_SUBSCRIPTION_KEY: ${{ secrets.MTN_COLLECTION_SUBSCRIPTION_KEY }}
+          MTN_COLLECTION_API_USER: ${{ secrets.MTN_COLLECTION_API_USER }}
+          MTN_COLLECTION_API_KEY: ${{ secrets.MTN_COLLECTION_API_KEY }}
+          MTN_DISBURSEMENT_SUBSCRIPTION_KEY: ${{ secrets.MTN_DISBURSEMENT_SUBSCRIPTION_KEY }}
+          MTN_DISBURSEMENT_API_USER: ${{ secrets.MTN_DISBURSEMENT_API_USER }}
+          MTN_DISBURSEMENT_API_KEY: ${{ secrets.MTN_DISBURSEMENT_API_KEY }}
+          MTN_TARGET_ENVIRONMENT: ${{ vars.MTN_TARGET_ENVIRONMENT }}
       - name: Deploy
         id: deploy
         run: zx ./scripts/deploy.mjs

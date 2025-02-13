@@ -27,12 +27,6 @@ interface CDKStackProps extends cdk.StackProps {
   envName: string;
   namespace: string;
   envConfigs: EnvConfig;
-  /**
-   * Time of day to run the daily disbursement process.
-   * Format: "HH:mm" in 24-hour format (e.g., "14:30" for 2:30 PM)
-   * Default: "02:00" (2 AM)
-   */
-  disbursementTime?: string;
 }
 
 export class CDKStack extends cdk.Stack {
@@ -263,14 +257,6 @@ export class CDKStack extends cdk.Stack {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         MTN_API_SECRET: mtnSecret.secretName,
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        /**
-         * Time to run daily disbursement in "HH:mm" format (24-hour)
-         * Examples:
-         * - "02:00" for 2 AM
-         * - "14:30" for 2:30 PM
-         * - "23:45" for 11:45 PM
-         */
-        DISBURSEMENT_TIME: props.disbursementTime || '02:00',
       },
     });
     disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
@@ -281,12 +267,20 @@ export class CDKStack extends cdk.Stack {
     createLambdaLogGroup(this, disbursementLambda.lambda);
 
     // Create CloudWatch Event Rule to trigger disbursement lambda at configured time
+    /**
+     * Time to run daily disbursement in "HH:mm" format (24-hour)
+     * Examples:
+     * - "02:00" for 2 AM
+     * - "14:30" for 2:30 PM
+     * - "23:45" for 11:45 PM
+     */
+    const disbursementTime = process.env.DISBURSEMENT_TIME;
     new events.Rule(this, 'DisbursementSchedule', {
       description:
         'Triggers the daily disbursement process at the configured time',
       schedule: events.Schedule.cron({
-        minute: props.disbursementTime?.split(':')[1] || '0',
-        hour: props.disbursementTime?.split(':')[0] || '2',
+        minute: disbursementTime?.split(':')[1] || '0',
+        hour: disbursementTime?.split(':')[0] || '2',
         day: '*',
         month: '*',
         year: '*',
