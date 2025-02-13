@@ -19,6 +19,9 @@ import { DynamoDBConstruct } from './dynamodb';
 import { ElasticCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
 import { KMSHelper } from './kms';
+import { IFunction } from 'aws-cdk-lib/aws-lambda';
+import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
+import * as logs from 'aws-cdk-lib/aws-logs';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -26,6 +29,7 @@ interface CDKStackProps extends cdk.StackProps {
   envName: string;
   namespace: string;
   envConfigs: EnvConfig;
+  slackWebhookUrl: string;
 }
 
 export class CDKStack extends cdk.Stack {
@@ -256,6 +260,47 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
+
+    const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
+      name: `SlackNotifier-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.SLACK_NOTIFIER}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        SLACK_WEBHOOK_URL: props.slackWebhookUrl,
+      },
+    });
+
+    const monitoredLambdas = [
+      mtnWebhookLambda.lambda,
+      stripeWebhookLambda.lambda,
+      transactionsProcessLambda.lambda,
+      orangeWebhookLambda.lambda,
+    ];
+    monitoredLambdas.forEach((logGroupName: IFunction) => {
+      const subscriptionFilter = new logs.SubscriptionFilter(
+        this,
+        `Subscription-${logGroupName}`,
+        {
+          logGroup: logs.LogGroup.fromLogGroupName(
+            this,
+            `LogGroup-${logGroupName}`,
+            `/aws/lambda/${logGroupName.functionName}`
+          ),
+          destination: new destinations.LambdaDestination(
+            slackNotifierLambda.lambda
+          ),
+          filterPattern: logs.FilterPattern.anyTerm(
+            'ERROR',
+            'MainThread',
+            'WARN'
+          ),
+          filterName: `ErrorInMainThread-${logGroupName.functionName}`,
+        }
+      );
+
+      subscriptionFilter.node.addDependency(logGroupName);
+    });
 
     const resources: ResourceConfig[] = [
       {
