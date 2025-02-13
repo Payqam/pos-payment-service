@@ -16,11 +16,15 @@ import { createLambdaLogGroup } from './log-groups';
 import { SecretsManagerHelper } from './secretsmanager';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
-import { ElastiCacheConstruct } from './elasticache';
+import { ElasticCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
+import { KMSHelper } from './kms';
+import { IFunction } from 'aws-cdk-lib/aws-lambda';
+import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
+import * as logs from 'aws-cdk-lib/aws-logs';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -28,6 +32,7 @@ interface CDKStackProps extends cdk.StackProps {
   envName: string;
   namespace: string;
   envConfigs: EnvConfig;
+  slackWebhookUrl: string;
 }
 
 export class CDKStack extends cdk.Stack {
@@ -133,6 +138,24 @@ export class CDKStack extends cdk.Stack {
     const mtnSecret = SecretsManagerHelper.createSecret(this, mtnConfig);
     const orangeSecret = SecretsManagerHelper.createSecret(this, orangeConfig);
 
+    // Create ElastiCache cluster
+    const cache = new ElasticCacheConstruct(this, 'Cache', {
+      envName: props.envName,
+      namespace: props.namespace,
+      vpc: vpcConstruct.vpc,
+      securityGroup: securityGroups.cacheSecurityGroup,
+    });
+    const { key } = KMSHelper.createKey(this, {
+      keyName: 'TransactionsEncryption',
+      description: 'KMS Key for Transactions Processing',
+      accountId: env.account as string,
+      stage: props.envName,
+      namespace: props.namespace,
+      serviceName: 'transactions-transport',
+      externalRoleArns: [],
+      iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
+      region: env.region as string,
+    });
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -140,6 +163,7 @@ export class CDKStack extends cdk.Stack {
         name: `TransactionsProcess-${props.envName}${props.namespace}`,
         path: `${PATHS.FUNCTIONS.TRANSACTIONS_PROCESS}/handler.ts`,
         vpc: vpcConstruct.vpc,
+        securityGroup: securityGroups.lambdaSecurityGroup,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           STRIPE_API_SECRET: stripeSecret.secretName,
@@ -147,6 +171,8 @@ export class CDKStack extends cdk.Stack {
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
+          VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
+          KMS_TRANSPORT_KEY: key.keyArn,
         },
       }
     );
@@ -159,6 +185,14 @@ export class CDKStack extends cdk.Stack {
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
+    );
+    // Define configs for KMS
+    key.grantDecrypt(transactionsProcessLambda.lambda);
+    KMSHelper.grantDecryptPermission(
+      key,
+      transactionsProcessLambda.lambda,
+      env.region as string,
+      env.account as string
     );
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);
@@ -203,6 +237,7 @@ export class CDKStack extends cdk.Stack {
       iamConstruct.secretsManagerPolicy
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, stripeWebhookLambda.lambda);
 
     // Create SNS topic and DLQ for Salesforce events
     const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
@@ -291,7 +326,53 @@ export class CDKStack extends cdk.Stack {
     });
 
     // Grant DynamoDB permissions to Lambda functions
+    dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
+
+    const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
+      name: `SlackNotifier-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.SLACK_NOTIFIER}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        SLACK_WEBHOOK_URL: props.slackWebhookUrl,
+      },
+    });
+
+    const monitoredLambdas = [
+      mtnWebhookLambda.lambda,
+      stripeWebhookLambda.lambda,
+      transactionsProcessLambda.lambda,
+      orangeWebhookLambda.lambda,
+    ];
+    monitoredLambdas.forEach((logGroupName: IFunction) => {
+      const subscriptionFilter = new logs.SubscriptionFilter(
+        this,
+        `Subscription-${logGroupName}`,
+        {
+          logGroup: logs.LogGroup.fromLogGroupName(
+            this,
+            `LogGroup-${logGroupName}`,
+            `/aws/lambda/${logGroupName.functionName}`
+          ),
+          destination: new destinations.LambdaDestination(
+            slackNotifierLambda.lambda
+          ),
+          filterPattern: logs.FilterPattern.anyTerm(
+            'ERROR',
+            'MainThread',
+            'WARN'
+          ),
+          filterName: `ErrorInMainThread-${logGroupName.functionName}`,
+        }
+      );
+
+      subscriptionFilter.node.addDependency(logGroupName);
+    });
 
     // Create ElastiCache cluster
     const cache = new ElastiCacheConstruct(this, 'Cache', {

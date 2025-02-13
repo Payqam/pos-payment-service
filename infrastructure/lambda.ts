@@ -8,7 +8,7 @@ import {
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
 import { join } from 'path';
-import { IVpc } from 'aws-cdk-lib/aws-ec2';
+import { ISecurityGroup, IVpc } from 'aws-cdk-lib/aws-ec2';
 
 interface PAYQAMLambdaProps {
   path: string;
@@ -21,6 +21,7 @@ interface PAYQAMLambdaProps {
   };
   name: string;
   vpc?: IVpc;
+  securityGroup?: ISecurityGroup;
 }
 
 export class PAYQAMLambda extends Construct {
@@ -46,7 +47,7 @@ export class PAYQAMLambda extends Construct {
       timeout: Duration.minutes(1),
       vpc: props.vpc,
       tracing: Tracing.ACTIVE,
-
+      securityGroups: props.securityGroup ? [props.securityGroup] : [],
       bundling: {
         externalModules: [
           'cache-manager',

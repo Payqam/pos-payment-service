@@ -6,5 +6,6 @@ export const PATHS = {
     ORANGE_WEBHOOK: '../src/functions/webhook/orange',
     MTN_WEBHOOK: '../src/functions/webhook/mtn',
     DISBURSEMENT: '../src/functions/disbursement',
+    SLACK_NOTIFIER: '../src/functions/slack-notifier',
   },
 } as const;
