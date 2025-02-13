@@ -20,6 +20,7 @@ import { ElastiCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
+import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -145,6 +146,7 @@ export class CDKStack extends cdk.Stack {
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
         },
       }
     );
@@ -440,11 +442,27 @@ export class CDKStack extends cdk.Stack {
     ];
 
     // Create API Gateway with WAF association
-    new ApiGatewayConstruct(this, 'ApiGateway', {
+    const apiGateway = new ApiGatewayConstruct(this, 'ApiGateway', {
       envName: props.envName,
       namespace: props.namespace,
       resources,
       webAcl: wafConstruct.webAcl,
+    });
+
+    new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
+      lambda: transactionsProcessLambda.lambda,
+      apiGateway: apiGateway.api,
+      stage: props.envName,
+      envName: props.envName,
+      currentEnvVars: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        STRIPE_API_SECRET: stripeSecret.secretName,
+        ORANGE_API_SECRET: orangeSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
+        MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
+      },
     });
 
     // Add stack outputs

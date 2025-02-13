@@ -88,32 +88,65 @@ export class MtnPaymentService {
   }
 
   /**
+   * Creates headers for MTN API requests based on the transaction type and token.
+   * Different endpoints require different headers, but some are common across all.
+   *
+   * @param type - The type of transaction (PAYMENT or TRANSFER)
+   * @param credentials - MTN API credentials
+   * @param token - Access token for the API
+   * @param transactionId - Optional transaction ID for reference
+   * @returns Headers object for the API request
+   */
+  private createHeaders(
+    type: TransactionType,
+    credentials: MTNCredentials,
+    token?: MTNToken,
+    transactionId?: string
+  ): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Ocp-Apim-Subscription-Key':
+        type === TransactionType.PAYMENT
+          ? credentials.collection.subscriptionKey
+          : credentials.disbursement.subscriptionKey,
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      'X-Target-Environment': credentials.targetEnvironment,
+    };
+
+    // Add authorization if token is provided
+    if (token) {
+      headers.Authorization = `Bearer ${token.access_token}`;
+    }
+
+    // Add reference ID if provided, otherwise generate new one
+    headers['X-Reference-Id'] = transactionId || uuidv4();
+
+    // Add callback URL for payment requests
+    if (type === TransactionType.PAYMENT && process.env.MTN_WEBHOOK_URL) {
+      headers['X-Callback-Url'] = process.env.MTN_WEBHOOK_URL;
+    }
+
+    return headers;
+  }
+
+  /**
    * Creates a new axios instance for the specified transaction type.
    * A new instance is created for each call to ensure we're using fresh tokens.
    *
    * @param type - The type of transaction (PAYMENT or TRANSFER)
+   * @param transactionId - Optional transaction ID for reference
    * @returns An axios instance configured with the appropriate credentials and token
    */
   private async createAxiosInstance(
-    type: TransactionType
+    type: TransactionType,
+    transactionId?: string
   ): Promise<AxiosInstance> {
     const credentials = await this.getMTNCredentials();
     const token = await this.generateToken(credentials, type);
-    const creds =
-      type === TransactionType.PAYMENT
-        ? credentials.collection
-        : credentials.disbursement;
 
     return axios.create({
       baseURL: this.baseUrl,
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        'X-Target-Environment': credentials.targetEnvironment,
-        'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
-        'X-Reference-Id': uuidv4(),
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
+      headers: this.createHeaders(type, credentials, token, transactionId),
     });
   }
 
@@ -152,20 +185,21 @@ export class MtnPaymentService {
           ? credentials.collection
           : credentials.disbursement;
 
+      const headers = {
+        'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
+        Authorization: `Basic ${Buffer.from(creds.apiUser + ':' + creds.apiKey).toString('base64')}`,
+      };
+
       const response = await axios.post(
         `${this.baseUrl}${apiPath}`,
         {},
-        {
-          headers: {
-            'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
-            Authorization: `Basic ${Buffer.from(creds.apiUser + ':' + creds.apiKey).toString('base64')}`,
-          },
-        }
+        { headers }
       );
       return response.data;
     } catch (error) {
       this.logger.error('Error generating MTN token', {
         error: error instanceof Error ? error.message : 'Unknown error',
+        type,
       });
       throw new Error('Failed to generate MTN token');
     }
