@@ -4,6 +4,7 @@ import { PaymentService } from './paymentService';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
+import { KmsService } from '../../services/kmsService';
 
 const sensitiveFields = ['id', 'destinationId', 'cardName'];
 registerRedactFilter(sensitiveFields);
@@ -13,9 +14,12 @@ export class TransactionProcessService {
 
   private readonly paymentService: PaymentService;
 
+  private readonly kmsService: KmsService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
+    this.kmsService = new KmsService();
     this.logger.info('init()');
   }
 
@@ -46,10 +50,18 @@ export class TransactionProcessService {
         );
       }
 
+      // TODO: We need to decide what are the data fields that need to be decrypted.
+      // let decryptedPhone = customerPhone;
+      // if (customerPhone) {
+      //   decryptedPhone = await this.kmsService.decryptData(customerPhone);
+      //   this.logger.info('Decrypted customer phone:', decryptedPhone);
+      // }
+
       const transactionResult = await this.paymentService.processPayment({
         amount,
         paymentMethod,
         cardData,
+        // customerPhone: decryptedPhone,
         customerPhone,
         metaData,
       });

@@ -41,6 +41,7 @@
     "@aws-lambda-powertools/logger": "^2.0.2",
     "@aws-lambda-powertools/tracer": "^2.0.2",
     "@aws-sdk/client-dynamodb": "^3.731.1",
+    "@aws-sdk/client-kms": "^3.744.0",
     "@aws-sdk/client-secrets-manager": "^3.734.0",
     "@aws-sdk/client-xray": "^3.731.1",
     "@aws-sdk/lib-dynamodb": "^3.738.0",
