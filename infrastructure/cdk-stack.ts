@@ -18,6 +18,9 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElasticCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
 import { KMSHelper } from './kms';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
@@ -85,8 +88,9 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        apiKey: process.env.STRIPE_API_SECRET as string,
-        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
+        apiKey: process.env.STRIPE_API_SECRET || 'stripe_test_key',
+        signingSecret:
+          process.env.STRIPE_SIGNING_SECRET || 'stripe_test_signing_secret',
       },
     };
 
@@ -95,8 +99,27 @@ export class CDKStack extends cdk.Stack {
       secretName: `MTN_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores MTN Mobile Money API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.mtn.com',
-        apiKey: 'mtn_test_your_key_here',
+        collection: {
+          subscriptionKey:
+            process.env.MTN_COLLECTION_SUBSCRIPTION_KEY ||
+            'mtn_test_collection_key',
+          apiUser:
+            process.env.MTN_COLLECTION_API_USER || 'mtn_test_collection_user',
+          apiKey:
+            process.env.MTN_COLLECTION_API_KEY || 'mtn_test_collection_api_key',
+        },
+        disbursement: {
+          subscriptionKey:
+            process.env.MTN_DISBURSEMENT_SUBSCRIPTION_KEY ||
+            'mtn_test_disbursement_key',
+          apiUser:
+            process.env.MTN_DISBURSEMENT_API_USER ||
+            'mtn_test_disbursement_user',
+          apiKey:
+            process.env.MTN_DISBURSEMENT_API_KEY ||
+            'mtn_test_disbursement_api_key',
+        },
+        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
       },
     };
 
@@ -105,8 +128,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.orange.com',
-        apiKey: 'orange_test_your_key_here',
+        endpoint: process.env.ORANGE_API_ENDPOINT || 'https://api.orange.com',
+        apiKey: process.env.ORANGE_API_KEY || 'orange_test_your_key_here',
       },
     };
 
@@ -147,6 +170,7 @@ export class CDKStack extends cdk.Stack {
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
           VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
           KMS_TRANSPORT_KEY: key.keyArn,
         },
@@ -249,10 +273,57 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
+        PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
       },
     });
     mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, mtnWebhookLambda.lambda);
+
+    // Create Daily Disbursement Lambda with configurable execution time
+    const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
+      name: `Disbursement-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.DISBURSEMENT}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+      },
+    });
+    disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    disbursementLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    disbursementLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, disbursementLambda.lambda);
+
+    // Create CloudWatch Event Rule to trigger disbursement lambda at configured time
+    /**
+     * Time to run daily disbursement in "HH:mm" format (24-hour)
+     * Examples:
+     * - "02:00" for 2 AM
+     * - "14:30" for 2:30 PM
+     * - "23:45" for 11:45 PM
+     */
+    const disbursementTime = process.env.DISBURSEMENT_TIME;
+    new events.Rule(this, 'DisbursementSchedule', {
+      description:
+        'Triggers the daily disbursement process at the configured time',
+      schedule: events.Schedule.cron({
+        minute: disbursementTime?.split(':')[1] || '0',
+        hour: disbursementTime?.split(':')[0] || '2',
+        day: '*',
+        month: '*',
+        year: '*',
+      }),
+      targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
+    });
 
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
@@ -260,6 +331,7 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
 
     const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
       name: `SlackNotifier-${props.envName}${props.namespace}`,
@@ -301,7 +373,6 @@ export class CDKStack extends cdk.Stack {
 
       subscriptionFilter.node.addDependency(logGroupName);
     });
-
     const resources: ResourceConfig[] = [
       {
         path: 'process-payments',
@@ -402,14 +473,67 @@ export class CDKStack extends cdk.Stack {
           },
         },
       },
+      {
+        path: 'webhooks/mtn',
+        method: 'POST',
+        lambda: mtnWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+                required: ['transactionId', 'status', 'amount', 'currency'],
+              },
+            },
+            required: ['type', 'data'],
+          },
+        },
+        responseModel: {
+          modelName: 'MTNWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
     ];
 
     // Create API Gateway with WAF association
-    new ApiGatewayConstruct(this, 'ApiGateway', {
+    const apiGateway = new ApiGatewayConstruct(this, 'ApiGateway', {
       envName: props.envName,
       namespace: props.namespace,
       resources,
       webAcl: wafConstruct.webAcl,
+    });
+
+    new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
+      lambda: transactionsProcessLambda.lambda,
+      apiGateway: apiGateway.api,
+      envName: props.envName,
+      currentEnvVars: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        STRIPE_API_SECRET: stripeSecret.secretName,
+        ORANGE_API_SECRET: orangeSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
+        MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
+      },
     });
 
     // Add stack outputs

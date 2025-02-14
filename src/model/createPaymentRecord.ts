@@ -1,14 +1,17 @@
-import stripe from 'stripe';
-
 export interface CreatePaymentRecord {
   transactionId: string;
   amount: number;
-  fee?: number;
+  currency?: string;
   paymentMethod: string;
-  customerPhone?: string;
-  destinationId?: string;
-  status: string;
   createdOn: number;
-  paymentProviderResponse?: stripe.Response<stripe.PaymentIntent>;
-  metaData: Record<string, string> | undefined;
+  status: string;
+  paymentProviderResponse?: Record<string, never>;
+  metaData?: Record<string, never> | Record<string, string>;
+  mobileNo?: string;
+  merchantId?: string;
+  fee?: number;
+  settlementAmount?: number;
+  settlementStatus?: string;
+  settlementId?: string;
+  settlementDate?: number;
 }

@@ -9,6 +9,25 @@ export interface DynamoDBConstructProps {
   removalPolicy?: cdk.RemovalPolicy;
 }
 
+/**
+ * DynamoDB Construct for transaction management
+ *
+ * Table Structure:
+ * - Partition Key: {paymentMethod}#{status}#{year}#{month}
+ *   Example: "mtn#SUCCESS#2024#02"
+ *
+ * - Sort Key: {timeStamp}#{transactionId}
+ *   Example: "1707305731#tx_123456"
+ *
+ * Global Secondary Indexes:
+ * 1. TransactionIndex
+ *    - PK: transactionId
+ *    For direct transaction lookups
+ *
+ * 2. MerchantIndex
+ *    - PK: merchantId
+ *    For querying transactions by merchant
+ */
 export class DynamoDBConstruct extends Construct {
   public readonly table: dynamodb.Table;
 
@@ -19,17 +38,31 @@ export class DynamoDBConstruct extends Construct {
     this.table = new dynamodb.Table(this, `${props.namespace}-Table`, {
       tableName: `${props.tableName}`,
       partitionKey: {
-        name: 'transactionId',
-        type: dynamodb.AttributeType.STRING,
+        name: 'pk',
+        type: dynamodb.AttributeType.STRING, // {paymentMethod}#{status}#{year}#{month}
+      },
+      sortKey: {
+        name: 'sk',
+        type: dynamodb.AttributeType.STRING, // {timeStamp}#{transactionId}
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: props.removalPolicy || cdk.RemovalPolicy.RETAIN,
       pointInTimeRecovery: true,
     });
 
-    // Add GSI1 with merchantId as partition key
+    // Add GSI for transaction ID lookups
     this.table.addGlobalSecondaryIndex({
-      indexName: 'GSI1',
+      indexName: 'TransactionIndex',
+      partitionKey: {
+        name: 'transactionId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Add GSI for merchant queries
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'MerchantIndex',
       partitionKey: {
         name: 'merchantId',
         type: dynamodb.AttributeType.STRING,
@@ -38,12 +71,10 @@ export class DynamoDBConstruct extends Construct {
     });
   }
 
-  // Helper method to grant read/write permissions to other resources
   public grantReadWrite(grantee: cdk.aws_iam.IGrantable): void {
     this.table.grantReadWriteData(grantee);
   }
 
-  // Helper method to grant read-only permissions to other resources
   public grantRead(grantee: cdk.aws_iam.IGrantable): void {
     this.table.grantReadData(grantee);
   }

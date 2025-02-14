@@ -24,9 +24,14 @@ export class PaymentService {
   }
 
   async processPayment(transaction: PaymentRequest): Promise<string> {
-    const { amount, paymentMethod, cardData, customerPhone, metaData } =
-      transaction;
-
+    const {
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      merchantId,
+    } = transaction;
     switch (paymentMethod) {
       case 'CARD':
         if (!cardData) {
@@ -52,7 +57,11 @@ export class PaymentService {
           );
         }
         this.logger.info('Processing MTN Mobile Money payment');
-        return this.mtnPaymentService.processPayment(amount, customerPhone);
+        return this.mtnPaymentService.processPayment(
+          amount,
+          customerPhone,
+          merchantId as string
+        );
 
       case 'ORANGE':
         if (!customerPhone) {
