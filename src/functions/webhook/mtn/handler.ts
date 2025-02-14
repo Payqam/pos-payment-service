@@ -210,22 +210,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       TransactionType.PAYMENT
     )) as unknown as MTNTransactionStatus | null;
 
-    if (!verifiedStatus?.status || verifiedStatus.status !== status) {
-      logger.error('Transaction status verification failed', {
-        webhookStatus: status,
-        verifiedStatus: verifiedStatus?.status,
-        transactionId: externalId,
-      });
-      return {
-        statusCode: 400,
-        headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({ message: 'Invalid transaction status' }),
-      };
-    }
-
     // Update transaction record in DynamoDB
     const paymentRecord: PaymentRecordUpdate = {
-      status: status,
+      status: verifiedStatus?.status as string,
       paymentProviderResponse: {
         status: status,
       },

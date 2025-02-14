@@ -90,6 +90,7 @@ export class DynamoDBService {
       currency: item.currency,
       mobileNo: item.mobileNo,
       merchantId: item.merchantId,
+      merchantMobileNo: item.merchantMobileNo,
       paymentMethod: item.paymentMethod,
       paymentProviderResponse: item.paymentProviderResponse,
       settlementStatus: item.settlementStatus,
