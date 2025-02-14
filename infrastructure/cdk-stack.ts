@@ -524,7 +524,6 @@ export class CDKStack extends cdk.Stack {
     new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
       lambda: transactionsProcessLambda.lambda,
       apiGateway: apiGateway.api,
-      stage: props.envName,
       envName: props.envName,
       currentEnvVars: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
