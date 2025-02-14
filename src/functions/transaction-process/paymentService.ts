@@ -24,8 +24,14 @@ export class PaymentService {
   }
 
   async processPayment(transaction: PaymentRequest): Promise<string> {
-    const { amount, paymentMethod, cardData, customerPhone, metaData } =
-      transaction;
+    const {
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      transactionType,
+    } = transaction;
 
     switch (paymentMethod) {
       case 'CARD':
@@ -40,6 +46,7 @@ export class PaymentService {
         return this.cardPaymentService.processCardPayment(
           amount,
           cardData,
+          transactionType as string,
           metaData
         );
 
