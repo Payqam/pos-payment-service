@@ -7,9 +7,8 @@ import { Construct } from 'constructs';
 interface UpdateLambdaEnvProps {
   lambda: lambda.IFunction;
   apiGateway: cdk.aws_apigateway.RestApi;
-  stage: string;
   envName: string;
-  currentEnvVars: { [key: string]: string }; // Add this to pass current env vars
+  currentEnvVars: { [key: string]: string };
 }
 
 export class UpdateLambdaEnv extends Construct {
@@ -25,8 +24,11 @@ export class UpdateLambdaEnv extends Construct {
           FunctionName: props.lambda.functionName,
           Environment: {
             Variables: {
-              ...props.currentEnvVars, // Use passed environment variables
-              MTN_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/webhook/mtn`,
+              ...props.currentEnvVars,
+              MTN_WEBHOOK_URL:
+                process.env.MTN_TARGET_ENVIRONMENT === 'sandbox'
+                  ? `http://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/webhook/mtn`
+                  : `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/webhook/mtn`,
             },
           },
         },
