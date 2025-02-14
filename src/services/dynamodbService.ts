@@ -22,6 +22,7 @@ interface AdditionalTransactionFields {
   settlementDate?: number;
   fee?: number;
   settlementAmount?: number;
+  merchantMobileNo?: string;
   [key: string]: unknown;
 }
 
@@ -116,15 +117,23 @@ export class DynamoDBService {
         ...record,
         pk: `${record.paymentMethod}#${record.status}#${year}#${month}`,
         sk: `${timestamp}#${record.transactionId}`,
-        transactionId: record.transactionId,
+        transactionId: record.transactionId, // This is the GSI partition key
         createdOn: timestamp,
       },
     };
 
     try {
+      this.logger.info('Creating payment record', {
+        transactionId: record.transactionId,
+        pk: params.Item.pk,
+        sk: params.Item.sk,
+      });
       await this.dbClient.sendCommand(new PutCommand(params));
     } catch (error) {
-      this.logger.error('Error inserting record to DynamoDB', error);
+      this.logger.error('Error inserting record to DynamoDB', {
+        error,
+        transactionId: record.transactionId,
+      });
       throw error;
     }
   }
@@ -167,11 +176,12 @@ export class DynamoDBService {
    * Retrieves a transaction by its ID using the TransactionIndex GSI.
    *
    * @param transactionId - The ID of the transaction to retrieve
-   * @returns The transaction record if found
+   * @returns The transaction record and primary key if found
    */
-  public async getTransactionById(
-    transactionId: string
-  ): Promise<TransactionRecord | null> {
+  public async getTransactionById(transactionId: string): Promise<{
+    record: TransactionRecord;
+    key: { pk: string; sk: string };
+  } | null> {
     const params: QueryCommandInput = {
       TableName: this.tableName,
       IndexName: 'TransactionIndex',
@@ -183,18 +193,60 @@ export class DynamoDBService {
     };
 
     try {
+      this.logger.info('Retrieving transaction by ID', {
+        transactionId,
+        indexName: 'TransactionIndex',
+      });
       const command = new QueryCommand(params);
       const result = await this.dbClient.queryCommand(command);
-      return result.Items?.[0]
-        ? this.mapToTransactionRecord(result.Items[0])
-        : null;
+
+      if (!result.Items?.[0]) {
+        this.logger.warn('Transaction not found', { transactionId });
+        return null;
+      }
+
+      const item = result.Items[0];
+      this.logger.info('Found transaction', {
+        transactionId,
+        pk: item.pk,
+        sk: item.sk,
+      });
+
+      return {
+        record: this.mapToTransactionRecord(item),
+        key: {
+          pk: item.pk,
+          sk: item.sk,
+        },
+      };
     } catch (error) {
       this.logger.error('Error retrieving transaction by ID', {
         transactionId,
-        error,
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw error;
     }
+  }
+
+  /**
+   * Updates a payment record in the DynamoDB table using transaction ID.
+   * This method first retrieves the record using GSI, then updates it using the primary key.
+   *
+   * @param transactionId - The transaction ID to update
+   * @param updateFields - Fields to update (null values will be removed)
+   */
+  public async updatePaymentRecordByTransactionId<U>(
+    transactionId: string,
+    updateFields: U
+  ): Promise<void> {
+    // First get the record using GSI to obtain primary key
+    const result = await this.getTransactionById(transactionId);
+    if (!result) {
+      throw new Error(`Transaction not found: ${transactionId}`);
+    }
+
+    // Update the record using primary key
+    await this.updatePaymentRecord(result.key, updateFields);
   }
 
   /**

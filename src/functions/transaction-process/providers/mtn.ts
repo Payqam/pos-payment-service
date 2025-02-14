@@ -349,23 +349,36 @@ export class MtnPaymentService {
       const axiosInstance = await this.createAxiosInstance(
         TransactionType.TRANSFER
       );
-      const transferId = uuidv4();
 
-      await axiosInstance.post('/disbursement/v1_0/transfer', {
+      const referenceId = uuidv4(); // Generate new UUID for disbursement reference
+      this.logger.info('Initiating MTN transfer', {
+        amount,
+        recipientMobileNo,
+        currency,
+        referenceId,
+      });
+
+      const response = await axiosInstance.post('/v1_0/transfer', {
         amount: amount.toString(),
         currency,
-        externalId: transferId,
+        externalId: referenceId,
         payee: {
           partyIdType: 'MSISDN',
           partyId: recipientMobileNo,
         },
-        payerMessage: 'Disbursement from PayQAM',
-        payeeNote: 'Merchant settlement',
+        payerMessage: 'Payment disbursement',
+        payeeNote: 'Payment received',
       });
 
-      return transferId;
+      this.logger.info('MTN transfer initiated successfully', {
+        referenceId,
+        statusCode: response.status,
+        responseData: response.data,
+      });
+
+      return referenceId;
     } catch (error) {
-      this.logger.error('Error initiating transfer', {
+      this.logger.error('Failed to initiate MTN transfer', {
         error: error instanceof Error ? error.message : 'Unknown error',
         amount,
         recipientMobileNo,

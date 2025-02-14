@@ -47,6 +47,7 @@ interface PaymentRecordUpdate {
   settlementStatus?: string;
   settlementId?: string;
   settlementDate?: number;
+  settlementAmount?: number;
   fee?: number;
 }
 
@@ -95,19 +96,21 @@ async function processInstantDisbursement(
     });
 
     // Get transaction details from DynamoDB
-    const transaction = await dbService.getTransactionById(transactionId);
+    const result = await dbService.getTransactionById(transactionId);
     if (
-      !transaction ||
-      !transaction.merchantId ||
-      !transaction.merchantMobileNo
+      !result?.record ||
+      !result.record.merchantId ||
+      !result.record.merchantMobileNo
     ) {
       logger.error('Invalid transaction data for instant disbursement', {
         transactionId,
-        hasMerchantId: !!transaction?.merchantId,
-        hasMerchantMobileNo: !!transaction?.merchantMobileNo,
+        hasMerchantId: !!result?.record?.merchantId,
+        hasMerchantMobileNo: !!result?.record?.merchantMobileNo,
       });
       return null;
     }
+
+    const transaction = result.record;
 
     // Calculate settlement amount
     const settlementAmount = calculateSettlementAmount(amount);
@@ -136,15 +139,13 @@ async function processInstantDisbursement(
     });
 
     // Update transaction record with settlement info
-    await dbService.updatePaymentRecord(
-      { transactionId },
-      {
-        settlementStatus: 'INITIATED',
-        settlementId: transferId,
-        settlementDate: Math.floor(Date.now() / 1000),
-        fee,
-      }
-    );
+    await dbService.updatePaymentRecordByTransactionId(transactionId, {
+      settlementStatus: 'INITIATED',
+      settlementId: transferId,
+      settlementDate: Math.floor(Date.now() / 1000),
+      settlementAmount,
+      fee,
+    });
 
     return transferId;
   } catch (error) {
@@ -230,8 +231,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       },
     };
 
-    await dbService.updatePaymentRecord(
-      { transactionId: externalId },
+    await dbService.updatePaymentRecordByTransactionId(
+      externalId,
       paymentRecord
     );
 
