@@ -51,12 +51,10 @@ export interface ApiGatewayConstructProps {
 export class ApiGatewayConstruct extends Construct {
   public readonly api: apigateway.RestApi;
 
-  public readonly httpApi: apigateway.RestApi | undefined;
-
   constructor(scope: Construct, id: string, props: ApiGatewayConstructProps) {
     super(scope, id);
 
-    // Create main HTTPS REST API
+    // Create REST API with CORS and deployment configuration
     this.api = new apigateway.RestApi(this, `PAYQAM-ApiGateway`, {
       restApiName: `PAYQAM-${props.envName}${props.namespace}-Api`,
       description:
@@ -70,29 +68,6 @@ export class ApiGatewayConstruct extends Construct {
         allowCredentials: true,
       },
     });
-
-    // Create HTTP API for MTN webhook in sandbox environment
-    if (process.env.MTN_TARGET_ENVIRONMENT === 'sandbox') {
-      this.httpApi = new apigateway.RestApi(this, `PAYQAM-HTTP-ApiGateway`, {
-        restApiName: `PAYQAM-${props.envName}${props.namespace}-Http-Api`,
-        description: 'HTTP API Gateway for MTN webhook in sandbox',
-        deployOptions: {
-          stageName: props.envName,
-        },
-        defaultCorsPreflightOptions: {
-          allowOrigins: apigateway.Cors.ALL_ORIGINS,
-          allowMethods: apigateway.Cors.ALL_METHODS,
-          allowCredentials: true,
-        },
-        endpointConfiguration: {
-          types: [apigateway.EndpointType.REGIONAL],
-        },
-        endpointExportName: `PAYQAM-${props.envName}${props.namespace}-Http-Api`,
-        disableExecuteApiEndpoint: false,
-        binaryMediaTypes: [],
-        minimumCompressionSize: 0,
-      });
-    }
 
     // Create API key for authentication
     const apiKey = this.api.addApiKey('PAYQAM-ApiKey', {
@@ -120,17 +95,7 @@ export class ApiGatewayConstruct extends Construct {
 
     // Add resources and methods
     props.resources.forEach((config) => {
-      // Special handling for MTN webhook in sandbox environment
-      if (
-        process.env.MTN_TARGET_ENVIRONMENT === 'sandbox' &&
-        config.path === '/webhook/mtn'
-      ) {
-        if (this.httpApi) {
-          this.addResourceWithLambda(config, props, this.httpApi);
-        }
-      }
-      // Always add to main HTTPS API
-      this.addResourceWithLambda(config, props, this.api);
+      this.addResourceWithLambda(config, props);
     });
 
     // Associate WAF Web ACL with API Gateway if provided
@@ -152,12 +117,11 @@ export class ApiGatewayConstruct extends Construct {
    */
   private addResourceWithLambda(
     config: ResourceConfig,
-    props: ApiGatewayConstructProps,
-    api: apigateway.RestApi
+    props: ApiGatewayConstructProps
   ) {
     // Handle nested paths (e.g., 'parent/child')
     const pathParts = config.path.split('/');
-    let currentResource = api.root;
+    let currentResource = this.api.root;
 
     // Create nested resources
     pathParts.forEach((part) => {
@@ -173,7 +137,7 @@ export class ApiGatewayConstruct extends Construct {
 
     // Create and attach request model if provided
     if (config.requestModel) {
-      requestModel = api.addModel(config.requestModel.modelName, {
+      requestModel = this.api.addModel(config.requestModel.modelName, {
         contentType: 'application/json',
         modelName: config.requestModel.modelName,
         schema: config.requestModel.schema,
@@ -182,7 +146,7 @@ export class ApiGatewayConstruct extends Construct {
 
     // Create and attach response model if provided
     if (config.responseModel) {
-      responseModel = api.addModel(config.responseModel.modelName, {
+      responseModel = this.api.addModel(config.responseModel.modelName, {
         contentType: 'application/json',
         modelName: config.responseModel.modelName,
         schema: config.responseModel.schema,
@@ -190,7 +154,7 @@ export class ApiGatewayConstruct extends Construct {
     }
 
     // Create request validator for the method
-    const requestValidator = api.addRequestValidator(
+    const requestValidator = this.api.addRequestValidator(
       `PAYQAM-${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
       {
         requestValidatorName: `PAYQAM-${props.envName}${props.namespace}-RequestValidator-${config.path}-${config.method}`,
