@@ -31,6 +31,7 @@ export class PaymentService {
       customerPhone,
       metaData,
       merchantId,
+      merchantMobileNo,
     } = transaction;
     switch (paymentMethod) {
       case 'CARD':
@@ -48,19 +49,33 @@ export class PaymentService {
           metaData
         );
 
-      case 'MOMO':
+      case 'MTN':
         if (!customerPhone) {
           throw new EnhancedError(
             'MISSING_PHONE',
             ErrorCategory.VALIDATION_ERROR,
-            'Missing customer phone number for MTN Mobile Money payment'
+            'Missing customer phone number for MTN payment'
           );
         }
-        this.logger.info('Processing MTN Mobile Money payment');
+        if (!merchantId || !merchantMobileNo) {
+          throw new EnhancedError(
+            'MISSING_MERCHANT_INFO',
+            ErrorCategory.VALIDATION_ERROR,
+            'Missing merchant information for MTN payment'
+          );
+        }
+        this.logger.info('Processing MTN payment', {
+          amount,
+          customerPhone,
+          merchantId,
+          merchantMobileNo,
+        });
         return this.mtnPaymentService.processPayment(
           amount,
           customerPhone,
-          merchantId as string
+          merchantId,
+          merchantMobileNo,
+          metaData
         );
 
       case 'ORANGE':

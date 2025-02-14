@@ -11,6 +11,7 @@ interface PaymentRequest {
   customerPhone?: string;
   metaData?: Record<string, string>;
   merchantId?: string;
+  merchantMobileNo?: string;
 }
 
 export { CardData, PaymentRequest };

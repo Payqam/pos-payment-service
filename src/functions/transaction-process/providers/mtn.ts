@@ -224,86 +224,78 @@ export class MtnPaymentService {
    * @param amount - The payment amount
    * @param mobileNo - Customer's mobile number (MSISDN format)
    * @param merchantId - ID of the merchant receiving the payment
-   * @param currency - Payment currency (default: EUR)
+   * @param merchantMobileNo - Merchant's mobile number for disbursement
    * @param metaData - Optional metadata for the transaction
+   * @param currency - Payment currency (default: EUR)
    * @returns The transaction ID for tracking
    */
   public async processPayment(
     amount: number,
     mobileNo: string,
     merchantId: string,
-    currency: string = 'EUR',
-    metaData?: Record<string, never>
+    merchantMobileNo: string,
+    metaData?: Record<string, never> | Record<string, string>,
+    currency: string = 'EUR'
   ): Promise<string> {
-    // Only log scalar values, not objects that might contain circular refs
-    this.logger.info('Processing MTN Mobile Money payment', {
+    const transactionId = uuidv4();
+    this.logger.info('Processing MTN payment', {
+      transactionId,
       amount,
-      currency,
+      mobileNo,
       merchantId,
+      merchantMobileNo,
+      currency,
     });
 
     try {
       const axiosInstance = await this.createAxiosInstance(
-        TransactionType.PAYMENT
+        TransactionType.PAYMENT,
+        transactionId
       );
-      const transactionId = uuidv4();
 
       const { fee, settlementAmount } = this.calculateFeeAndSettlement(amount);
 
-      this.logger.info('Calculated payment amounts', {
-        originalAmount: amount,
-        fee,
-        settlementAmount,
-        feePercentage: PAYQAM_FEE_PERCENTAGE,
+      // Create payment request in MTN
+      await axiosInstance.post('/collection/v1_0/requesttopay', {
+        amount: amount.toString(),
+        currency,
+        externalId: transactionId,
+        payer: {
+          partyIdType: 'MSISDN',
+          partyId: mobileNo,
+        },
+        payerMessage: 'PayQAM payment request',
+        payeeNote: 'Thank you for your payment',
       });
 
-      // Comment out response logging to avoid circular refs
-      const response = await axiosInstance.post(
-        '/collection/v1_0/requesttopay',
-        {
-          amount: amount.toString(),
-          currency,
-          externalId: transactionId,
-          payer: {
-            partyIdType: 'MSISDN',
-            partyId: mobileNo,
-          },
-          payerMessage: 'Payment for services',
-          payeeNote: 'PayQAM transaction',
-        }
-      );
-
-      const record: CreatePaymentRecord = {
+      // Store transaction record in DynamoDB
+      const paymentRecord: CreatePaymentRecord = {
         transactionId,
         amount,
         currency,
-        paymentMethod: 'MTN_MOBILE',
+        paymentMethod: 'MTN',
         createdOn: Math.floor(Date.now() / 1000),
         status: 'PENDING',
-        paymentProviderResponse: response.data, // Only store the data, not the full response
-        metaData,
         mobileNo,
         merchantId,
+        merchantMobileNo,
+        metaData,
         fee,
         settlementAmount,
       };
 
-      await this.dbService.createPaymentRecord(record);
-      // Only log scalar values from the record
-      this.logger.info('Payment record created in DynamoDB', {
+      await this.dbService.createPaymentRecord(paymentRecord);
+
+      this.logger.info('Payment request created successfully', {
         transactionId,
-        status: record.status,
-        amount: record.amount,
-        fee: record.fee,
+        status: 'PENDING',
       });
 
       return transactionId;
     } catch (error) {
-      // Only log the error message, not the full error object
-      this.logger.error('Error processing MTN payment', {
+      this.logger.error('Failed to process payment', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        amount,
-        merchantId,
+        transactionId,
       });
       throw error;
     }

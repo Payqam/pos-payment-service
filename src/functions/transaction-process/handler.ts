@@ -40,13 +40,29 @@ export class TransactionProcessService {
       const body = JSON.parse(event.body);
       this.logger.info('Parsed body:', body);
 
-      const { amount, paymentMethod, cardData, customerPhone, metaData } = body;
+      const {
+        amount,
+        paymentMethod,
+        cardData,
+        customerPhone,
+        metaData,
+        merchantId,
+        merchantMobileNo,
+      } = body;
 
       if (!amount || !paymentMethod) {
         return ErrorHandler.createErrorResponse(
           'MISSING_FIELDS',
           ErrorCategory.VALIDATION_ERROR,
           'Missing required fields: amount or paymentMethod'
+        );
+      }
+
+      if (paymentMethod === 'MTN' && (!merchantId || !merchantMobileNo)) {
+        return ErrorHandler.createErrorResponse(
+          'MISSING_MERCHANT_INFO',
+          ErrorCategory.VALIDATION_ERROR,
+          'Missing required fields: merchantId or merchantMobileNo for MTN payment'
         );
       }
 
@@ -61,9 +77,10 @@ export class TransactionProcessService {
         amount,
         paymentMethod,
         cardData,
-        // customerPhone: decryptedPhone,
         customerPhone,
         metaData,
+        merchantId,
+        merchantMobileNo,
       });
 
       return {

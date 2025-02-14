@@ -20,28 +20,18 @@ const PAYQAM_FEE_PERCENTAGE = parseFloat(
 
 /**
  * Structure of the webhook event received from MTN.
- * MTN sends different event types for payments and transfers,
- * but they follow the same basic structure.
  */
 interface WebhookEvent {
-  type: string;
-  data: {
-    transactionId: string;
-    status: string;
-    reason?: string;
-    amount: string;
-    currency: string;
-    payerMessage?: string;
-    payeeNote?: string;
+  financialTransactionId: string;
+  externalId: string;
+  amount: string;
+  currency: string;
+  payer: {
+    partyIdType: string;
+    partyId: string;
   };
-}
-
-/**
- * Structure for the DynamoDB record key.
- * Used to identify the transaction record to update.
- */
-interface PaymentRecordKey {
-  transactionId: string;
+  payeeNote?: string;
+  status: string;
 }
 
 /**
@@ -58,6 +48,20 @@ interface PaymentRecordUpdate {
   settlementId?: string;
   settlementDate?: number;
   fee?: number;
+}
+
+/**
+ * Interface for MTN API transaction status response
+ */
+interface MTNTransactionStatus {
+  financialTransactionId: string;
+  externalId: string;
+  amount: string;
+  currency: string;
+  payerMessage: string;
+  payeeNote: string;
+  status: string;
+  reason?: string;
 }
 
 /**
@@ -92,11 +96,15 @@ async function processInstantDisbursement(
 
     // Get transaction details from DynamoDB
     const transaction = await dbService.getTransactionById(transactionId);
-    if (!transaction || !transaction.merchantId || !transaction.mobileNo) {
+    if (
+      !transaction ||
+      !transaction.merchantId ||
+      !transaction.merchantMobileNo
+    ) {
       logger.error('Invalid transaction data for instant disbursement', {
         transactionId,
         hasMerchantId: !!transaction?.merchantId,
-        hasMobileNo: !!transaction?.mobileNo,
+        hasMerchantMobileNo: !!transaction?.merchantMobileNo,
       });
       return null;
     }
@@ -112,10 +120,10 @@ async function processInstantDisbursement(
       feePercentage: PAYQAM_FEE_PERCENTAGE,
     });
 
-    // Initiate transfer to merchant
+    // Initiate transfer to merchant using merchant's mobile number
     const transferId = await mtnService.initiateTransfer(
       settlementAmount,
-      transaction.mobileNo,
+      transaction.merchantMobileNo as string,
       transaction.currency || 'EUR'
     );
 
@@ -124,6 +132,7 @@ async function processInstantDisbursement(
       transferId,
       settlementAmount,
       merchantId: transaction.merchantId,
+      merchantMobileNo: transaction.merchantMobileNo,
     });
 
     // Update transaction record with settlement info
@@ -183,113 +192,94 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     }
 
     const webhookEvent = JSON.parse(event.body) as WebhookEvent;
-    const { transactionId, status, reason } = webhookEvent.data;
-
-    // Determine transaction type from webhook event type
-    const transactionType = webhookEvent.type.includes('transfer')
-      ? TransactionType.TRANSFER
-      : TransactionType.PAYMENT;
+    const { financialTransactionId, externalId, amount, currency, status } =
+      webhookEvent;
 
     logger.info('Processing webhook event', {
-      transactionId,
+      financialTransactionId,
+      externalId,
       status,
-      type: webhookEvent.type,
-      transactionType,
+      amount,
+      currency,
     });
 
     // Verify transaction status with MTN API to prevent webhook spoofing
-    const verifiedStatus = await mtnService.checkTransactionStatus(
-      transactionId,
-      transactionType
-    );
+    const verifiedStatus = (await mtnService.checkTransactionStatus(
+      externalId,
+      TransactionType.PAYMENT
+    )) as unknown as MTNTransactionStatus | null;
 
-    if (verifiedStatus !== status) {
-      logger.error('Status mismatch', {
+    if (!verifiedStatus?.status || verifiedStatus.status !== status) {
+      logger.error('Transaction status verification failed', {
         webhookStatus: status,
-        verifiedStatus,
+        verifiedStatus: verifiedStatus?.status,
+        transactionId: externalId,
       });
       return {
         statusCode: 400,
         headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({ message: 'Status verification failed' }),
+        body: JSON.stringify({ message: 'Invalid transaction status' }),
       };
     }
 
-    // Update transaction record in DynamoDB with new status
-    const key: PaymentRecordKey = { transactionId };
-    const updateFields: PaymentRecordUpdate = {
-      status,
+    // Update transaction record in DynamoDB
+    const paymentRecord: PaymentRecordUpdate = {
+      status: status,
       paymentProviderResponse: {
-        status,
-        reason,
+        status: status,
       },
     };
 
-    await dbService.updatePaymentRecord(key, updateFields);
+    await dbService.updatePaymentRecord(
+      { transactionId: externalId },
+      paymentRecord
+    );
 
     // If payment is successful and instant disbursement is enabled, process disbursement
-    let settlementId: string | null = null;
-    if (
-      INSTANT_DISBURSEMENT_ENABLED &&
-      transactionType === TransactionType.PAYMENT &&
-      status === 'SUCCESS'
-    ) {
-      logger.info('Initiating instant disbursement', {
-        transactionId,
-        amount: webhookEvent.data.amount,
-      });
-
-      settlementId = await processInstantDisbursement(
-        transactionId,
-        parseFloat(webhookEvent.data.amount)
+    if (status === 'SUCCESSFUL' && INSTANT_DISBURSEMENT_ENABLED) {
+      const amountNumber = parseFloat(amount);
+      const settlementId = await processInstantDisbursement(
+        externalId,
+        amountNumber
       );
+
+      if (settlementId) {
+        logger.info('Instant disbursement processed successfully', {
+          transactionId: externalId,
+          settlementId,
+        });
+      } else {
+        logger.error('Failed to process instant disbursement', {
+          transactionId: externalId,
+        });
+      }
     }
 
-    // Publish status update to SNS for downstream processing
-    const snsMessage = {
-      transactionId,
-      status,
-      type: webhookEvent.type,
-      amount: webhookEvent.data.amount,
-      currency: webhookEvent.data.currency,
-      reason: webhookEvent.data.reason,
-      timestamp: new Date().toISOString(),
-      settlementId,
-    };
-
+    // Publish status update to SNS
     await snsClient.send(
       new PublishCommand({
         TopicArn: process.env.TRANSACTION_STATUS_TOPIC_ARN,
-        Message: JSON.stringify(snsMessage),
-        MessageAttributes: {
-          transactionType: {
-            DataType: 'String',
-            StringValue: transactionType,
-          },
-        },
+        Message: JSON.stringify({
+          transactionId: externalId,
+          status: status,
+          type: 'PAYMENT',
+          amount: amount,
+          currency: currency,
+        }),
       })
     );
-
-    logger.info('Successfully processed webhook', {
-      transactionId,
-      status,
-      type: webhookEvent.type,
-      settlementId,
-    });
 
     return {
       statusCode: 200,
       headers: API.DEFAULT_HEADERS,
-      body: JSON.stringify({
-        message: 'Webhook processed successfully',
-        settlementId,
-      }),
+      body: JSON.stringify({ message: 'Webhook processed successfully' }),
     };
   } catch (error) {
     logger.error('Error processing webhook', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
+      event,
     });
+
     return {
       statusCode: 500,
       headers: API.DEFAULT_HEADERS,

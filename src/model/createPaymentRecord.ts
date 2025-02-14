@@ -9,6 +9,7 @@ export interface CreatePaymentRecord {
   metaData?: Record<string, never> | Record<string, string>;
   mobileNo?: string;
   merchantId?: string;
+  merchantMobileNo?: string; // Added merchant's mobile number
   fee?: number;
   settlementAmount?: number;
   settlementStatus?: string;
