@@ -23,7 +23,7 @@ jobs:
         env:
           ENV: DEV
           NAMESPACE: ''
-      - name: Configure AWS Credentials for deployment
+      - name: Configure AWS Credentials for deployments
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
