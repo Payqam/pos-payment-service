@@ -4,7 +4,7 @@ import { PaymentService } from './paymentService';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
-import { KmsService } from '../../services/kmsService';
+//import { KmsService } from '../../services/kmsService';
 
 const sensitiveFields = ['id', 'destinationId', 'cardName'];
 registerRedactFilter(sensitiveFields);
@@ -14,12 +14,12 @@ export class TransactionProcessService {
 
   private readonly paymentService: PaymentService;
 
-  private readonly kmsService: KmsService;
+  //private readonly kmsService: KmsService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
-    this.kmsService = new KmsService();
+    //this.kmsService = new KmsService();
     this.logger.info('init()');
   }
 
