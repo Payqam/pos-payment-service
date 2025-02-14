@@ -4,9 +4,14 @@ import {
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { registerRedactFilter } from '../../../utils/redactUtil';
 
 const logger: Logger = LoggerService.named('salesforce-sync');
 const secretsManager = new SecretsManagerClient({});
+
+// Configure sensitive field redaction in logs
+const sensitiveFields = ['clientId', 'clientSecret', 'username', 'password'];
+registerRedactFilter(sensitiveFields);
 
 interface SalesforceCredentials {
   clientId: string;

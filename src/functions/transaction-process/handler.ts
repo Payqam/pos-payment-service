@@ -6,7 +6,8 @@ import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
 import { KmsService } from '../../services/kmsService';
 
-const sensitiveFields = ['id', 'destinationId', 'cardName'];
+// Configure sensitive field redaction in logs
+const sensitiveFields = ['id', 'destinationId', 'cardName', 'subscriptionKey', 'apiKey', 'apiUser'];
 registerRedactFilter(sensitiveFields);
 
 export class TransactionProcessService {
