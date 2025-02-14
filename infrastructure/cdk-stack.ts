@@ -495,10 +495,10 @@ export class CDKStack extends cdk.Stack {
                   payerMessage: { type: apigateway.JsonSchemaType.STRING },
                   payeeNote: { type: apigateway.JsonSchemaType.STRING },
                 },
-                required: ['transactionId', 'status', 'amount', 'currency'],
+                //required: ['transactionId', 'status', 'amount', 'currency'],
               },
             },
-            required: ['type', 'data'],
+            //required: ['type', 'data'],
           },
         },
         responseModel: {
@@ -524,6 +524,7 @@ export class CDKStack extends cdk.Stack {
     new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
       lambda: transactionsProcessLambda.lambda,
       apiGateway: apiGateway.api,
+      stage: props.envName,
       envName: props.envName,
       currentEnvVars: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
