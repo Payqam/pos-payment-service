@@ -121,10 +121,25 @@ export class MtnPaymentService {
     // Add reference ID if provided, otherwise generate new one
     headers['X-Reference-Id'] = transactionId || uuidv4();
 
-    // Add callback URL for payment requests
-    if (type === TransactionType.PAYMENT && process.env.MTN_WEBHOOK_URL) {
-      headers['X-Callback-Url'] = process.env.MTN_WEBHOOK_URL;
+    // Add callback URL based on transaction type
+    if (process.env.MTN_WEBHOOK_URL) {
+      if (
+        type === TransactionType.PAYMENT ||
+        type === TransactionType.TRANSFER
+      ) {
+        headers['X-Callback-Url'] = process.env.MTN_WEBHOOK_URL;
+        this.logger.info('Added callback URL to headers', {
+          type,
+          callbackUrl: process.env.MTN_WEBHOOK_URL,
+        });
+      }
     }
+
+    this.logger.info('Generated headers for MTN request', {
+      type,
+      headers,
+      hasCallbackUrl: !!headers['X-Callback-Url'],
+    });
 
     return headers;
   }

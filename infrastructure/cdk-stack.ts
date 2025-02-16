@@ -278,6 +278,9 @@ export class CDKStack extends cdk.Stack {
         TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
         INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
         PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
+        MTN_WEBHOOK_URL:
+          process.env.MTN_WEBHOOK_URL ||
+          'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
       },
     });
     mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
