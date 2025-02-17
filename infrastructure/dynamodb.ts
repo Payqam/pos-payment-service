@@ -48,6 +48,16 @@ export class DynamoDBConstruct extends Construct {
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+
+    // Add GSI2 for settlement lookups
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'SettlementIndex',
+      partitionKey: {
+        name: 'settlementId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
   }
 
   public grantReadWrite(grantee: cdk.aws_iam.IGrantable): void {

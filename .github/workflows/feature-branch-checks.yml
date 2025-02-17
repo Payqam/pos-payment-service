@@ -59,6 +59,8 @@ jobs:
           MTN_DISBURSEMENT_API_USER: ${{ secrets.MTN_DISBURSEMENT_API_USER }}
           MTN_DISBURSEMENT_API_KEY: ${{ secrets.MTN_DISBURSEMENT_API_KEY }}
           MTN_TARGET_ENVIRONMENT: ${{ vars.MTN_TARGET_ENVIRONMENT }}
+          MTN_PAYMENT_WEBHOOK_URL: ${{ vars.MTN_PAYMENT_WEBHOOK_URL }}
+          MTN_DISBURSEMENT_WEBHOOK_URL: ${{ vars.MTN_DISBURSEMENT_WEBHOOK_URL }}
       - name: Destroy Deployment
         if: ${{ steps.deploy.outcome == 'success' && always() }}
         run: zx ./scripts/destroy.mjs

@@ -1,12 +1,12 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
-import { API } from '../../../../configurations/api';
+import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
-import { MtnPaymentService } from '../../transaction-process/providers';
-import { DynamoDBService } from '../../../services/dynamodbService';
+import { MtnPaymentService } from '../../../transaction-process/providers';
+import { DynamoDBService } from '../../../../services/dynamodbService';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
-import { TransactionType } from '../../transaction-process/providers';
+import { TransactionType } from '../../../transaction-process/providers';
 
-const logger: Logger = LoggerService.named('mtn-webhook-handler');
+const logger: Logger = LoggerService.named('mtn-payment-webhook-handler');
 const mtnService = new MtnPaymentService();
 const dbService = new DynamoDBService();
 const snsClient = new SNSClient({ region: process.env.AWS_REGION });
@@ -101,7 +101,6 @@ async function processInstantDisbursement(
     }>({
       transactionId,
     });
-    console.log(`-----------result`, result);
 
     if (
       !result?.Item ||

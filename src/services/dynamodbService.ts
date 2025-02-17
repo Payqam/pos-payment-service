@@ -167,15 +167,22 @@ export class DynamoDBService {
    * Retrieves an item from the DynamoDB table using GetItemCommand.
    *
    * @param key - The primary key of the record to retrieve.
-   * @returns The retrieved item wrapped in a GetItemCommandOutput.
+   * @param indexName - Optional. The name of the GSI to query.
+   * @returns The retrieved item wrapped in a GetCommandOutput.
    */
-  public async getItem<T>(key: T): Promise<GetCommandOutput> {
-    console.log(`-----------key`, key);
-
-    const params = {
+  public async getItem<T>(
+    key: T,
+    indexName?: string
+  ): Promise<GetCommandOutput> {
+    const params: any = {
       TableName: this.tableName,
       Key: key as Record<string, NativeAttributeValue>,
     };
+
+    if (indexName) {
+      params.IndexName = indexName;
+    }
+
     try {
       const result = await this.dbClient.getItem(new GetCommand(params));
       return result as GetCommandOutput;
