@@ -13,18 +13,11 @@ export interface DynamoDBConstructProps {
  * DynamoDB Construct for transaction management
  *
  * Table Structure:
- * - Partition Key: {paymentMethod}#{status}#{year}#{month}
- *   Example: "mtn#SUCCESS#2024#02"
- *
- * - Sort Key: {timeStamp}#{transactionId}
- *   Example: "1707305731#tx_123456"
+ * - Partition Key: transactionId
+ *   Example: "tx_123456"
  *
  * Global Secondary Indexes:
- * 1. TransactionIndex
- *    - PK: transactionId
- *    For direct transaction lookups
- *
- * 2. MerchantIndex
+ * 1. GSI1
  *    - PK: merchantId
  *    For querying transactions by merchant
  */
@@ -38,31 +31,17 @@ export class DynamoDBConstruct extends Construct {
     this.table = new dynamodb.Table(this, `${props.namespace}-Table`, {
       tableName: `${props.tableName}`,
       partitionKey: {
-        name: 'pk',
-        type: dynamodb.AttributeType.STRING, // {paymentMethod}#{status}#{year}#{month}
-      },
-      sortKey: {
-        name: 'sk',
-        type: dynamodb.AttributeType.STRING, // {timeStamp}#{transactionId}
+        name: 'transactionId',
+        type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: props.removalPolicy || cdk.RemovalPolicy.RETAIN,
       pointInTimeRecovery: true,
     });
 
-    // Add GSI for transaction ID lookups
+    // Add GSI1 with merchantId as partition key
     this.table.addGlobalSecondaryIndex({
-      indexName: 'TransactionIndex',
-      partitionKey: {
-        name: 'transactionId',
-        type: dynamodb.AttributeType.STRING,
-      },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
-
-    // Add GSI for merchant queries
-    this.table.addGlobalSecondaryIndex({
-      indexName: 'MerchantIndex',
+      indexName: 'GSI1',
       partitionKey: {
         name: 'merchantId',
         type: dynamodb.AttributeType.STRING,

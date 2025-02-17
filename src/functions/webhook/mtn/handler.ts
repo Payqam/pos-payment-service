@@ -95,22 +95,37 @@ async function processInstantDisbursement(
       amount,
     });
 
-    // Get transaction details from DynamoDB
-    const result = await dbService.getTransactionById(transactionId);
+    // Get transaction details from DynamoDB using transaction ID
+    const result = await dbService.getItem<{
+      transactionId: string;
+    }>({
+      transactionId,
+    });
+    console.log(`-----------result`, result);
+
     if (
-      !result?.record ||
-      !result.record.merchantId ||
-      !result.record.merchantMobileNo
+      !result?.Item ||
+      !result.Item?.merchantId ||
+      !result.Item?.merchantMobileNo
     ) {
-      logger.error('Invalid transaction data for instant disbursement', {
+      logger.error('Transaction not found or missing required fields', {
         transactionId,
-        hasMerchantId: !!result?.record?.merchantId,
-        hasMerchantMobileNo: !!result?.record?.merchantMobileNo,
       });
       return null;
     }
 
-    const transaction = result.record;
+    // Update transaction status and add response
+    await dbService.updatePaymentRecordByTransactionId(transactionId, {
+      status: 'SUCCESS',
+      paymentProviderResponse: {
+        externalId: transactionId,
+        status: 'SUCCESS',
+        reason: 'Instant disbursement processed',
+        amount: amount,
+      },
+    });
+
+    const transaction = result.Item;
 
     // Calculate settlement amount
     const settlementAmount = calculateSettlementAmount(amount);
