@@ -41,14 +41,26 @@ export class StripeWebhookService {
         return 1;
       case 'INTENT_CREATED':
         return 2;
-      case 'INTENT_SUCCEEDED':
+      case 'INTENT_PROCESSING':
         return 3;
-      case 'CHARGE_UPDATED':
+      case 'INTENT_SUCCEEDED':
         return 4;
-      case 'CHARGE_SUCCEEDED':
+      case 'INTENT_REQUIRES_ACTION':
         return 5;
-      case 'FAILED':
-        return 0;
+      case 'CHARGE_UPDATED':
+        return 6;
+      case 'CHARGE_SUCCEEDED':
+        return 7;
+      case 'INTENT_CANCELLED':
+        return 8;
+      case 'INTENT_FAILED':
+        return 9;
+      case 'REFUND_CREATED':
+        return 10;
+      case 'REFUND_UPDATED':
+        return 11;
+      case 'REFUND_FAILED':
+        return 12;
       default:
         return 0;
     }
@@ -89,73 +101,22 @@ export class StripeWebhookService {
     }
   }
 
-  private async handlePaymentIntentUpdated(
-    charge: stripe.Charge
+  private async handlePaymentEvent(
+    paymentIntent: stripe.PaymentIntent | stripe.Charge | stripe.Refund,
+    status: string
   ): Promise<void> {
-    this.logger.info('Payment intent updated', charge);
-    const key = { transactionId: charge.payment_intent as string };
+    this.logger.info(`Processing event with status: ${status}`, paymentIntent);
+
+    const transactionId =
+      'payment_intent' in paymentIntent
+        ? (paymentIntent.payment_intent as string)
+        : paymentIntent.id;
+
+    const key = { transactionId };
     this.logger.info('key', key);
 
     const updateData = {
-      status: 'CHARGE_UPDATED',
-      paymentProviderResponse: charge,
-    };
-
-    await this.updateRecordIfHigherStatus(key, updateData.status, updateData);
-  }
-
-  private async handlePaymentIntentSucceeded(
-    paymentIntent: stripe.PaymentIntent
-  ): Promise<void> {
-    this.logger.info('Payment intent succeeded', paymentIntent);
-    const key = { transactionId: paymentIntent.id as string };
-    this.logger.info('key', key);
-
-    const updateData = {
-      status: 'INTENT_SUCCEEDED',
-      paymentProviderResponse: paymentIntent,
-    };
-
-    await this.updateRecordIfHigherStatus(key, updateData.status, updateData);
-  }
-
-  private async handlePaymentIntentCreated(
-    paymentIntent: stripe.PaymentIntent
-  ): Promise<void> {
-    this.logger.info('Payment intent created', paymentIntent);
-    const key = { transactionId: paymentIntent.id };
-    this.logger.info('key', key);
-
-    const updateData = {
-      status: 'INTENT_CREATED',
-      paymentProviderResponse: paymentIntent,
-    };
-
-    await this.updateRecordIfHigherStatus(key, updateData.status, updateData);
-  }
-
-  private async handleChargeSucceeded(charge: stripe.Charge): Promise<void> {
-    this.logger.info('Charge succeeded', charge);
-    const key = { transactionId: charge.payment_intent as string };
-    this.logger.info('key', key);
-
-    const updateData = {
-      status: 'CHARGE_SUCCEEDED',
-      paymentProviderResponse: charge,
-    };
-
-    await this.updateRecordIfHigherStatus(key, updateData.status, updateData);
-  }
-
-  private async handlePaymentIntentFailed(
-    paymentIntent: stripe.PaymentIntent
-  ): Promise<void> {
-    this.logger.error('Payment intent failed', paymentIntent);
-    const key = { transactionId: paymentIntent.payment_method as string };
-    this.logger.info('key', key);
-
-    const updateData = {
-      status: 'FAILED',
+      status,
       paymentProviderResponse: paymentIntent,
     };
 
@@ -186,28 +147,69 @@ export class StripeWebhookService {
       this.logger.info('Processing Stripe webhook', { stripeEvent });
       switch (stripeEvent.type) {
         case 'charge.succeeded':
-          await this.handleChargeSucceeded(
-            stripeEvent.data.object as stripe.Charge
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Charge,
+            'CHARGE_SUCCEEDED'
           );
           break;
         case 'charge.updated':
-          await this.handlePaymentIntentUpdated(
-            stripeEvent.data.object as stripe.Charge
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Charge,
+            'CHARGE_UPDATED'
           );
           break;
         case 'payment_intent.succeeded':
-          await this.handlePaymentIntentSucceeded(
-            stripeEvent.data.object as stripe.PaymentIntent
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.PaymentIntent,
+            'INTENT_SUCCEEDED'
           );
           break;
         case 'payment_intent.created':
-          await this.handlePaymentIntentCreated(
-            stripeEvent.data.object as stripe.PaymentIntent
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.PaymentIntent,
+            'INTENT_CREATED'
           );
           break;
         case 'payment_intent.payment_failed':
-          await this.handlePaymentIntentFailed(
-            stripeEvent.data.object as stripe.PaymentIntent
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.PaymentIntent,
+            'INTENT_FAILED'
+          );
+          break;
+        case 'payment_intent.requires_action':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.PaymentIntent,
+            'INTENT_REQUIRES_ACTION'
+          );
+          break;
+        case 'payment_intent.canceled':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.PaymentIntent,
+            'INTENT_CANCELLED'
+          );
+          break;
+        case 'payment_intent.processing':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.PaymentIntent,
+            'INTENT_PROCESSING'
+          );
+          break;
+        case 'refund.created':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Refund,
+            'REFUND_CREATED'
+          );
+          break;
+        case 'refund.updated':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Refund,
+            'REFUND_UPDATED'
+          );
+          break;
+        case 'refund.failed':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Refund,
+            'REFUND_FAILED'
           );
           break;
         default:
