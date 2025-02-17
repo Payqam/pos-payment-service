@@ -26,6 +26,7 @@ export class CardPaymentService {
     amount: number,
     cardData: CardData,
     transactionType: string,
+    merchantId: string,
     metaData?: Record<string, string>
   ): Promise<string> {
     this.logger.info('Processing card payment', {
@@ -42,11 +43,8 @@ export class CardPaymentService {
     switch (transactionType) {
       case 'CHARGE': {
         try {
-          const feeAmount = ['visa', 'mastercard', 'amex'].includes(
-            cardData.cardName as string
-          )
-            ? 250
-            : 19;
+          const feePercentage = 0.02;
+          const feeAmount = Math.floor(amount * feePercentage);
           const transferAmount = Math.max(amount - feeAmount, 0);
 
           const paymentIntent = await stripeClient.paymentIntents.create({
@@ -67,6 +65,7 @@ export class CardPaymentService {
           this.logger.info('Payment intent created', paymentIntent);
           const record = {
             transactionId: paymentIntent?.id as string,
+            merchantId: merchantId,
             amount,
             paymentMethod: 'CARD',
             createdOn: Math.floor(Date.now() / 1000),
