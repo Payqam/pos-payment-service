@@ -31,6 +31,7 @@ export class PaymentService {
       customerPhone,
       metaData,
       transactionType,
+      merchantId,
     } = transaction;
 
     switch (paymentMethod) {
@@ -47,6 +48,7 @@ export class PaymentService {
           amount,
           cardData,
           transactionType as string,
+          merchantId,
           metaData
         );
 

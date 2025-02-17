@@ -167,6 +167,7 @@ export class TransactionProcessService {
       customerPhone,
       metaData,
       transactionType,
+      merchantId,
     } = body;
 
     if (!amount || !paymentMethod) {
@@ -184,6 +185,7 @@ export class TransactionProcessService {
       customerPhone,
       metaData,
       transactionType,
+      merchantId,
     });
 
     return {
