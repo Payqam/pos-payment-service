@@ -2,7 +2,7 @@ import stripe from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-import { CardData, CreatePaymentRecord } from '../../../model';
+import { CardData } from '../../../model';
 import { CacheService } from '../../../services/cacheService';
 
 export class CardPaymentService {

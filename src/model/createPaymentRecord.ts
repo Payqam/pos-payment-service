@@ -9,11 +9,10 @@ export interface CreatePaymentRecord {
   destinationId?: string;
   status: string;
   createdOn: number;
-  status: string;
-    paymentProviderResponse?: stripe.Response<
-        stripe.PaymentIntent | stripe.Refund
-    >;
-    metaData?: Record<string, string> | undefined;
+  paymentProviderResponse?: stripe.Response<
+    stripe.PaymentIntent | stripe.Refund
+  >;
+  metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
   merchantMobileNo?: string; // Added merchant's mobile number
@@ -22,5 +21,5 @@ export interface CreatePaymentRecord {
   settlementStatus?: string;
   settlementId?: string;
   settlementDate?: number;
-    transactionType: string;
+  transactionType?: string;
 }

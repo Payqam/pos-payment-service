@@ -64,7 +64,16 @@ export class TransactionProcessService {
     const body = JSON.parse(event.body);
     this.logger.info('Parsed body:', body);
 
-      const { amount, paymentMethod, cardData, customerPhone, metaData, merchantMobileNo, transactionType } = body;
+    const {
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      merchantMobileNo,
+      transactionType,
+      merchantId,
+    } = body;
 
     if (!amount || !paymentMethod) {
       return ErrorHandler.createErrorResponse(
@@ -74,31 +83,31 @@ export class TransactionProcessService {
       );
     }
 
-      if (paymentMethod === 'MTN' && (!merchantId || !merchantMobileNo)) {
-        return ErrorHandler.createErrorResponse(
-          'MISSING_MERCHANT_INFO',
-          ErrorCategory.VALIDATION_ERROR,
-          'Missing required fields: merchantId or merchantMobileNo for MTN payment'
-        );
-      }
+    if (paymentMethod === 'MTN' && (!merchantId || !merchantMobileNo)) {
+      return ErrorHandler.createErrorResponse(
+        'MISSING_MERCHANT_INFO',
+        ErrorCategory.VALIDATION_ERROR,
+        'Missing required fields: merchantId or merchantMobileNo for MTN payment'
+      );
+    }
 
-      // TODO: We need to decide what are the data fields that need to be decrypted.
-      // let decryptedPhone = customerPhone;
-      // if (customerPhone) {
-      //   decryptedPhone = await this.kmsService.decryptData(customerPhone);
-      //   this.logger.info('Decrypted customer phone:', decryptedPhone);
-      // }
+    // TODO: We need to decide what are the data fields that need to be decrypted.
+    // let decryptedPhone = customerPhone;
+    // if (customerPhone) {
+    //   decryptedPhone = await this.kmsService.decryptData(customerPhone);
+    //   this.logger.info('Decrypted customer phone:', decryptedPhone);
+    // }
 
-      const transactionResult = await this.paymentService.processPayment({
-        amount,
-        paymentMethod,
-        cardData,
-        customerPhone,
-        metaData,
-        merchantId,
-          transactionType,
-        merchantMobileNo,
-      });
+    const transactionResult = await this.paymentService.processPayment({
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      merchantId,
+      transactionType,
+      merchantMobileNo,
+    });
 
     return {
       statusCode: 200,

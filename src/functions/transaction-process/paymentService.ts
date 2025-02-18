@@ -48,7 +48,7 @@ export class PaymentService {
           amount,
           cardData,
           transactionType as string,
-          merchantId,
+          merchantId as string,
           metaData
         );
 
