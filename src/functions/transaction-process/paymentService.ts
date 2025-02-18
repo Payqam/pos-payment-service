@@ -24,9 +24,15 @@ export class PaymentService {
   }
 
   async processPayment(transaction: PaymentRequest): Promise<string> {
-    const { amount, paymentMethod, cardData, customerPhone, metaData } =
-      transaction;
-
+    const {
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      merchantId,
+      merchantMobileNo,
+    } = transaction;
     switch (paymentMethod) {
       case 'CARD':
         if (!cardData) {
@@ -43,16 +49,34 @@ export class PaymentService {
           metaData
         );
 
-      case 'MOMO':
+      case 'MTN':
         if (!customerPhone) {
           throw new EnhancedError(
             'MISSING_PHONE',
             ErrorCategory.VALIDATION_ERROR,
-            'Missing customer phone number for MTN Mobile Money payment'
+            'Missing customer phone number for MTN payment'
           );
         }
-        this.logger.info('Processing MTN Mobile Money payment');
-        return this.mtnPaymentService.processPayment(amount, customerPhone);
+        if (!merchantId || !merchantMobileNo) {
+          throw new EnhancedError(
+            'MISSING_MERCHANT_INFO',
+            ErrorCategory.VALIDATION_ERROR,
+            'Missing merchant information for MTN payment'
+          );
+        }
+        this.logger.info('Processing MTN payment', {
+          amount,
+          customerPhone,
+          merchantId,
+          merchantMobileNo,
+        });
+        return this.mtnPaymentService.processPayment(
+          amount,
+          customerPhone,
+          merchantId,
+          merchantMobileNo,
+          metaData
+        );
 
       case 'ORANGE':
         if (!customerPhone) {

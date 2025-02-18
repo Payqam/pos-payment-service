@@ -4,7 +4,7 @@ import { PaymentService } from './paymentService';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
-import { KmsService } from '../../services/kmsService';
+//import { KmsService } from '../../services/kmsService';
 
 const sensitiveFields = ['id', 'destinationId', 'cardName'];
 registerRedactFilter(sensitiveFields);
@@ -14,12 +14,12 @@ export class TransactionProcessService {
 
   private readonly paymentService: PaymentService;
 
-  private readonly kmsService: KmsService;
+  //private readonly kmsService: KmsService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
-    this.kmsService = new KmsService();
+    //this.kmsService = new KmsService();
     this.logger.info('init()');
   }
 
@@ -40,13 +40,29 @@ export class TransactionProcessService {
       const body = JSON.parse(event.body);
       this.logger.info('Parsed body:', body);
 
-      const { amount, paymentMethod, cardData, customerPhone, metaData } = body;
+      const {
+        amount,
+        paymentMethod,
+        cardData,
+        customerPhone,
+        metaData,
+        merchantId,
+        merchantMobileNo,
+      } = body;
 
       if (!amount || !paymentMethod) {
         return ErrorHandler.createErrorResponse(
           'MISSING_FIELDS',
           ErrorCategory.VALIDATION_ERROR,
           'Missing required fields: amount or paymentMethod'
+        );
+      }
+
+      if (paymentMethod === 'MTN' && (!merchantId || !merchantMobileNo)) {
+        return ErrorHandler.createErrorResponse(
+          'MISSING_MERCHANT_INFO',
+          ErrorCategory.VALIDATION_ERROR,
+          'Missing required fields: merchantId or merchantMobileNo for MTN payment'
         );
       }
 
@@ -61,9 +77,10 @@ export class TransactionProcessService {
         amount,
         paymentMethod,
         cardData,
-        // customerPhone: decryptedPhone,
         customerPhone,
         metaData,
+        merchantId,
+        merchantMobileNo,
       });
 
       return {

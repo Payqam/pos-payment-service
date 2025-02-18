@@ -4,7 +4,9 @@ export const PATHS = {
     SALESFORCE_SYNC: '../src/functions/salesforce-sync',
     STRIPE_WEBHOOK: '../src/functions/webhook/stripe',
     ORANGE_WEBHOOK: '../src/functions/webhook/orange',
-    MTN_WEBHOOK: '../src/functions/webhook/mtn',
+    MTN_PAYMENT_WEBHOOK: '../src/functions/webhook/mtn/payment',
+    MTN_DISBURSEMENT_WEBHOOK: '../src/functions/webhook/mtn/disbursement',
+    DISBURSEMENT: '../src/functions/disbursement',
     SLACK_NOTIFIER: '../src/functions/slack-notifier',
   },
 } as const;

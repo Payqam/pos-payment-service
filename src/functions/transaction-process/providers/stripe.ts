@@ -2,7 +2,7 @@ import stripe from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-import { CardData } from '../../../model';
+import { CardData, CreatePaymentRecord } from '../../../model';
 import { CacheService } from '../../../services/cacheService';
 
 export class CardPaymentService {
@@ -64,7 +64,9 @@ export class CardPaymentService {
     };
 
     try {
-      await this.dbService.createPaymentRecord(record);
+      await this.dbService.createPaymentRecord(
+        record as unknown as CreatePaymentRecord
+      );
       this.logger.info('Payment record created in DynamoDB', record);
       const key = `payment:${record.transactionId}`;
       await this.cacheService.setValue(key, record, 3600);
