@@ -2,11 +2,11 @@ import { APIGatewayProxyHandler } from 'aws-lambda';
 import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBService } from '../../../../services/dynamodbService';
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+import { SNSService } from '../../../../services/snsService';
 
 const logger: Logger = LoggerService.named('mtn-disbursement-webhook-handler');
 const dbService = new DynamoDBService();
-const snsClient = new SNSClient({ region: process.env.AWS_REGION });
+const snsService = SNSService.getInstance();
 
 /**
  * Structure of the webhook event received from MTN.
@@ -77,20 +77,15 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       }
     );
 
-    // Publish settlement status update to SNS
-    await snsClient.send(
-      new PublishCommand({
-        TopicArn: process.env.TRANSACTION_STATUS_TOPIC_ARN,
-        Message: JSON.stringify({
-          transactionId: result.Item.transactionId,
-          settlementId: externalId,
-          status: status,
-          type: 'SETTLEMENT',
-          amount: amount,
-          currency: currency,
-        }),
-      })
-    );
+    // Publish settlement status update using SNS service
+    await snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      transactionId: result.Item.transactionId,
+      settlementId: externalId,
+      status: status,
+      type: 'SETTLEMENT',
+      amount: amount,
+      currency: currency,
+    });
 
     return {
       statusCode: 200,
@@ -98,11 +93,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       body: JSON.stringify({ message: 'Webhook processed successfully' }),
     };
   } catch (error) {
-    logger.error('Error processing webhook', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      event,
-    });
-
+    logger.error('Error processing webhook', { error });
     return {
       statusCode: 500,
       headers: API.DEFAULT_HEADERS,

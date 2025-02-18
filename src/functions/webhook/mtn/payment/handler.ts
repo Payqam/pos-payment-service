@@ -3,13 +3,12 @@ import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { MtnPaymentService } from '../../../transaction-process/providers';
 import { DynamoDBService } from '../../../../services/dynamodbService';
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
-import { TransactionType } from '../../../transaction-process/providers';
+import { SNSService } from '../../../../services/snsService';
 
 const logger: Logger = LoggerService.named('mtn-payment-webhook-handler');
 const mtnService = new MtnPaymentService();
 const dbService = new DynamoDBService();
-const snsClient = new SNSClient({ region: process.env.AWS_REGION });
+const snsService = SNSService.getInstance();
 
 // Environment variables
 const INSTANT_DISBURSEMENT_ENABLED =
@@ -49,20 +48,6 @@ interface PaymentRecordUpdate {
   settlementDate?: number;
   settlementAmount?: number;
   fee?: number;
-}
-
-/**
- * Interface for MTN API transaction status response
- */
-interface MTNTransactionStatus {
-  financialTransactionId: string;
-  externalId: string;
-  amount: string;
-  currency: string;
-  payerMessage: string;
-  payeeNote: string;
-  status: string;
-  reason?: string;
 }
 
 /**
@@ -199,6 +184,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     logger.info('Received MTN webhook event', { event });
 
     if (!event.body) {
+      logger.error('No body in webhook event');
       return {
         statusCode: 400,
         headers: API.DEFAULT_HEADERS,
@@ -207,69 +193,65 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     }
 
     const webhookEvent = JSON.parse(event.body) as WebhookEvent;
-    const { financialTransactionId, externalId, amount, currency, status } =
-      webhookEvent;
+    const { externalId, amount, currency, status } = webhookEvent;
 
-    logger.info('Processing webhook event', {
-      financialTransactionId,
-      externalId,
-      status,
-      amount,
-      currency,
+    // Get transaction details from DynamoDB
+    const result = await dbService.getItem({
+      transactionId: externalId,
     });
 
-    // Verify transaction status with MTN API to prevent webhook spoofing
-    const verifiedStatus = (await mtnService.checkTransactionStatus(
-      externalId,
-      TransactionType.PAYMENT
-    )) as unknown as MTNTransactionStatus | null;
+    if (!result?.Item) {
+      logger.error('Transaction not found', { externalId });
+      return {
+        statusCode: 404,
+        headers: API.DEFAULT_HEADERS,
+        body: JSON.stringify({ message: 'Transaction not found' }),
+      };
+    }
 
-    // Update transaction record in DynamoDB
-    const paymentRecord: PaymentRecordUpdate = {
-      status: verifiedStatus?.status as string,
+    // Prepare update data
+    const updateData: PaymentRecordUpdate = {
+      status: status === 'SUCCESSFUL' ? 'SUCCESS' : 'FAILED',
       paymentProviderResponse: {
         status: status,
+        reason: webhookEvent.payeeNote,
       },
     };
 
-    await dbService.updatePaymentRecordByTransactionId(
-      externalId,
-      paymentRecord
-    );
-
-    // If payment is successful and instant disbursement is enabled, process disbursement
-    if (status === 'SUCCESSFUL' && INSTANT_DISBURSEMENT_ENABLED) {
+    // If payment is successful, calculate settlement details
+    if (status === 'SUCCESSFUL') {
       const amountNumber = parseFloat(amount);
-      const settlementId = await processInstantDisbursement(
-        externalId,
-        amountNumber
-      );
+      const settlementAmount = calculateSettlementAmount(amountNumber);
+      updateData.fee = amountNumber - settlementAmount;
 
-      if (settlementId) {
-        logger.info('Instant disbursement processed successfully', {
-          transactionId: externalId,
-          settlementId,
-        });
-      } else {
-        logger.error('Failed to process instant disbursement', {
-          transactionId: externalId,
-        });
+      // Process instant disbursement if enabled
+      if (INSTANT_DISBURSEMENT_ENABLED) {
+        const settlementId = await processInstantDisbursement(
+          externalId,
+          settlementAmount
+        );
+        if (settlementId) {
+          updateData.settlementId = settlementId;
+          updateData.settlementStatus = 'PENDING';
+          updateData.settlementDate = Date.now();
+          updateData.settlementAmount = settlementAmount;
+        }
       }
     }
 
-    // Publish status update to SNS
-    await snsClient.send(
-      new PublishCommand({
-        TopicArn: process.env.TRANSACTION_STATUS_TOPIC_ARN,
-        Message: JSON.stringify({
-          transactionId: externalId,
-          status: status,
-          type: 'PAYMENT',
-          amount: amount,
-          currency: currency,
-        }),
-      })
-    );
+    // Update transaction record
+    await dbService.updatePaymentRecordByTransactionId(externalId, updateData);
+
+    // Publish status update
+    await snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      transactionId: externalId,
+      status: updateData.status,
+      type: 'PAYMENT',
+      amount: amount,
+      currency: currency,
+      settlementId: updateData.settlementId,
+      settlementStatus: updateData.settlementStatus,
+    });
 
     return {
       statusCode: 200,
@@ -277,11 +259,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       body: JSON.stringify({ message: 'Webhook processed successfully' }),
     };
   } catch (error) {
-    logger.error('Error processing webhook', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      event,
-    });
-
+    logger.error('Error processing webhook', { error });
     return {
       statusCode: 500,
       headers: API.DEFAULT_HEADERS,
