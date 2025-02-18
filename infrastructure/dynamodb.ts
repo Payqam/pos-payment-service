@@ -9,6 +9,18 @@ export interface DynamoDBConstructProps {
   removalPolicy?: cdk.RemovalPolicy;
 }
 
+/**
+ * DynamoDB Construct for transaction management
+ *
+ * Table Structure:
+ * - Partition Key: transactionId
+ *   Example: "tx_123456"
+ *
+ * Global Secondary Indexes:
+ * 1. GSI1
+ *    - PK: merchantId
+ *    For querying transactions by merchant
+ */
 export class DynamoDBConstruct extends Construct {
   public readonly table: dynamodb.Table;
 
@@ -36,14 +48,22 @@ export class DynamoDBConstruct extends Construct {
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+
+    // Add GSI2 for settlement lookups
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'SettlementIndex',
+      partitionKey: {
+        name: 'settlementId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
   }
 
-  // Helper method to grant read/write permissions to other resources
   public grantReadWrite(grantee: cdk.aws_iam.IGrantable): void {
     this.table.grantReadWriteData(grantee);
   }
 
-  // Helper method to grant read-only permissions to other resources
   public grantRead(grantee: cdk.aws_iam.IGrantable): void {
     this.table.grantReadData(grantee);
   }

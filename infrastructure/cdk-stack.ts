@@ -18,6 +18,9 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElasticCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
 import { KMSHelper } from './kms';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
@@ -85,8 +88,9 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        apiKey: process.env.STRIPE_API_SECRET as string,
-        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
+        apiKey: process.env.STRIPE_API_SECRET || 'stripe_test_key',
+        signingSecret:
+          process.env.STRIPE_SIGNING_SECRET || 'stripe_test_signing_secret',
       },
     };
 
@@ -95,8 +99,27 @@ export class CDKStack extends cdk.Stack {
       secretName: `MTN_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores MTN Mobile Money API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.mtn.com',
-        apiKey: 'mtn_test_your_key_here',
+        collection: {
+          subscriptionKey:
+            process.env.MTN_COLLECTION_SUBSCRIPTION_KEY ||
+            'mtn_test_collection_key',
+          apiUser:
+            process.env.MTN_COLLECTION_API_USER || 'mtn_test_collection_user',
+          apiKey:
+            process.env.MTN_COLLECTION_API_KEY || 'mtn_test_collection_api_key',
+        },
+        disbursement: {
+          subscriptionKey:
+            process.env.MTN_DISBURSEMENT_SUBSCRIPTION_KEY ||
+            'mtn_test_disbursement_key',
+          apiUser:
+            process.env.MTN_DISBURSEMENT_API_USER ||
+            'mtn_test_disbursement_user',
+          apiKey:
+            process.env.MTN_DISBURSEMENT_API_KEY ||
+            'mtn_test_disbursement_api_key',
+        },
+        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
       },
     };
 
@@ -105,8 +128,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
-        endpoint: 'https://api.orange.com',
-        apiKey: 'orange_test_your_key_here',
+        endpoint: process.env.ORANGE_API_ENDPOINT || 'https://api.orange.com',
+        apiKey: process.env.ORANGE_API_KEY || 'orange_test_your_key_here',
       },
     };
 
@@ -147,8 +170,11 @@ export class CDKStack extends cdk.Stack {
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
           VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
           KMS_TRANSPORT_KEY: key.keyArn,
+          MTN_PAYMENT_WEBHOOK_URL: process.env
+            .MTN_PAYMENT_WEBHOOK_URL as string,
         },
       }
     );
@@ -242,24 +268,113 @@ export class CDKStack extends cdk.Stack {
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
-    // Create MTN webhook Lambda
-    const mtnWebhookLambda = new PAYQAMLambda(this, 'MTNWebhookLambda', {
-      name: `MTNWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.MTN_WEBHOOK}/handler.ts`,
+    // Create MTN payment webhook Lambda
+    const mtnPaymentWebhookLambda = new PAYQAMLambda(
+      this,
+      'MTNPaymentWebhookLambda',
+      {
+        name: `MTNWebhook-payment-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.MTN_PAYMENT_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
+          PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
+          MTN_PAYMENT_WEBHOOK_URL:
+            process.env.MTN_PAYMENT_WEBHOOK_URL ||
+            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+        },
+      }
+    );
+    mtnPaymentWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    mtnPaymentWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    mtnPaymentWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, mtnPaymentWebhookLambda.lambda);
+
+    // Create MTN disbursement webhook Lambda
+    const mtnDisbursementWebhookLambda = new PAYQAMLambda(
+      this,
+      'MTNDisbursementWebhookLambda',
+      {
+        name: `MTNWebhook-disbursement-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.MTN_DISBURSEMENT_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          MTN_DISBURSEMENT_WEBHOOK_URL:
+            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
+            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+        },
+      }
+    );
+    mtnDisbursementWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
+    mtnDisbursementWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    mtnDisbursementWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, mtnDisbursementWebhookLambda.lambda);
+
+    // Create Daily Disbursement Lambda with configurable execution time
+    const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
+      name: `Disbursement-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.DISBURSEMENT}/handler.ts`,
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
       },
     });
-    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-    createLambdaLogGroup(this, mtnWebhookLambda.lambda);
+    disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    disbursementLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    disbursementLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, disbursementLambda.lambda);
+
+    // Create CloudWatch Event Rule to trigger disbursement lambda at configured time
+    /**
+     * Time to run daily disbursement in "HH:mm" format (24-hour)
+     * Examples:
+     * - "02:00" for 2 AM
+     * - "14:30" for 2:30 PM
+     * - "23:45" for 11:45 PM
+     */
+    const disbursementTime = process.env.DISBURSEMENT_TIME;
+    new events.Rule(this, 'DisbursementSchedule', {
+      description:
+        'Triggers the daily disbursement process at the configured time',
+      schedule: events.Schedule.cron({
+        minute: disbursementTime?.split(':')[1] || '0',
+        hour: disbursementTime?.split(':')[0] || '2',
+        day: '*',
+        month: '*',
+        year: '*',
+      }),
+      targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
+    });
 
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnPaymentWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnDisbursementWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
+    // Grant SNS permissions to MTN webhook lambdas
+    snsConstruct.eventTopic.grantPublish(mtnPaymentWebhookLambda.lambda);
+    snsConstruct.eventTopic.grantPublish(mtnDisbursementWebhookLambda.lambda);
 
     const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
       name: `SlackNotifier-${props.envName}${props.namespace}`,
@@ -272,7 +387,8 @@ export class CDKStack extends cdk.Stack {
     });
 
     const monitoredLambdas = [
-      mtnWebhookLambda.lambda,
+      mtnPaymentWebhookLambda.lambda,
+      mtnDisbursementWebhookLambda.lambda,
       stripeWebhookLambda.lambda,
       transactionsProcessLambda.lambda,
       orangeWebhookLambda.lambda,
@@ -301,7 +417,6 @@ export class CDKStack extends cdk.Stack {
 
       subscriptionFilter.node.addDependency(logGroupName);
     });
-
     const resources: ResourceConfig[] = [
       {
         path: 'transaction/process/charge',
@@ -441,14 +556,102 @@ export class CDKStack extends cdk.Stack {
           },
         },
       },
+      {
+        path: 'webhooks/mtn/payment',
+        method: 'POST',
+        lambda: mtnPaymentWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNPaymentWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'MTNPaymentWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/mtn/disbursement',
+        method: 'POST',
+        lambda: mtnDisbursementWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNDisbursementWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'MTNDisbursementWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
     ];
 
     // Create API Gateway with WAF association
-    new ApiGatewayConstruct(this, 'ApiGateway', {
+    const apiGateway = new ApiGatewayConstruct(this, 'ApiGateway', {
       envName: props.envName,
       namespace: props.namespace,
       resources,
       webAcl: wafConstruct.webAcl,
+    });
+
+    new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
+      lambda: transactionsProcessLambda.lambda,
+      apiGateway: apiGateway.api,
+      stage: props.envName,
+      envName: props.envName,
+      currentEnvVars: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        MTN_API_SECRET: mtnSecret.secretName,
+        STRIPE_API_SECRET: stripeSecret.secretName,
+        ORANGE_API_SECRET: orangeSecret.secretName,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
+        MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
+      },
     });
 
     // Add stack outputs
