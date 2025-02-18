@@ -176,7 +176,11 @@ export class DynamoDBService {
     key: T,
     indexName?: string
   ): Promise<GetCommandOutput> {
-    const params: any = {
+    const params: {
+      TableName: string;
+      IndexName?: string;
+      Key: Record<string, NativeAttributeValue>;
+    } = {
       TableName: this.tableName,
       Key: key as Record<string, NativeAttributeValue>,
     };
