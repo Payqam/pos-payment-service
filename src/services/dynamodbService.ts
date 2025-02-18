@@ -4,6 +4,8 @@ import {
   NativeAttributeValue,
   PutCommand,
   UpdateCommand,
+  QueryCommand,
+  QueryCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBDocClient } from '../dynamodbClient';
 import { CreatePaymentRecord } from '../model';
@@ -188,6 +190,42 @@ export class DynamoDBService {
       return result as GetCommandOutput;
     } catch (error) {
       this.logger.error('Error retrieving record from DynamoDB', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Queries an item using a Global Secondary Index
+   *
+   * @param key - Key to query with (e.g., { settlementId: 'xyz' })
+   * @param indexName - Name of the GSI to use
+   * @returns The first matching item, if any
+   */
+  public async queryByGSI(
+    key: { settlementId: string },
+    indexName: string
+  ): Promise<QueryCommandOutput> {
+    try {
+      const params = new QueryCommand({
+        TableName: this.tableName,
+        IndexName: indexName,
+        KeyConditionExpression: '#sid = :sid',
+        ExpressionAttributeNames: {
+          '#sid': 'settlementId',
+        },
+        ExpressionAttributeValues: {
+          ':sid': key.settlementId,
+        },
+        Limit: 1, // We only need one item
+      });
+
+      return await this.dbClient.queryCommand(params);
+    } catch (error) {
+      this.logger.error('Error querying record from DynamoDB using GSI', {
+        error,
+        key,
+        indexName,
+      });
       throw error;
     }
   }

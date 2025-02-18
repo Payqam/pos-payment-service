@@ -143,29 +143,27 @@ export class MTNDisbursementWebhookService {
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId, amount, currency, status } = webhookEvent;
 
-      // Get transaction by settlementId using GSI
-      const result = await this.dbService.getItem(
+      // Query using settlementId in the SettlementIndex
+      const result = await this.dbService.queryByGSI(
         {
           settlementId: externalId,
         },
         'SettlementIndex'
       );
 
-      if (!result?.Item) {
+      if (!result.Items?.[0]) {
         throw new WebhookError(
           `Transaction not found for settlement: ${externalId}`,
           404
         );
       }
 
-      await this.updateSettlementStatus(
-        result.Item.transactionId,
-        status,
-        webhookEvent
-      );
+      const transactionId = result.Items[0].transactionId;
+
+      await this.updateSettlementStatus(transactionId, status, webhookEvent);
 
       await this.publishStatusUpdate(
-        result.Item.transactionId,
+        transactionId,
         externalId,
         status,
         amount,

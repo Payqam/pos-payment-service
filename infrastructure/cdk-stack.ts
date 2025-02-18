@@ -173,6 +173,8 @@ export class CDKStack extends cdk.Stack {
           PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
           VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
           KMS_TRANSPORT_KEY: key.keyArn,
+          MTN_PAYMENT_WEBHOOK_URL: process.env
+            .MTN_PAYMENT_WEBHOOK_URL as string,
         },
       }
     );
@@ -554,7 +556,7 @@ export class CDKStack extends cdk.Stack {
       {
         path: 'webhooks/mtn/disbursement',
         method: 'POST',
-        lambda: mtnPaymentWebhookLambda.lambda,
+        lambda: mtnDisbursementWebhookLambda.lambda,
         apiKeyRequired: false,
         requestModel: {
           modelName: 'MTNDisbursementWebhookRequestModel',
