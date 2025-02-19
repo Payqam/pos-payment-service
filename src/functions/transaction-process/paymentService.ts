@@ -32,6 +32,7 @@ export class PaymentService {
       metaData,
       merchantId,
       merchantMobileNo,
+      transactionType,
     } = transaction;
     switch (paymentMethod) {
       case 'CARD':
@@ -46,6 +47,8 @@ export class PaymentService {
         return this.cardPaymentService.processCardPayment(
           amount,
           cardData,
+          transactionType as string,
+          merchantId as string,
           metaData
         );
 

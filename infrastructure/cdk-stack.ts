@@ -419,12 +419,12 @@ export class CDKStack extends cdk.Stack {
     });
     const resources: ResourceConfig[] = [
       {
-        path: 'process-payments',
+        path: 'transaction/process/charge',
         method: 'POST',
         lambda: transactionsProcessLambda.lambda,
         apiKeyRequired: true,
         requestModel: {
-          modelName: 'ProcessPaymentsRequestModel',
+          modelName: 'ProcessPaymentsChargeRequestModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
@@ -447,7 +447,46 @@ export class CDKStack extends cdk.Stack {
           },
         },
         responseModel: {
-          modelName: 'ProcessPaymentsResponseModel',
+          modelName: 'ProcessPaymentsChargeResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              status: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'transaction/process/refund',
+        method: 'POST',
+        lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
+        requestModel: {
+          modelName: 'ProcessPaymentsRefundRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              merchantId: { type: apigateway.JsonSchemaType.STRING },
+              amount: { type: apigateway.JsonSchemaType.NUMBER },
+              customerPhone: { type: apigateway.JsonSchemaType.STRING },
+              transactionType: { type: apigateway.JsonSchemaType.STRING },
+              paymentMethod: { type: apigateway.JsonSchemaType.STRING },
+              metaData: { type: apigateway.JsonSchemaType.OBJECT },
+              cardData: { type: apigateway.JsonSchemaType.OBJECT },
+            },
+            required: [
+              'merchantId',
+              'amount',
+              'customerPhone',
+              'transactionType',
+              'paymentMethod',
+              'metaData',
+            ],
+          },
+        },
+        responseModel: {
+          modelName: 'ProcessPaymentsRefundResponseModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
@@ -464,7 +503,7 @@ export class CDKStack extends cdk.Stack {
         apiKeyRequired: true,
       },
       {
-        path: 'transaction-status',
+        path: 'transaction/status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
         apiKeyRequired: true,

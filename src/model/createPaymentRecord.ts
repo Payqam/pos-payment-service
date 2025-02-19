@@ -1,12 +1,18 @@
+import stripe from 'stripe';
+
 export interface CreatePaymentRecord {
   transactionId: string;
   amount: number;
   currency?: string;
   paymentMethod: string;
-  createdOn: number;
+  customerPhone?: string;
+  destinationId?: string;
   status: string;
-  paymentProviderResponse?: Record<string, never>;
-  metaData?: Record<string, never> | Record<string, string>;
+  createdOn: number;
+  paymentProviderResponse?: stripe.Response<
+    stripe.PaymentIntent | stripe.Refund
+  >;
+  metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
   merchantMobileNo?: string; // Added merchant's mobile number
@@ -15,4 +21,5 @@ export interface CreatePaymentRecord {
   settlementStatus?: string;
   settlementId?: string;
   settlementDate?: number;
+  transactionType?: string;
 }
