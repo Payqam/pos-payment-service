@@ -25,12 +25,12 @@ export class PaymentServiceXRay extends Construct {
     //   version: 1,
     // });
 
-    // Create encryption key for X-Ray traces
-    new cdk.aws_kms.Key(this, 'XRayEncryptionKey', {
-      enableKeyRotation: true,
-      description: 'KMS key for X-Ray trace encryption',
-      alias: `alias/xray-encryption-${props.envName}${props.namespace}`,
-    });
+    // // Create encryption key for X-Ray traces
+    // new cdk.aws_kms.Key(this, 'XRayEncryptionKey', {
+    //   enableKeyRotation: true,
+    //   description: 'KMS key for X-Ray trace encryption',
+    //   alias: `alias/xray-encryption-${props.envName}${props.namespace}`,
+    // });
 
     // Add encryption configuration
     new xray.CfnGroup(this, 'PaymentServiceXRayGroup', {
