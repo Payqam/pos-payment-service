@@ -66,6 +66,7 @@ jobs:
           SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
           SALESFORCE_URL_HOST: ${{ vars.SALESFORCE_URL_HOST }}
           SALESFORCE_OWNER_ID: ${{ secrets.SALESFORCE_OWNER_ID }}
+          ENABLE_DYNAMODB_PROVISIONING: ${{ vars.ENABLE_DYNAMODB_PROVISIONING }}
       - name: Destroy Deployment
         if: ${{ steps.deploy.outcome == 'success' && always() }}
         run: zx ./scripts/destroy.mjs
