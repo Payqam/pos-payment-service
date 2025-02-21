@@ -42,3 +42,9 @@ coverage/
 # Temporary files and other
 *.temp
 *.cache
+
+# Ignore deliverables that are on build
+reports/
+
+# dotenv environment variables file
+cypress.env.json

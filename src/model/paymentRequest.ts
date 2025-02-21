@@ -1,7 +1,13 @@
+import stripe from 'stripe';
+
 interface CardData {
-  id: string;
-  cardName: string;
-  destinationId: string;
+  paymentMethodId?: string;
+  cardName?: string;
+  destinationId?: string;
+  currency?: string;
+  paymentIntentId?: string;
+  reverse_transfer?: boolean;
+  reason?: stripe.RefundCreateParams.Reason;
 }
 
 interface PaymentRequest {
@@ -11,6 +17,8 @@ interface PaymentRequest {
   customerPhone?: string;
   metaData?: Record<string, string>;
   merchantId?: string;
+  merchantMobileNo?: string;
+  transactionType?: string;
 }
 
 export { CardData, PaymentRequest };

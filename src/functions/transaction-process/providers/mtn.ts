@@ -121,10 +121,26 @@ export class MtnPaymentService {
     // Add reference ID if provided, otherwise generate new one
     headers['X-Reference-Id'] = transactionId || uuidv4();
 
-    // Add callback URL for payment requests
-    if (type === TransactionType.PAYMENT && process.env.MTN_WEBHOOK_URL) {
-      headers['X-Callback-Url'] = process.env.MTN_WEBHOOK_URL;
+    // Add callback URL based on transaction type
+    if (process.env.MTN_PAYMENT_WEBHOOK_URL) {
+      headers['X-Callback-Url'] = process.env.MTN_PAYMENT_WEBHOOK_URL;
+      this.logger.info('Added callback URL to headers', {
+        type,
+        callbackUrl: process.env.MTN_PAYMENT_WEBHOOK_URL,
+      });
+    } else if (process.env.MTN_DISBURSEMENT_WEBHOOK_URL) {
+      headers['X-Callback-Url'] = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
     }
+    this.logger.info('Added callback URL to headers', {
+      type,
+      callbackUrl: process.env.MTN_DISBURSEMENT_WEBHOOK_URL,
+    });
+
+    this.logger.info('Generated headers for MTN request', {
+      type,
+      headers,
+      hasCallbackUrl: !!headers['X-Callback-Url'],
+    });
 
     return headers;
   }
@@ -185,7 +201,6 @@ export class MtnPaymentService {
           ? credentials.collection
           : credentials.disbursement;
 
-      // Create axios config matching the working test implementation
       const config = {
         baseURL: this.baseUrl,
         auth: {
@@ -198,14 +213,9 @@ export class MtnPaymentService {
         },
       };
 
-      this.logger.debug('Generating MTN token with config', {
-        baseURL: config.baseURL,
-        apiPath,
-        subscriptionKey: creds.subscriptionKey,
-      });
-
       const response = await axios.post(apiPath, {}, config);
 
+      // Only log scalar values from the token response
       this.logger.info('Successfully generated MTN token', {
         tokenType: response.data.token_type,
         expiresIn: response.data.expires_in,
@@ -213,6 +223,7 @@ export class MtnPaymentService {
 
       return response.data;
     } catch (error) {
+      // Only log the error message, not the full error object
       this.logger.error('Error generating MTN token', {
         error: error instanceof Error ? error.message : 'Unknown error',
         type,
@@ -229,82 +240,78 @@ export class MtnPaymentService {
    * @param amount - The payment amount
    * @param mobileNo - Customer's mobile number (MSISDN format)
    * @param merchantId - ID of the merchant receiving the payment
-   * @param currency - Payment currency (default: EUR)
+   * @param merchantMobileNo - Merchant's mobile number for disbursement
    * @param metaData - Optional metadata for the transaction
+   * @param currency - Payment currency (default: EUR)
    * @returns The transaction ID for tracking
    */
   public async processPayment(
     amount: number,
     mobileNo: string,
     merchantId: string,
-    currency: string = 'EUR',
-    metaData?: Record<string, never>
+    merchantMobileNo: string,
+    metaData?: Record<string, never> | Record<string, string>,
+    currency: string = 'EUR'
   ): Promise<string> {
-    this.logger.info('Processing MTN Mobile Money payment', {
+    const transactionId = uuidv4();
+    this.logger.info('Processing MTN payment', {
+      transactionId,
       amount,
-      currency,
+      mobileNo,
       merchantId,
+      merchantMobileNo,
+      currency,
     });
 
     try {
       const axiosInstance = await this.createAxiosInstance(
-        TransactionType.PAYMENT
+        TransactionType.PAYMENT,
+        transactionId
       );
-      const transactionId = uuidv4();
 
       const { fee, settlementAmount } = this.calculateFeeAndSettlement(amount);
 
-      this.logger.info('Calculated payment amounts', {
-        originalAmount: amount,
-        fee,
-        settlementAmount,
-        feePercentage: PAYQAM_FEE_PERCENTAGE,
+      // Create payment request in MTN
+      await axiosInstance.post('/collection/v1_0/requesttopay', {
+        amount: amount.toString(),
+        currency,
+        externalId: transactionId,
+        payer: {
+          partyIdType: 'MSISDN',
+          partyId: mobileNo,
+        },
+        payerMessage: 'PayQAM payment request',
+        payeeNote: 'Thank you for your payment',
       });
 
-      const response = await axiosInstance.post(
-        '/collection/v1_0/requesttopay',
-        {
-          amount: amount.toString(),
-          currency,
-          externalId: transactionId,
-          payer: {
-            partyIdType: 'MSISDN',
-            partyId: mobileNo,
-          },
-          payerMessage: 'Payment for services',
-          payeeNote: 'PayQAM transaction',
-        }
-      );
-
-      const record: CreatePaymentRecord = {
+      // Store transaction record in DynamoDB
+      const paymentRecord: CreatePaymentRecord = {
         transactionId,
         amount,
         currency,
-        paymentMethod: 'MTN_MOBILE',
+        paymentMethod: 'MTN',
         createdOn: Math.floor(Date.now() / 1000),
         status: 'PENDING',
-        paymentProviderResponse: response.data,
-        metaData,
         mobileNo,
         merchantId,
+        merchantMobileNo,
+        metaData,
         fee,
         settlementAmount,
       };
 
-      await this.dbService.createPaymentRecord(record);
-      this.logger.info('Payment record created in DynamoDB', {
+      await this.dbService.createPaymentRecord(paymentRecord);
+
+      this.logger.info('Payment request created successfully', {
         transactionId,
-        status: record.status,
-        amount: record.amount,
-        fee: record.fee,
+        status: 'PENDING',
       });
 
       return transactionId;
     } catch (error) {
-      this.logger.error('Error processing MTN payment', {
+      this.logger.error('Failed to process payment', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        amount,
-        merchantId,
+        transactionId,
       });
       throw error;
     }
@@ -358,26 +365,39 @@ export class MtnPaymentService {
       const axiosInstance = await this.createAxiosInstance(
         TransactionType.TRANSFER
       );
-      const transferId = uuidv4();
 
-      await axiosInstance.post('/disbursement/v1_0/transfer', {
+      // Log the request details (mask sensitive data)
+      this.logger.info('Initiating MTN transfer', {
+        amount,
+        currency,
+        recipientMobileNo: recipientMobileNo.replace(/\d(?=\d{4})/g, '*'),
+      });
+
+      const transactionId = uuidv4();
+      const response = await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,
-        externalId: transferId,
+        externalId: transactionId,
         payee: {
           partyIdType: 'MSISDN',
           partyId: recipientMobileNo,
         },
-        payerMessage: 'Disbursement from PayQAM',
-        payeeNote: 'Merchant settlement',
+        payerMessage: 'PayQAM merchant disbursement',
+        payeeNote: 'Payment from your customer',
       });
 
-      return transferId;
+      // Log successful transfer
+      this.logger.info('Transfer initiated successfully', {
+        transactionId,
+        status: response.status,
+        statusText: response.statusText,
+      });
+
+      return transactionId;
     } catch (error) {
-      this.logger.error('Error initiating transfer', {
+      // Log detailed error information
+      this.logger.error('Failed to initiate transfer', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        amount,
-        recipientMobileNo,
       });
       throw error;
     }

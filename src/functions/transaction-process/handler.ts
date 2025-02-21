@@ -5,6 +5,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
 import { KmsService } from '../../services/kmsService';
+import { DynamoDBService } from '../../services/dynamodbService';
 
 // Configure sensitive field redaction in logs
 const sensitiveFields = ['id', 'destinationId', 'cardName', 'subscriptionKey', 'apiKey', 'apiUser'];
@@ -17,10 +18,13 @@ export class TransactionProcessService {
 
   private readonly kmsService: KmsService;
 
+  private readonly dbService: DynamoDBService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
     this.kmsService = new KmsService();
+    this.dbService = new DynamoDBService();
     this.logger.info('init()');
   }
 
@@ -30,54 +34,118 @@ export class TransactionProcessService {
     this.logger.info('Received event:', event);
 
     try {
-      if (!event.body) {
-        return ErrorHandler.createErrorResponse(
-          'MISSING_BODY',
-          ErrorCategory.VALIDATION_ERROR,
-          'Request body is missing'
-        );
+      switch (event.httpMethod) {
+        case 'POST':
+          return await this.handlePost(event);
+        case 'GET':
+          return await this.handleGet(event);
+        default:
+          return ErrorHandler.createErrorResponse(
+            'METHOD_NOT_ALLOWED',
+            ErrorCategory.VALIDATION_ERROR,
+            `Method ${event.httpMethod} not allowed`
+          );
       }
-
-      const body = JSON.parse(event.body);
-      this.logger.info('Parsed body:', body);
-
-      const { amount, paymentMethod, cardData, customerPhone, metaData } = body;
-
-      if (!amount || !paymentMethod) {
-        return ErrorHandler.createErrorResponse(
-          'MISSING_FIELDS',
-          ErrorCategory.VALIDATION_ERROR,
-          'Missing required fields: amount or paymentMethod'
-        );
-      }
-
-      // TODO: We need to decide what are the data fields that need to be decrypted.
-      // let decryptedPhone = customerPhone;
-      // if (customerPhone) {
-      //   decryptedPhone = await this.kmsService.decryptData(customerPhone);
-      //   this.logger.info('Decrypted customer phone:', decryptedPhone);
-      // }
-
-      const transactionResult = await this.paymentService.processPayment({
-        amount,
-        paymentMethod,
-        cardData,
-        // customerPhone: decryptedPhone,
-        customerPhone,
-        metaData,
-      });
-
-      return {
-        statusCode: 200,
-        headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({
-          message: 'Payment processed successfully',
-          result: transactionResult,
-        }),
-      };
     } catch (error: unknown) {
-      return ErrorHandler.handleException(error, 'Failed to process payment');
+      return ErrorHandler.handleException(error, 'Failed to process request');
     }
+  }
+
+  private async handlePost(
+    event: APIGatewayProxyEvent
+  ): Promise<APIGatewayProxyResult> {
+    if (!event.body) {
+      return ErrorHandler.createErrorResponse(
+        'MISSING_BODY',
+        ErrorCategory.VALIDATION_ERROR,
+        'Request body is missing'
+      );
+    }
+
+    const body = JSON.parse(event.body);
+    this.logger.info('Parsed body:', body);
+
+    const {
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      merchantMobileNo,
+      transactionType,
+      merchantId,
+    } = body;
+
+    if (!amount || !paymentMethod) {
+      return ErrorHandler.createErrorResponse(
+        'MISSING_FIELDS',
+        ErrorCategory.VALIDATION_ERROR,
+        'Missing required fields: amount or paymentMethod'
+      );
+    }
+
+    if (paymentMethod === 'MTN' && (!merchantId || !merchantMobileNo)) {
+      return ErrorHandler.createErrorResponse(
+        'MISSING_MERCHANT_INFO',
+        ErrorCategory.VALIDATION_ERROR,
+        'Missing required fields: merchantId or merchantMobileNo for MTN payment'
+      );
+    }
+
+    // TODO: We need to decide what are the data fields that need to be decrypted.
+    // let decryptedPhone = customerPhone;
+    // if (customerPhone) {
+    //   decryptedPhone = await this.kmsService.decryptData(customerPhone);
+    //   this.logger.info('Decrypted customer phone:', decryptedPhone);
+    // }
+
+    const transactionResult = await this.paymentService.processPayment({
+      amount,
+      paymentMethod,
+      cardData,
+      customerPhone,
+      metaData,
+      merchantId,
+      transactionType,
+      merchantMobileNo,
+    });
+
+    return {
+      statusCode: 200,
+      headers: API.DEFAULT_HEADERS,
+      body: JSON.stringify({
+        message: 'Payment processed successfully',
+        id: transactionResult,
+      }),
+    };
+  }
+
+  private async handleGet(
+    event: APIGatewayProxyEvent
+  ): Promise<APIGatewayProxyResult> {
+    const transactionId = event.queryStringParameters?.transactionId;
+    this.logger.info('transactionId:', transactionId);
+    if (!transactionId) {
+      return ErrorHandler.createErrorResponse(
+        'MISSING_TRANSACTION_ID',
+        ErrorCategory.VALIDATION_ERROR,
+        'Transaction ID is required'
+      );
+    }
+
+    const transactionDetails = await this.dbService.getItem<{
+      transactionId: string;
+    }>({
+      transactionId,
+    });
+    return {
+      statusCode: 200,
+      headers: API.DEFAULT_HEADERS,
+      body: JSON.stringify({
+        message: 'Transaction retrieved successfully',
+        transaction: transactionDetails,
+      }),
+    };
   }
 }
 

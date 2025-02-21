@@ -28,4 +28,4 @@ for (const key in envVarsData) {
   }
 }
 
-// await $`npx cdk destroy -c env=${process.env.ENV} -c namespace=${process.env.NAMESPACE} --force`;
+await $`npx cdk destroy -c env=${process.env.ENV} -c namespace=${process.env.NAMESPACE} --force`;

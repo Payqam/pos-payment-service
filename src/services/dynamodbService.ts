@@ -5,9 +5,10 @@ import {
   PutCommand,
   UpdateCommand,
   QueryCommand,
-  QueryCommandInput,
+  QueryCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBDocClient } from '../dynamodbClient';
+import { CreatePaymentRecord } from '../model';
 import { buildUpdateExpression } from '../../utils/updateUtils';
 import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
@@ -22,6 +23,7 @@ interface AdditionalTransactionFields {
   settlementDate?: number;
   fee?: number;
   settlementAmount?: number;
+  merchantMobileNo?: string;
   [key: string]: unknown;
 }
 
@@ -33,18 +35,6 @@ export interface TransactionRecord extends AdditionalTransactionFields {
   currency: string;
   mobileNo: string;
   merchantId: string;
-}
-
-export interface CreatePaymentRecord {
-  transactionId: string;
-  status: string;
-  amount: number;
-  currency?: string;
-  mobileNo?: string;
-  merchantId?: string;
-  paymentMethod: string;
-  paymentProviderResponse?: Record<string, unknown>;
-  metaData?: Record<string, unknown>;
 }
 
 /**
@@ -89,6 +79,7 @@ export class DynamoDBService {
       currency: item.currency,
       mobileNo: item.mobileNo,
       merchantId: item.merchantId,
+      merchantMobileNo: item.merchantMobileNo,
       paymentMethod: item.paymentMethod,
       paymentProviderResponse: item.paymentProviderResponse,
       settlementStatus: item.settlementStatus,
@@ -102,23 +93,12 @@ export class DynamoDBService {
   /**
    * Creates a payment record in the DynamoDB table.
    *
-   * @param record - A plain object representing the payment record
+   * @param record - A plain object representing the payment record.
    */
   public async createPaymentRecord(record: CreatePaymentRecord): Promise<void> {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const date = new Date(timestamp * 1000);
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-
     const params = {
       TableName: this.tableName,
-      Item: {
-        ...record,
-        pk: `${record.paymentMethod}#${record.status}#${year}#${month}`,
-        sk: `${timestamp}#${record.transactionId}`,
-        transactionId: record.transactionId,
-        createdOn: timestamp,
-      },
+      Item: record,
     };
 
     try {
@@ -132,8 +112,9 @@ export class DynamoDBService {
   /**
    * Updates a payment record in the DynamoDB table.
    *
-   * @param key - The primary key of the record to update
-   * @param updateFields - Fields to update (null values will be removed)
+   * @param key - The primary key of the record to update.
+   * @param updateFields - An object containing the fields to update.
+   *                     Any fields with null values will be removed.
    */
   public async updatePaymentRecord<T, U>(
     key: T,
@@ -164,50 +145,50 @@ export class DynamoDBService {
   }
 
   /**
-   * Retrieves a transaction by its ID using the TransactionIndex GSI.
+   * Updates a payment record in the DynamoDB table using transaction ID.
+   * This method first retrieves the record using GSI, then updates it using the primary key.
    *
-   * @param transactionId - The ID of the transaction to retrieve
-   * @returns The transaction record if found
+   * @param transactionId - The transaction ID to update
+   * @param updateFields - Fields to update (null values will be removed)
    */
-  public async getTransactionById(
-    transactionId: string
-  ): Promise<TransactionRecord | null> {
-    const params: QueryCommandInput = {
-      TableName: this.tableName,
-      IndexName: 'TransactionIndex',
-      KeyConditionExpression: 'transactionId = :txId',
-      ExpressionAttributeValues: {
-        ':txId': transactionId,
-      },
-      Limit: 1,
-    };
-
-    try {
-      const command = new QueryCommand(params);
-      const result = await this.dbClient.queryCommand(command);
-      return result.Items?.[0]
-        ? this.mapToTransactionRecord(result.Items[0])
-        : null;
-    } catch (error) {
-      this.logger.error('Error retrieving transaction by ID', {
-        transactionId,
-        error,
-      });
-      throw error;
+  public async updatePaymentRecordByTransactionId<U>(
+    transactionId: string,
+    updateFields: U
+  ): Promise<void> {
+    // First get the record using GSI to obtain primary key
+    const result = await this.getItem({ transactionId });
+    if (!result) {
+      throw new Error(`Transaction not found: ${transactionId}`);
     }
+
+    // Update the record using primary key
+    await this.updatePaymentRecord({ transactionId }, updateFields);
   }
 
   /**
    * Retrieves an item from the DynamoDB table using GetItemCommand.
    *
    * @param key - The primary key of the record to retrieve.
-   * @returns The retrieved item wrapped in a GetItemCommandOutput.
+   * @param indexName - Optional. The name of the GSI to query.
+   * @returns The retrieved item wrapped in a GetCommandOutput.
    */
-  public async getItem<T>(key: T): Promise<GetCommandOutput> {
-    const params = {
+  public async getItem<T>(
+    key: T,
+    indexName?: string
+  ): Promise<GetCommandOutput> {
+    const params: {
+      TableName: string;
+      IndexName?: string;
+      Key: Record<string, NativeAttributeValue>;
+    } = {
       TableName: this.tableName,
       Key: key as Record<string, NativeAttributeValue>,
     };
+
+    if (indexName) {
+      params.IndexName = indexName;
+    }
+
     try {
       const result = await this.dbClient.getItem(new GetCommand(params));
       return result as GetCommandOutput;
@@ -218,97 +199,38 @@ export class DynamoDBService {
   }
 
   /**
-   * Queries transactions by payment method and status within a time range.
+   * Queries an item using a Global Secondary Index
    *
-   * @param paymentMethod - Payment method (e.g., 'mtn', 'stripe')
-   * @param status - Transaction status
-   * @param startTime - Start of time range (Unix timestamp)
-   * @param endTime - End of time range (Unix timestamp)
-   * @returns Array of matching transactions
+   * @param key - Key to query with (e.g., { settlementId: 'xyz' })
+   * @param indexName - Name of the GSI to use
+   * @returns The first matching item, if any
    */
-  public async queryByPaymentMethodAndStatus(
-    paymentMethod: string,
-    status: string,
-    startTime: number,
-    endTime: number
-  ): Promise<TransactionRecord[]> {
-    const startDate = new Date(startTime * 1000);
-    const endDate = new Date(endTime * 1000);
-    const endYear = endDate.getUTCFullYear();
-
-    // Generate all year-month combinations between start and end dates
-    const yearMonths: string[] = [];
-    const currentDate = new Date(startDate);
-    while (
-      currentDate.getUTCFullYear() < endYear ||
-      (currentDate.getUTCFullYear() === endYear &&
-        currentDate.getUTCMonth() <= endDate.getUTCMonth())
-    ) {
-      const year = currentDate.getUTCFullYear();
-      const month = String(currentDate.getUTCMonth() + 1).padStart(2, '0');
-      yearMonths.push(`${year}#${month}`);
-      currentDate.setUTCMonth(currentDate.getUTCMonth() + 1);
-    }
-
-    // Query each partition and combine results
-    const allResults: TransactionRecord[] = [];
-    for (const yearMonth of yearMonths) {
-      const [year, month] = yearMonth.split('#');
-      const params: QueryCommandInput = {
+  public async queryByGSI(
+    key: { settlementId: string },
+    indexName: string
+  ): Promise<QueryCommandOutput> {
+    try {
+      const params = new QueryCommand({
         TableName: this.tableName,
-        KeyConditionExpression: 'pk = :pk AND sk BETWEEN :startKey AND :endKey',
-        ExpressionAttributeValues: {
-          ':pk': `${paymentMethod}#${status}#${year}#${month}`,
-          ':startKey': `${startTime}`,
-          ':endKey': `${endTime}`,
+        IndexName: indexName,
+        KeyConditionExpression: '#sid = :sid',
+        ExpressionAttributeNames: {
+          '#sid': 'settlementId',
         },
-      };
+        ExpressionAttributeValues: {
+          ':sid': key.settlementId,
+        },
+        Limit: 1, // We only need one item
+      });
 
-      try {
-        const command = new QueryCommand(params);
-        const result = await this.dbClient.queryCommand(command);
-        if (result.Items) {
-          allResults.push(
-            ...result.Items.map((item) => this.mapToTransactionRecord(item))
-          );
-        }
-      } catch (error) {
-        this.logger.error(
-          'Error querying records by payment method and status',
-          {
-            paymentMethod,
-            status,
-            yearMonth,
-            error,
-          }
-        );
-        // Continue with other partitions even if one fails
-        continue;
-      }
+      return await this.dbClient.queryCommand(params);
+    } catch (error) {
+      this.logger.error('Error querying record from DynamoDB using GSI', {
+        error,
+        key,
+        indexName,
+      });
+      throw error;
     }
-
-    return allResults;
-  }
-
-  /**
-   * Groups transactions by merchant ID
-   *
-   * @param transactions - Array of transactions to group
-   * @returns Record with merchant IDs as keys and transaction arrays as values
-   */
-  public groupTransactionsByMerchant(
-    transactions: TransactionRecord[]
-  ): Record<string, TransactionRecord[]> {
-    return transactions.reduce(
-      (groups, transaction) => {
-        const merchantId = transaction.merchantId;
-        if (!groups[merchantId]) {
-          groups[merchantId] = [];
-        }
-        groups[merchantId].push(transaction);
-        return groups;
-      },
-      {} as Record<string, TransactionRecord[]>
-    );
   }
 }

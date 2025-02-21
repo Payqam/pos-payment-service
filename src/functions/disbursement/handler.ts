@@ -1,4 +1,5 @@
-/**
+/*
+/!**
  * Daily Disbursement Handler
  *
  * This lambda function is triggered by a CloudWatch Event Rule to process daily disbursements
@@ -22,7 +23,7 @@
  *   * Successful disbursements with amounts
  *   * Failed disbursements with error details
  *   * Empty disbursement runs
- */
+ *!/
 
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBService } from '../../services/dynamodbService';
@@ -115,3 +116,4 @@ export const handler = async (): Promise<void> => {
     throw error;
   }
 };
+*/

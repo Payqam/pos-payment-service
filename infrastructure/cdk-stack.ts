@@ -22,6 +22,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
 import { KMSHelper } from './kms';
+import * as kms from 'aws-cdk-lib/aws-kms';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -145,17 +146,34 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       securityGroup: securityGroups.cacheSecurityGroup,
     });
-    const { key } = KMSHelper.createKey(this, {
-      keyName: 'TransactionsEncryption',
-      description: 'KMS Key for Transactions Processing',
-      accountId: env.account as string,
-      stage: props.envName,
-      namespace: props.namespace,
-      serviceName: 'transactions-transport',
-      externalRoleArns: [],
-      iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
-      region: env.region as string,
-    });
+
+    // Check for existing KMS key ARN in environment variables
+    let key: kms.Key;
+    const existingKeyArn = process.env.KMS_KEY_ARN;
+
+    if (existingKeyArn) {
+      // Use fromKeyArn to reference the existing key
+      key = kms.Key.fromKeyArn(
+        this,
+        'ExistingTransactionsKey',
+        existingKeyArn
+      ) as kms.Key;
+    } else {
+      // Create new key if no existing ARN found
+      const { key: newKey } = KMSHelper.createKey(this, {
+        keyName: 'TransactionsEncryption',
+        description: 'KMS Key for Transactions Processing',
+        accountId: env.account as string,
+        stage: props.envName,
+        namespace: props.namespace,
+        serviceName: 'transactions-transport',
+        externalRoleArns: [],
+        iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
+        region: env.region as string,
+      });
+      key = newKey;
+    }
+
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -173,6 +191,8 @@ export class CDKStack extends cdk.Stack {
           PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
           VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
           KMS_TRANSPORT_KEY: key.keyArn,
+          MTN_PAYMENT_WEBHOOK_URL: process.env
+            .MTN_PAYMENT_WEBHOOK_URL as string,
         },
       }
     );
@@ -266,24 +286,61 @@ export class CDKStack extends cdk.Stack {
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
-    // Create MTN webhook Lambda
-    const mtnWebhookLambda = new PAYQAMLambda(this, 'MTNWebhookLambda', {
-      name: `MTNWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.MTN_WEBHOOK}/handler.ts`,
-      vpc: vpcConstruct.vpc,
-      environment: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        MTN_API_SECRET: mtnSecret.secretName,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-        INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
-        PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
-      },
-    });
-    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
-    mtnWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
-    createLambdaLogGroup(this, mtnWebhookLambda.lambda);
+    // Create MTN payment webhook Lambda
+    const mtnPaymentWebhookLambda = new PAYQAMLambda(
+      this,
+      'MTNPaymentWebhookLambda',
+      {
+        name: `MTNWebhook-payment-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.MTN_PAYMENT_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
+          PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
+          MTN_PAYMENT_WEBHOOK_URL:
+            process.env.MTN_PAYMENT_WEBHOOK_URL ||
+            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+        },
+      }
+    );
+    mtnPaymentWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    mtnPaymentWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    mtnPaymentWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, mtnPaymentWebhookLambda.lambda);
+
+    // Create MTN disbursement webhook Lambda
+    const mtnDisbursementWebhookLambda = new PAYQAMLambda(
+      this,
+      'MTNDisbursementWebhookLambda',
+      {
+        name: `MTNWebhook-disbursement-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.MTN_DISBURSEMENT_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          MTN_DISBURSEMENT_WEBHOOK_URL:
+            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
+            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+        },
+      }
+    );
+    mtnDisbursementWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
+    mtnDisbursementWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    mtnDisbursementWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    createLambdaLogGroup(this, mtnDisbursementWebhookLambda.lambda);
 
     // Create Daily Disbursement Lambda with configurable execution time
     const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
@@ -330,8 +387,12 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(mtnWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnPaymentWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(mtnDisbursementWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
+    // Grant SNS permissions to MTN webhook lambdas
+    snsConstruct.eventTopic.grantPublish(mtnPaymentWebhookLambda.lambda);
+    snsConstruct.eventTopic.grantPublish(mtnDisbursementWebhookLambda.lambda);
 
     const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
       name: `SlackNotifier-${props.envName}${props.namespace}`,
@@ -344,7 +405,8 @@ export class CDKStack extends cdk.Stack {
     });
 
     const monitoredLambdas = [
-      mtnWebhookLambda.lambda,
+      mtnPaymentWebhookLambda.lambda,
+      mtnDisbursementWebhookLambda.lambda,
       stripeWebhookLambda.lambda,
       transactionsProcessLambda.lambda,
       orangeWebhookLambda.lambda,
@@ -375,12 +437,12 @@ export class CDKStack extends cdk.Stack {
     });
     const resources: ResourceConfig[] = [
       {
-        path: 'process-payments',
+        path: 'transaction/process/charge',
         method: 'POST',
         lambda: transactionsProcessLambda.lambda,
         apiKeyRequired: true,
         requestModel: {
-          modelName: 'ProcessPaymentsRequestModel',
+          modelName: 'ProcessPaymentsChargeRequestModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
@@ -403,7 +465,46 @@ export class CDKStack extends cdk.Stack {
           },
         },
         responseModel: {
-          modelName: 'ProcessPaymentsResponseModel',
+          modelName: 'ProcessPaymentsChargeResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              status: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'transaction/process/refund',
+        method: 'POST',
+        lambda: transactionsProcessLambda.lambda,
+        apiKeyRequired: true,
+        requestModel: {
+          modelName: 'ProcessPaymentsRefundRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              merchantId: { type: apigateway.JsonSchemaType.STRING },
+              amount: { type: apigateway.JsonSchemaType.NUMBER },
+              customerPhone: { type: apigateway.JsonSchemaType.STRING },
+              transactionType: { type: apigateway.JsonSchemaType.STRING },
+              paymentMethod: { type: apigateway.JsonSchemaType.STRING },
+              metaData: { type: apigateway.JsonSchemaType.OBJECT },
+              cardData: { type: apigateway.JsonSchemaType.OBJECT },
+            },
+            required: [
+              'merchantId',
+              'amount',
+              'customerPhone',
+              'transactionType',
+              'paymentMethod',
+              'metaData',
+            ],
+          },
+        },
+        responseModel: {
+          modelName: 'ProcessPaymentsRefundResponseModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
@@ -420,7 +521,7 @@ export class CDKStack extends cdk.Stack {
         apiKeyRequired: true,
       },
       {
-        path: 'transaction-status',
+        path: 'transaction/status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
         apiKeyRequired: true,
@@ -474,12 +575,12 @@ export class CDKStack extends cdk.Stack {
         },
       },
       {
-        path: 'webhooks/mtn',
+        path: 'webhooks/mtn/payment',
         method: 'POST',
-        lambda: mtnWebhookLambda.lambda,
+        lambda: mtnPaymentWebhookLambda.lambda,
         apiKeyRequired: false,
         requestModel: {
-          modelName: 'MTNWebhookRequestModel',
+          modelName: 'MTNPaymentWebhookRequestModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
@@ -495,14 +596,48 @@ export class CDKStack extends cdk.Stack {
                   payerMessage: { type: apigateway.JsonSchemaType.STRING },
                   payeeNote: { type: apigateway.JsonSchemaType.STRING },
                 },
-                required: ['transactionId', 'status', 'amount', 'currency'],
               },
             },
-            required: ['type', 'data'],
           },
         },
         responseModel: {
-          modelName: 'MTNWebhookResponseModel',
+          modelName: 'MTNPaymentWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/mtn/disbursement',
+        method: 'POST',
+        lambda: mtnDisbursementWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNDisbursementWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'MTNDisbursementWebhookResponseModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {

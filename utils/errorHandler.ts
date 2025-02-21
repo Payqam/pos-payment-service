@@ -86,6 +86,20 @@ export class ErrorHandler {
   }
 
   /**
+   * Safely extracts key information from an error object without circular references
+   */
+  private static getSafeErrorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+    return { error: String(error) };
+  }
+
+  /**
    * Handles exceptions and returns a structured error response
    * @param error - The thrown exception
    * @param defaultMessage - Default message when no specific error is available
@@ -95,7 +109,8 @@ export class ErrorHandler {
     error: unknown,
     defaultMessage: string
   ): APIGatewayProxyResult {
-    this.logger.error('Error occurred:', error);
+    // Log only safe error information without circular references
+    this.logger.error('Error occurred:', this.getSafeErrorInfo(error));
 
     if (error instanceof EnhancedError) {
       return this.createErrorResponse(
