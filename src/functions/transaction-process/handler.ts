@@ -114,7 +114,7 @@ export class TransactionProcessService {
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify({
         message: 'Payment processed successfully',
-        id: transactionResult,
+        transactionDetails: transactionResult,
       }),
     };
   }
