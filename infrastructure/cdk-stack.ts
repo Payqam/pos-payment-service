@@ -152,13 +152,19 @@ export class CDKStack extends cdk.Stack {
       salesForceConfig
     );
 
-    // Create ElastiCache cluster
-    const cache = new ElasticCacheConstruct(this, 'Cache', {
-      envName: props.envName,
-      namespace: props.namespace,
-      vpc: vpcConstruct.vpc,
-      securityGroup: securityGroups.cacheSecurityGroup,
-    });
+    // Create ElastiCache cluster if enabled
+    let cacheEndpoint: string | undefined;
+    const enableCache = process.env.ENABLE_CACHE === 'true';
+
+    if (enableCache) {
+      const cache = new ElasticCacheConstruct(this, 'Cache', {
+        envName: props.envName,
+        namespace: props.namespace,
+        vpc: vpcConstruct.vpc,
+        securityGroup: securityGroups.cacheSecurityGroup,
+      });
+      cacheEndpoint = cache.cluster.attrPrimaryEndPointAddress;
+    }
 
     // Check for existing KMS key ARN in environment variables
     let key: kms.Key;
@@ -232,7 +238,8 @@ export class CDKStack extends cdk.Stack {
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
-          VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
+          ENABLE_CACHE: enableCache ? 'true' : 'false',
+          VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
           MTN_PAYMENT_WEBHOOK_URL: process.env
@@ -708,7 +715,7 @@ export class CDKStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'elastiCacheCluster', {
-      value: cache.cluster.ref,
+      value: cacheEndpoint || '',
       description: 'ElastiCache Cluster Name',
     });
   }
