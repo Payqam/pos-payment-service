@@ -61,6 +61,10 @@ jobs:
           MTN_TARGET_ENVIRONMENT: ${{ vars.MTN_TARGET_ENVIRONMENT }}
           MTN_PAYMENT_WEBHOOK_URL: ${{ vars.MTN_PAYMENT_WEBHOOK_URL }}
           MTN_DISBURSEMENT_WEBHOOK_URL: ${{ vars.MTN_DISBURSEMENT_WEBHOOK_URL }}
+          SALESFORCE_CLIENT_SECRET: ${{ secrets.SALESFORCE_CLIENT_SECRET }}
+          SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
+          SALESFORCE_URL_HOST: ${{ vars.SALESFORCE_URL_HOST }}
+          SALESFORCE_OWNER_ID: ${{ secrets.SALESFORCE_OWNER_ID }}
       - name: Destroy Deployment
         if: ${{ steps.deploy.outcome == 'success' && always() }}
         run: zx ./scripts/destroy.mjs
