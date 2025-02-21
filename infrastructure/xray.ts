@@ -1,4 +1,3 @@
-import * as cdk from 'aws-cdk-lib';
 import * as xray from 'aws-cdk-lib/aws-xray';
 import { Construct } from 'constructs';
 
