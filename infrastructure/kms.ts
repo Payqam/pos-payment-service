@@ -1,5 +1,6 @@
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Duration } from 'aws-cdk-lib';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
@@ -21,6 +22,7 @@ export interface KMSKeyConfig {
   iamUserArn?: string;
   region: string;
 }
+
 /**
  * Helper class to create and manage KMS keys
  */
@@ -74,6 +76,7 @@ export class KMSHelper {
       keySpec: kms.KeySpec.SYMMETRIC_DEFAULT,
       keyUsage: kms.KeyUsage.ENCRYPT_DECRYPT,
       rotationPeriod: Duration.days(config.rotationDays ?? 365),
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
     const statements = KMSHelper.getDefaultPolicyStatements(
@@ -85,8 +88,9 @@ export class KMSHelper {
     statements.forEach((statement) => key.addToResourcePolicy(statement));
 
     const alias = new kms.Alias(scope, `${config.keyName}Alias`, {
-      aliasName: `alias/PAYQAM-${config.serviceName}-${config.stage}${config.namespace}`,
+      aliasName: `alias/PAYQAM-${config.serviceName}-${config.stage}`,
       targetKey: key,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
     return { key, alias };
@@ -96,12 +100,11 @@ export class KMSHelper {
    * Grants decryption permissions to a given Lambda function
    */
   public static grantDecryptPermission(
-    key: kms.Key,
+    key: kms.IKey | kms.Key,
     lambdaFunction: IFunction,
     region: string,
     accountId: string
   ) {
-    // key.grantDecrypt(lambdaFunction);
     if (lambdaFunction.role) {
       key.addToResourcePolicy(
         new iam.PolicyStatement({

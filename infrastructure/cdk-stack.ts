@@ -22,6 +22,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
 import { KMSHelper } from './kms';
+import * as kms from 'aws-cdk-lib/aws-kms';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -158,17 +159,34 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       securityGroup: securityGroups.cacheSecurityGroup,
     });
-    const { key } = KMSHelper.createKey(this, {
-      keyName: 'TransactionsEncryption',
-      description: 'KMS Key for Transactions Processing',
-      accountId: env.account as string,
-      stage: props.envName,
-      namespace: props.namespace,
-      serviceName: 'transactions-transport',
-      externalRoleArns: [],
-      iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
-      region: env.region as string,
-    });
+
+    // Check for existing KMS key ARN in environment variables
+    let key: kms.Key;
+    const existingKeyArn = process.env.KMS_KEY_ARN;
+
+    if (existingKeyArn) {
+      // Use fromKeyArn to reference the existing key
+      key = kms.Key.fromKeyArn(
+        this,
+        'ExistingTransactionsKey',
+        existingKeyArn
+      ) as kms.Key;
+    } else {
+      // Create new key if no existing ARN found
+      const { key: newKey } = KMSHelper.createKey(this, {
+        keyName: 'TransactionsEncryption',
+        description: 'KMS Key for Transactions Processing',
+        accountId: env.account as string,
+        stage: props.envName,
+        namespace: props.namespace,
+        serviceName: 'transactions-transport',
+        externalRoleArns: [],
+        iamUserArn: 'arn:aws:iam::061051235502:user/kms-decrypt', //todo: update this with correct ARN
+        region: env.region as string,
+      });
+      key = newKey;
+    }
+
     // Create Salesforce sync Lambda
     const salesforceSyncLambda = new PAYQAMLambda(
       this,
@@ -198,6 +216,7 @@ export class CDKStack extends cdk.Stack {
       envName: props.envName,
       namespace: props.namespace,
     });
+
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
