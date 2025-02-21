@@ -77,9 +77,14 @@ export class CardPaymentService {
           };
           await this.dbService.createPaymentRecord(record);
           this.logger.info('Payment record created in DynamoDB', record);
-          const key = `payment:${record.transactionId}`;
-          await this.cacheService.setValue(key, record, 3600);
-          this.logger.info('Payment record stored in Redis', { key });
+
+          // Only cache if enabled
+          if (process.env.ENABLE_CACHE === 'true') {
+            const key = `payment:${record.transactionId}`;
+            await this.cacheService.setValue(key, record, 3600);
+            this.logger.info('Payment record stored in Redis', { key });
+          }
+
           return paymentIntent.id;
         } catch (error) {
           this.logger.error('Error creating payment record', error);

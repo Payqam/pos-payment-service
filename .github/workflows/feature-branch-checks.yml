@@ -62,6 +62,7 @@ jobs:
           MTN_PAYMENT_WEBHOOK_URL: ${{ vars.MTN_PAYMENT_WEBHOOK_URL }}
           MTN_DISBURSEMENT_WEBHOOK_URL: ${{ vars.MTN_DISBURSEMENT_WEBHOOK_URL }}
           KMS_KEY_ARN: ${{ vars.KMS_KEY_ARN }}
+          ENABLE_CACHE: ${{ vars.ENABLE_CACHE }}
       - name: Destroy Deployment
         if: ${{ steps.deploy.outcome == 'success' && always() }}
         run: zx ./scripts/destroy.mjs
