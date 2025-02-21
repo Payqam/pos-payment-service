@@ -2,6 +2,11 @@ import { SNSEvent, SNSHandler } from 'aws-lambda';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../services/secretsManagerService';
 import axios from 'axios';
+import { registerRedactFilter } from '../../../utils/redactUtil';
+
+// Configure sensitive field redaction in logs
+const sensitiveFields = ['clientId', 'clientSecret', 'username', 'password'];
+registerRedactFilter(sensitiveFields);
 
 interface SalesforceCredentials {
   clientSecret: string;
