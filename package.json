@@ -9,7 +9,7 @@
     "watch": "tsc -w",
     "cdk": "cdk",
     "clean": "tsc --build --clean",
-    "lint": "eslint .",
+    "lint": "eslint --fix --max-warnings=0 \"./src/**/*.{js,jsx,ts,tsx,json}\" && tsc --noEmit",
     "format": "prettier --write .",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration",

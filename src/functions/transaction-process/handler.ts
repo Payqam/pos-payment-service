@@ -7,7 +7,15 @@ import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
 import { KmsService } from '../../services/kmsService';
 import { DynamoDBService } from '../../services/dynamodbService';
 
-const sensitiveFields = ['id', 'destinationId', 'cardName'];
+// Configure sensitive field redaction in logs
+const sensitiveFields = [
+  'id',
+  'destinationId',
+  'cardName',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+];
 registerRedactFilter(sensitiveFields);
 
 export class TransactionProcessService {
@@ -114,7 +122,7 @@ export class TransactionProcessService {
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify({
         message: 'Payment processed successfully',
-        id: transactionResult,
+        transactionDetails: transactionResult,
       }),
     };
   }
