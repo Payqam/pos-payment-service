@@ -53,15 +53,15 @@ export class PaymentServiceSNS extends Construct {
     this.eventTopic.addSubscription(
       new subscriptions.LambdaSubscription(props.salesforceSyncLambda, {
         deadLetterQueue: this.dlq, // Failed messages go to DLQ
-        filterPolicy: {
-          // Only process specific payment events
-          eventType: sns.SubscriptionFilter.stringFilter({
-            allowlist: [
-              'PAYMENT_STATUS_UPDATE', // When payment status changes
-              'PAYMENT_CREATED', // When new payment is created
-            ],
-          }),
-        },
+        // filterPolicy: {
+        //   // Only process specific payment events
+        //   eventType: sns.SubscriptionFilter.stringFilter({
+        //     allowlist: [
+        //       'PAYMENT_STATUS_UPDATE', // When payment status changes
+        //       'PAYMENT_CREATED', // When new payment is created
+        //     ],
+        //   }),
+        // },
       })
     );
 
