@@ -85,6 +85,15 @@ export class CDKStack extends cdk.Stack {
         securityGroups.apiGatewaySecurityGroup.securityGroupId,
     });
 
+    const salesForceConfig = {
+      secretName: `SALESFORCE_SECRET-${props.envName}${props.namespace}`,
+      description: 'Stores Salesforce API Secrets and endpoint',
+      secretValues: {
+        clientId: process.env.SALESFORCE_CLIENT_ID as string,
+        clientSecret: process.env.SALESFORCE_CLIENT_SECRET as string,
+      },
+    };
+
     const stripeConfig = {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
@@ -138,6 +147,10 @@ export class CDKStack extends cdk.Stack {
     const stripeSecret = SecretsManagerHelper.createSecret(this, stripeConfig);
     const mtnSecret = SecretsManagerHelper.createSecret(this, mtnConfig);
     const orangeSecret = SecretsManagerHelper.createSecret(this, orangeConfig);
+    const salesForceSecret = SecretsManagerHelper.createSecret(
+      this,
+      salesForceConfig
+    );
 
     // Create ElastiCache cluster
     const cache = new ElasticCacheConstruct(this, 'Cache', {
@@ -174,6 +187,36 @@ export class CDKStack extends cdk.Stack {
       key = newKey;
     }
 
+    // Create Salesforce sync Lambda
+    const salesforceSyncLambda = new PAYQAMLambda(
+      this,
+      'SalesforceSyncLambda',
+      {
+        name: `SalesforceSync${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.SALESFORCE_SYNC}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          SALESFORCE_SECRET: salesForceSecret.secretName,
+          SALESFORCE_URL_HOST: process.env.SALESFORCE_URL_HOST as string,
+          SALESFORCE_OWNER_ID: process.env.SALESFORCE_OWNER_ID as string,
+        },
+      }
+    );
+
+    // Add required policies to Salesforce sync Lambda
+    salesforceSyncLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+
+    // Create SNS topic and DLQ for Salesforce events
+    const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
+      salesforceSyncLambda: salesforceSyncLambda.lambda,
+      envName: props.envName,
+      namespace: props.namespace,
+    });
+
     const transactionsProcessLambda = new PAYQAMLambda(
       this,
       'TransactionsProcessLambda',
@@ -190,6 +233,7 @@ export class CDKStack extends cdk.Stack {
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
           VALKEY_PRIMARY_ENDPOINT: cache.cluster.attrPrimaryEndPointAddress,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
           MTN_PAYMENT_WEBHOOK_URL: process.env
             .MTN_PAYMENT_WEBHOOK_URL as string,
@@ -217,26 +261,13 @@ export class CDKStack extends cdk.Stack {
 
     createLambdaLogGroup(this, transactionsProcessLambda.lambda);
 
-    // Create Salesforce sync Lambda
-    const salesforceSyncLambda = new PAYQAMLambda(
-      this,
-      'SalesforceSyncLambda',
-      {
-        name: `SalesforceSync${props.envName}${props.namespace}`,
-        path: `${PATHS.FUNCTIONS.SALESFORCE_SYNC}/handler.ts`,
-        vpc: vpcConstruct.vpc,
-        environment: {
-          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-          SALESFORCE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Salesforce-${props.envName}`,
-        },
-      }
+    // Add SNS publish permissions to transaction process Lambda
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['sns:Publish'],
+        resources: [snsConstruct.eventTopic.topicArn],
+      })
     );
-
-    // Add required policies to Salesforce sync Lambda
-    salesforceSyncLambda.lambda.addToRolePolicy(
-      iamConstruct.secretsManagerPolicy
-    );
-    salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
 
     // Create Stripe webhook Lambda
     const stripeWebhookLambda = new PAYQAMLambda(this, 'StripeWebhookLambda', {
@@ -248,6 +279,7 @@ export class CDKStack extends cdk.Stack {
         STRIPE_SECRET_ARN: `arn:aws:secretsmanager:${env.region}:${env.account}:secret:PayQAM/Stripe-${props.envName}`,
         STRIPE_API_SECRET: stripeSecret.secretName,
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
       },
     });
 
@@ -258,22 +290,6 @@ export class CDKStack extends cdk.Stack {
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
-
-    // Create SNS topic and DLQ for Salesforce events
-    const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
-      salesforceSyncLambda: salesforceSyncLambda.lambda,
-      envName: props.envName,
-      namespace: props.namespace,
-    });
-
-    // Add SNS publish permissions to transaction process Lambda
-    transactionsProcessLambda.lambda.addToRolePolicy(
-      new PolicyStatement({
-        actions: ['sns:Publish'],
-        resources: [snsConstruct.eventTopic.topicArn],
-      })
-    );
-
     // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,

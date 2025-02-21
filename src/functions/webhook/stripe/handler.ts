@@ -4,6 +4,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import stripe from 'stripe';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
+import { SNSService } from '../../../services/snsService';
 
 export class StripeWebhookService {
   private readonly logger: Logger;
@@ -16,10 +17,13 @@ export class StripeWebhookService {
 
   private readonly dbService: DynamoDBService;
 
+  private readonly snsService: SNSService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
+    this.snsService = SNSService.getInstance();
     this.logger.info('init()');
   }
 
@@ -31,36 +35,51 @@ export class StripeWebhookService {
     this.signingSecret = stripeSecret.signingSecret;
   }
 
+  private async publishStatusUpdate(
+    transactionId: string,
+    status: string,
+    amount: string
+  ): Promise<void> {
+    try {
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId,
+        status,
+        type: 'UPDATE',
+        amount,
+      });
+    } catch (error) {
+      this.logger.error('Failed to publish status update', { error });
+    }
+  }
+
   /**
    * Returns a numeric priority for a given status.
    * Higher numbers mean a later (more final) state.
    */
   private getStatusPriority(status: string): number {
     switch (status) {
-      case 'PENDING':
-        return 1;
       case 'INTENT_CREATED':
+        return 1;
+      case 'INTENT_REQUIRES_ACTION':
         return 2;
       case 'INTENT_PROCESSING':
         return 3;
       case 'INTENT_SUCCEEDED':
         return 4;
-      case 'INTENT_REQUIRES_ACTION':
+      case 'CHARGE_SUCCEEDED':
         return 5;
       case 'CHARGE_UPDATED':
         return 6;
-      case 'CHARGE_SUCCEEDED':
-        return 7;
-      case 'INTENT_CANCELLED':
-        return 8;
-      case 'INTENT_FAILED':
-        return 9;
       case 'REFUND_CREATED':
-        return 10;
+        return 7;
       case 'REFUND_UPDATED':
-        return 11;
+        return 8;
       case 'REFUND_FAILED':
-        return 12;
+        return 9;
+      case 'INTENT_FAILED':
+        return 10;
+      case 'INTENT_CANCELLED':
+        return 11;
       default:
         return 0;
     }
@@ -96,6 +115,11 @@ export class StripeWebhookService {
         updateData
       );
       this.logger.info('Record updated successfully:', updatedRecord);
+      await this.publishStatusUpdate(
+        key.transactionId,
+        updateData.status as string,
+        updateData.amount as string
+      );
     } catch (error) {
       this.logger.error('Failed to update record:', { error });
     }
