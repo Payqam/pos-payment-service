@@ -23,7 +23,9 @@ export class PaymentService {
     this.orangePaymentService = new OrangePaymentService();
   }
 
-  async processPayment(transaction: PaymentRequest): Promise<string> {
+  async processPayment(
+    transaction: PaymentRequest
+  ): Promise<{ transactionId: string; status: string } | string> {
     const {
       amount,
       paymentMethod,
