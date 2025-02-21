@@ -149,11 +149,15 @@ export class CDKStack extends cdk.Stack {
 
     // Check for existing KMS key ARN in environment variables
     let key: kms.Key;
-    const existingKeyArn = process.env.KMS_KEY_ARN || 'arn:aws:kms:us-east-1:061051235502:key/493581bf-39ba-40af-8422-67772e984694';
+    const existingKeyArn = process.env.KMS_KEY_ARN;
 
     if (existingKeyArn) {
       // Use fromKeyArn to reference the existing key
-      key = kms.Key.fromKeyArn(this, 'ExistingTransactionsKey', existingKeyArn) as kms.Key;
+      key = kms.Key.fromKeyArn(
+        this,
+        'ExistingTransactionsKey',
+        existingKeyArn
+      ) as kms.Key;
     } else {
       // Create new key if no existing ARN found
       const { key: newKey } = KMSHelper.createKey(this, {
