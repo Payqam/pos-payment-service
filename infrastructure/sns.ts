@@ -40,10 +40,6 @@ export class PaymentServiceSNS extends Construct {
     this.dlq = new sqs.Queue(this, 'SalesforceDLQ', {
       queueName: `salesforce-dlq-${props.envName}-${props.namespace}`,
       retentionPeriod: cdk.Duration.days(14), // Keep failed messages for 2 weeks
-      encryptionMasterKey: new cdk.aws_kms.Key(this, 'DLQKey', {
-        enableKeyRotation: true,
-        description: 'KMS key for Salesforce DLQ encryption',
-      }),
     });
 
     // Create SNS Topic for payment events
@@ -51,25 +47,21 @@ export class PaymentServiceSNS extends Construct {
     this.eventTopic = new sns.Topic(this, 'SalesforceEventTopic', {
       topicName: `salesforce-events-${props.envName}-${props.namespace}`,
       displayName: 'Salesforce Event Topic',
-      masterKey: new cdk.aws_kms.Key(this, 'TopicKey', {
-        enableKeyRotation: true,
-        description: 'KMS key for SNS topic encryption',
-      }),
     });
 
     // Add Lambda subscription with DLQ and message filtering
     this.eventTopic.addSubscription(
       new subscriptions.LambdaSubscription(props.salesforceSyncLambda, {
         deadLetterQueue: this.dlq, // Failed messages go to DLQ
-        filterPolicy: {
-          // Only process specific payment events
-          eventType: sns.SubscriptionFilter.stringFilter({
-            allowlist: [
-              'PAYMENT_STATUS_UPDATE', // When payment status changes
-              'PAYMENT_CREATED', // When new payment is created
-            ],
-          }),
-        },
+        // filterPolicy: {
+        //   // Only process specific payment events
+        //   eventType: sns.SubscriptionFilter.stringFilter({
+        //     allowlist: [
+        //       'PAYMENT_STATUS_UPDATE', // When payment status changes
+        //       'PAYMENT_CREATED', // When new payment is created
+        //     ],
+        //   }),
+        // },
       })
     );
 

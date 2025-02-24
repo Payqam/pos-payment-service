@@ -50,6 +50,24 @@ jobs:
         env:
           ENV: DEV
           NAMESPACE: ${{ steps.short-sha.outputs.sha }}
+          STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
+          STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
+          MTN_COLLECTION_SUBSCRIPTION_KEY: ${{ secrets.MTN_COLLECTION_SUBSCRIPTION_KEY }}
+          MTN_COLLECTION_API_USER: ${{ secrets.MTN_COLLECTION_API_USER }}
+          MTN_COLLECTION_API_KEY: ${{ secrets.MTN_COLLECTION_API_KEY }}
+          MTN_DISBURSEMENT_SUBSCRIPTION_KEY: ${{ secrets.MTN_DISBURSEMENT_SUBSCRIPTION_KEY }}
+          MTN_DISBURSEMENT_API_USER: ${{ secrets.MTN_DISBURSEMENT_API_USER }}
+          MTN_DISBURSEMENT_API_KEY: ${{ secrets.MTN_DISBURSEMENT_API_KEY }}
+          MTN_TARGET_ENVIRONMENT: ${{ vars.MTN_TARGET_ENVIRONMENT }}
+          MTN_PAYMENT_WEBHOOK_URL: ${{ vars.MTN_PAYMENT_WEBHOOK_URL }}
+          MTN_DISBURSEMENT_WEBHOOK_URL: ${{ vars.MTN_DISBURSEMENT_WEBHOOK_URL }}
+          KMS_KEY_ARN: ${{ vars.KMS_KEY_ARN }}
+          SALESFORCE_CLIENT_SECRET: ${{ secrets.SALESFORCE_CLIENT_SECRET }}
+          SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
+          SALESFORCE_URL_HOST: ${{ vars.SALESFORCE_URL_HOST }}
+          SALESFORCE_OWNER_ID: ${{ secrets.SALESFORCE_OWNER_ID }}
+          ENABLE_CACHE: ${{ vars.ENABLE_CACHE }}
+          ENABLE_DYNAMODB_PROVISIONING: ${{ vars.ENABLE_DYNAMODB_PROVISIONING }}
       - name: Destroy Deployment
         if: ${{ steps.deploy.outcome == 'success' && always() }}
         run: zx ./scripts/destroy.mjs

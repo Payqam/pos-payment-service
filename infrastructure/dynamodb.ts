@@ -9,11 +9,27 @@ export interface DynamoDBConstructProps {
   removalPolicy?: cdk.RemovalPolicy;
 }
 
+/**
+ * DynamoDB Construct for transaction management
+ *
+ * Table Structure:
+ * - Partition Key: transactionId
+ *   Example: "tx_123456"
+ *
+ * Global Secondary Indexes:
+ * 1. GSI1
+ *    - PK: merchantId
+ *    For querying transactions by merchant
+ */
 export class DynamoDBConstruct extends Construct {
   public readonly table: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DynamoDBConstructProps) {
     super(scope, id);
+
+    // Read environment variable (default is "false")
+    const enableProvisioning =
+      process.env.ENABLE_DYNAMODB_PROVISIONING === 'true';
 
     // Create the main DynamoDB table
     this.table = new dynamodb.Table(this, `${props.namespace}-Table`, {
@@ -22,7 +38,9 @@ export class DynamoDBConstruct extends Construct {
         name: 'transactionId',
         type: dynamodb.AttributeType.STRING,
       },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      billingMode: enableProvisioning
+        ? dynamodb.BillingMode.PROVISIONED
+        : dynamodb.BillingMode.PAY_PER_REQUEST, // Default to on-demand
       removalPolicy: props.removalPolicy || cdk.RemovalPolicy.RETAIN,
       pointInTimeRecovery: true,
     });
@@ -36,14 +54,48 @@ export class DynamoDBConstruct extends Construct {
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+
+    // Add GSI2 for settlement lookups
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'SettlementIndex',
+      partitionKey: {
+        name: 'settlementId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    if (enableProvisioning) {
+      // Enable Auto Scaling for Read Capacity
+      const readScaling = this.table.autoScaleReadCapacity({
+        minCapacity: 2,
+        maxCapacity: 10,
+      });
+      readScaling.scaleOnUtilization({
+        targetUtilizationPercent: 70,
+      });
+
+      // Enable Auto Scaling for Write Capacity
+      const writeScaling = this.table.autoScaleWriteCapacity({
+        minCapacity: 2,
+        maxCapacity: 10,
+      });
+      writeScaling.scaleOnUtilization({
+        targetUtilizationPercent: 70,
+      });
+
+      new cdk.CfnOutput(this, 'DynamoDBProvisioningEnabled', { value: 'true' });
+    } else {
+      new cdk.CfnOutput(this, 'DynamoDBProvisioningEnabled', {
+        value: 'false',
+      });
+    }
   }
 
-  // Helper method to grant read/write permissions to other resources
   public grantReadWrite(grantee: cdk.aws_iam.IGrantable): void {
     this.table.grantReadWriteData(grantee);
   }
 
-  // Helper method to grant read-only permissions to other resources
   public grantRead(grantee: cdk.aws_iam.IGrantable): void {
     this.table.grantReadData(grantee);
   }
