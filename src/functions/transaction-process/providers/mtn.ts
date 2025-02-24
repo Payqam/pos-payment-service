@@ -4,6 +4,12 @@ import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { CreatePaymentRecord } from '../../../model';
+import {
+  MTNRequestToPayErrorCode,
+  MTNErrorResponse,
+  MTN_ERROR_MAPPINGS,
+} from '../../../types/mtn';
+import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
   process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
@@ -252,7 +258,7 @@ export class MtnPaymentService {
     merchantMobileNo: string,
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
-  ): Promise<string> {
+  ): Promise<{ transactionId: string; status: string } | string> {
     const transactionId = uuidv4();
     this.logger.info('Processing MTN payment', {
       transactionId,
@@ -307,12 +313,43 @@ export class MtnPaymentService {
         status: 'PENDING',
       });
 
-      return transactionId;
+      return {
+        transactionId,
+        status: 'PENDING',
+      };
     } catch (error) {
       this.logger.error('Failed to process payment', {
         error: error instanceof Error ? error.message : 'Unknown error',
         transactionId,
       });
+
+      if (axios.isAxiosError(error)) {
+        const errorResponse = error.response?.data as MTNErrorResponse;
+        const errorCode = errorResponse?.errorCode as MTNRequestToPayErrorCode;
+
+        if (errorCode && MTN_ERROR_MAPPINGS[errorCode]) {
+          const errorMapping = MTN_ERROR_MAPPINGS[errorCode];
+          this.logger.error('MTN specific error encountered', {
+            errorCode,
+            errorMapping,
+            transactionId,
+          });
+
+          throw new EnhancedError(
+            errorMapping.label,
+            ErrorCategory.PROVIDER_ERROR,
+            errorMapping.message,
+            {
+              retryable: errorMapping.retryable,
+              suggestedAction: errorMapping.suggestedAction,
+              originalError: errorResponse,
+              httpStatus: errorMapping.statusCode,
+            }
+          );
+        }
+      }
+
+      // If not a mapped MTN error, throw the original error
       throw error;
     }
   }

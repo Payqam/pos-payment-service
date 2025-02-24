@@ -18,29 +18,52 @@ export interface ErrorResponse {
   errorCode: string;
   error: ErrorCategory;
   message: string;
-  details?: string;
+  retryable?: boolean;
+  suggestedAction?: string;
+  httpStatus?: number;
+  details?: unknown;
 }
 
 /**
- * Custom error class with category support
+ * Additional error metadata interface
+ */
+export interface ErrorMetadata {
+  retryable?: boolean;
+  suggestedAction?: string;
+  originalError?: unknown;
+  httpStatus?: number;
+}
+
+/**
+ * Custom error class with enhanced error information
  */
 export class EnhancedError extends Error {
   public readonly category: ErrorCategory;
 
   public readonly errorCode: string;
 
-  public readonly details?: string;
+  public readonly retryable: boolean;
+
+  public readonly suggestedAction?: string;
+
+  public readonly originalError?: unknown;
+
+  public readonly httpStatus?: number;
 
   constructor(
     errorCode: string,
     category: ErrorCategory,
     message: string,
-    details?: string
+    metadata?: ErrorMetadata
   ) {
     super(message);
+    this.name = 'EnhancedError';
     this.errorCode = errorCode;
     this.category = category;
-    this.details = details;
+    this.retryable = metadata?.retryable ?? false;
+    this.suggestedAction = metadata?.suggestedAction;
+    this.originalError = metadata?.originalError;
+    this.httpStatus = metadata?.httpStatus;
   }
 }
 
@@ -53,7 +76,12 @@ export class ErrorHandler {
   /**
    * Maps error categories to HTTP status codes
    */
-  private static getStatusCode(category: ErrorCategory): number {
+  private static getStatusCode(
+    category: ErrorCategory,
+    httpStatus?: number
+  ): number {
+    if (httpStatus) return httpStatus;
+
     const statusMap: Record<ErrorCategory, number> = {
       [ErrorCategory.VALIDATION_ERROR]: 400,
       [ErrorCategory.PROVIDER_ERROR]: 502,
@@ -64,22 +92,24 @@ export class ErrorHandler {
 
   /**
    * Creates a structured error response
-   * @param errorCode - Unique error code
-   * @param error - Error category
-   * @param message - Error message
-   * @param details - Additional error details (optional)
-   * @returns APIGatewayProxyResult
    */
   public static createErrorResponse(
     errorCode: string,
     error: ErrorCategory,
     message: string,
-    details?: string
+    metadata?: ErrorMetadata
   ): APIGatewayProxyResult {
-    const errorResponse: ErrorResponse = { errorCode, error, message, details };
+    const errorResponse: ErrorResponse = {
+      errorCode,
+      error,
+      message,
+      retryable: metadata?.retryable ?? false,
+      suggestedAction: metadata?.suggestedAction,
+      httpStatus: metadata?.httpStatus,
+    };
 
     return {
-      statusCode: this.getStatusCode(error),
+      statusCode: this.getStatusCode(error, metadata?.httpStatus),
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify(errorResponse),
     };
@@ -89,6 +119,18 @@ export class ErrorHandler {
    * Safely extracts key information from an error object without circular references
    */
   private static getSafeErrorInfo(error: unknown): Record<string, unknown> {
+    if (error instanceof EnhancedError) {
+      return {
+        name: error.name,
+        message: error.message,
+        errorCode: error.errorCode,
+        category: error.category,
+        retryable: error.retryable,
+        suggestedAction: error.suggestedAction,
+        httpStatus: error.httpStatus,
+        stack: error.stack,
+      };
+    }
     if (error instanceof Error) {
       return {
         name: error.name,
@@ -100,33 +142,36 @@ export class ErrorHandler {
   }
 
   /**
-   * Handles exceptions and returns a structured error response
-   * @param error - The thrown exception
-   * @param defaultMessage - Default message when no specific error is available
-   * @returns APIGatewayProxyResult
+   * Handles exceptions and creates appropriate error responses
    */
   public static handleException(
     error: unknown,
-    defaultMessage: string
+    defaultMessage = 'An unexpected error occurred'
   ): APIGatewayProxyResult {
-    // Log only safe error information without circular references
-    this.logger.error('Error occurred:', this.getSafeErrorInfo(error));
+    this.logger.error('Error caught:', this.getSafeErrorInfo(error));
 
     if (error instanceof EnhancedError) {
       return this.createErrorResponse(
         error.errorCode,
         error.category,
         error.message,
-        error.details
+        {
+          retryable: error.retryable,
+          suggestedAction: error.suggestedAction,
+          httpStatus: error.httpStatus,
+        }
       );
     }
 
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return this.createErrorResponse(
-      'UNEXPECTED_ERROR',
+      'SYSTEM_ERROR',
       ErrorCategory.SYSTEM_ERROR,
       defaultMessage,
-      errorMessage
+      {
+        retryable: false,
+        suggestedAction:
+          'Please try again later or contact support if the issue persists',
+      }
     );
   }
 }
