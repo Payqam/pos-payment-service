@@ -27,6 +27,10 @@ export class DynamoDBConstruct extends Construct {
   constructor(scope: Construct, id: string, props: DynamoDBConstructProps) {
     super(scope, id);
 
+    // Read environment variable (default is "false")
+    const enableProvisioning =
+      process.env.ENABLE_DYNAMODB_PROVISIONING === 'true';
+
     // Create the main DynamoDB table
     this.table = new dynamodb.Table(this, `${props.namespace}-Table`, {
       tableName: `${props.tableName}`,
@@ -34,7 +38,9 @@ export class DynamoDBConstruct extends Construct {
         name: 'transactionId',
         type: dynamodb.AttributeType.STRING,
       },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      billingMode: enableProvisioning
+        ? dynamodb.BillingMode.PROVISIONED
+        : dynamodb.BillingMode.PAY_PER_REQUEST, // Default to on-demand
       removalPolicy: props.removalPolicy || cdk.RemovalPolicy.RETAIN,
       pointInTimeRecovery: true,
     });
@@ -58,6 +64,32 @@ export class DynamoDBConstruct extends Construct {
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+
+    if (enableProvisioning) {
+      // Enable Auto Scaling for Read Capacity
+      const readScaling = this.table.autoScaleReadCapacity({
+        minCapacity: 2,
+        maxCapacity: 10,
+      });
+      readScaling.scaleOnUtilization({
+        targetUtilizationPercent: 70,
+      });
+
+      // Enable Auto Scaling for Write Capacity
+      const writeScaling = this.table.autoScaleWriteCapacity({
+        minCapacity: 2,
+        maxCapacity: 10,
+      });
+      writeScaling.scaleOnUtilization({
+        targetUtilizationPercent: 70,
+      });
+
+      new cdk.CfnOutput(this, 'DynamoDBProvisioningEnabled', { value: 'true' });
+    } else {
+      new cdk.CfnOutput(this, 'DynamoDBProvisioningEnabled', {
+        value: 'false',
+      });
+    }
   }
 
   public grantReadWrite(grantee: cdk.aws_iam.IGrantable): void {
