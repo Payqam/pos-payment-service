@@ -44,7 +44,11 @@ export class PAYQAMLambda extends Construct {
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
       },
       layers: props.layers ? props.layers : [],
-      timeout: Duration.minutes(1),
+      timeout:
+        props.name.toLowerCase().includes('mtn') &&
+        props.name.toLowerCase().includes('webhook')
+          ? Duration.minutes(5) // 5 minute timeout for MTN webhook lambdas
+          : Duration.minutes(1), // Default 1 minute timeout for other lambdas
       vpc: props.vpc,
       tracing: Tracing.ACTIVE,
       securityGroups: props.securityGroup ? [props.securityGroup] : [],

@@ -21,7 +21,9 @@ export class CardPaymentService {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    this.cacheService = new CacheService();
+    if (process.env.ENABLE_CACHE === 'true') {
+      this.cacheService = new CacheService();
+    }
     this.snsService = SNSService.getInstance();
     this.logger.info('init()');
   }
@@ -86,7 +88,8 @@ export class CardPaymentService {
             const key = `payment:${record.transactionId}`;
             await this.cacheService.setValue(key, record, 3600);
             this.logger.info('Payment record stored in Redis', { key });
-          }await this.snsService.publish(
+          }
+          await this.snsService.publish(
             process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
               transactionId: paymentIntent.id,

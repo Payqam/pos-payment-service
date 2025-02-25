@@ -5,22 +5,14 @@ import {
 } from 'aws-lambda';
 import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
-import { MtnPaymentService } from '../../../transaction-process/providers';
+import {
+  MtnPaymentService,
+  TransactionType,
+} from '../../../transaction-process/providers';
 import { DynamoDBService } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-
-interface WebhookEvent {
-  financialTransactionId: string;
-  externalId: string;
-  amount: string;
-  currency: string;
-  payer: {
-    partyIdType: string;
-    partyId: string;
-  };
-  payeeNote?: string;
-  status: string;
-}
+import { WebhookEvent } from '../../../../types/mtn';
+import { v4 as uuidv4 } from 'uuid';
 
 interface PaymentRecordUpdate {
   status: string;
@@ -142,34 +134,50 @@ export class MTNPaymentWebhookService {
     currency: string,
     webhookEvent: WebhookEvent
   ): Promise<PaymentRecordUpdate> {
-    const amountNumber = parseFloat(amount);
-    const settlementAmount = this.calculateSettlementAmount(amountNumber);
-    const updateData: PaymentRecordUpdate = {
-      status: 'SUCCESS',
-      paymentProviderResponse: {
-        status: webhookEvent.status,
-        reason: webhookEvent.payeeNote,
-      },
-      fee: amountNumber - settlementAmount,
-    };
+    this.logger.info('[DEBUG] Handling successful payment', {
+      externalId,
+      amount,
+      currency,
+    });
 
-    if (this.instantDisbursementEnabled) {
-      try {
-        updateData.settlementId = await this.processInstantDisbursement(
-          externalId,
-          settlementAmount,
-          currency
-        );
-        updateData.settlementStatus = 'PENDING';
-        updateData.settlementDate = Date.now();
-        updateData.settlementAmount = settlementAmount;
-      } catch (error) {
-        this.logger.error('Failed to process instant disbursement', { error });
-        // Continue with payment success even if disbursement fails
+    try {
+      const amountNumber = parseFloat(amount);
+      const settlementAmount = this.calculateSettlementAmount(amountNumber);
+      const updateData: PaymentRecordUpdate = {
+        status: 'SUCCESS',
+        paymentProviderResponse: {
+          status: webhookEvent.status,
+          reason: webhookEvent.payeeNote,
+        },
+        fee: amountNumber - settlementAmount,
+      };
+
+      if (this.instantDisbursementEnabled) {
+        try {
+          updateData.settlementId = await this.processInstantDisbursement(
+            externalId,
+            settlementAmount,
+            currency
+          );
+          updateData.settlementStatus = 'PENDING';
+          updateData.settlementDate = Date.now();
+          updateData.settlementAmount = settlementAmount;
+        } catch (error) {
+          this.logger.error('Failed to process instant disbursement', {
+            error,
+          });
+          // Continue with payment success even if disbursement fails
+        }
       }
-    }
 
-    return updateData;
+      return updateData;
+    } catch (error) {
+      this.logger.error('[DEBUG] Error in handleSuccessfulPayment', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        externalId,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -178,29 +186,32 @@ export class MTNPaymentWebhookService {
    */
   private parseWebhookEvent(body: string | null): WebhookEvent {
     if (!body) {
-      throw new WebhookError('No body in webhook event', 400);
+      throw new WebhookError('No body provided in webhook', 400);
     }
 
     try {
-      const event = JSON.parse(body) as WebhookEvent;
+      const webhookEvent = JSON.parse(body) as WebhookEvent;
+      this.logger.info('[DEBUG] Parsed webhook event', {
+        webhookEvent,
+      });
 
+      // Validate required fields
       if (
-        !event.externalId ||
-        !event.amount ||
-        !event.currency ||
-        !event.status
+        !webhookEvent.externalId ||
+        !webhookEvent.amount ||
+        !webhookEvent.currency ||
+        !webhookEvent.status
       ) {
-        throw new WebhookError(
-          'Missing required fields in webhook event',
-          400,
-          { event }
-        );
+        throw new WebhookError('Missing required fields in webhook event', 400);
       }
 
-      return event;
+      return webhookEvent;
     } catch (error) {
-      if (error instanceof WebhookError) throw error;
-      throw new WebhookError('Invalid webhook payload', 400, { error });
+      this.logger.error('[DEBUG] Failed to parse webhook event', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        body,
+      });
+      throw new WebhookError('Invalid webhook payload', 400);
     }
   }
 
@@ -211,21 +222,44 @@ export class MTNPaymentWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
-      this.logger.info('Received MTN webhook event', { event });
+      this.logger.info('[DEBUG] Received MTN payment webhook event', {
+        body: event.body,
+        headers: event.headers,
+      });
 
       const webhookEvent = this.parseWebhookEvent(event.body);
-      const { externalId, amount, currency, status } = webhookEvent;
+      const { externalId, amount, currency } = webhookEvent;
+
+      this.logger.info('[DEBUG] Parsed webhook event', {
+        webhookEvent,
+        externalId,
+        amount,
+        currency,
+      });
 
       const result = await this.dbService.getItem({
         transactionId: externalId,
       });
-
-      if (!result?.Item) {
+      if (!result) {
+        this.logger.error('[DEBUG] Transaction not found', { externalId });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
+      this.logger.info('[DEBUG] Checking transaction status with MTN', {
+        externalId,
+      });
+      const transactionStatus: WebhookEvent =
+        await this.mtnService.checkTransactionStatus(
+          externalId,
+          TransactionType.PAYMENT
+        );
+      this.logger.info('[DEBUG] Transaction status from MTN', {
+        externalId,
+        transactionStatus,
+      });
+
       const updateData =
-        status === 'SUCCESSFUL'
+        transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
               externalId,
               amount,
@@ -254,6 +288,75 @@ export class MTNPaymentWebhookService {
         settlementId: updateData.settlementId,
         settlementStatus: updateData.settlementStatus,
       });
+
+      this.logger.info('Webhook processed successfully', {
+        externalId,
+        status: updateData.status,
+        settlementId: updateData.settlementId,
+        settlementStatus: updateData.settlementStatus,
+      });
+
+      // Call sandbox disbursement webhook if in sandbox environment
+      const environment = process.env.MTN_TARGET_ENVIRONMENT;
+      const webhookUrl = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
+
+      if (
+        environment === 'sandbox' &&
+        webhookUrl &&
+        updateData.settlementId &&
+        updateData.settlementAmount
+      ) {
+        this.logger.info('[DEBUG] Calling merchant webhook', {
+          externalId,
+          webhookUrl,
+        });
+
+        // Create disbursement webhook event
+        const disbursementEvent = {
+          amount: updateData.settlementAmount.toString(),
+          currency: webhookEvent.currency,
+          financialTransactionId: `${externalId}_disbursement`,
+          externalId,
+          payer: {
+            partyIdType: 'MSISDN',
+            partyId: process.env.MTN_DISBURSEMENT_PARTY_ID || '',
+          },
+          payerMessage: 'Settlement transfer',
+          payeeNote: 'Merchant settlement',
+          status: 'SUCCESSFUL' as const,
+        };
+
+        this.logger.info('[DEBUG] Disbursement webhook payload', {
+          disbursementEvent,
+        });
+
+        await this.mtnService.callWebhook(
+          disbursementEvent,
+          TransactionType.TRANSFER
+        );
+
+        await this.mtnService.callWebhook(
+          {
+            financialTransactionId: uuidv4(),
+            externalId: updateData.settlementId,
+            amount: webhookEvent.amount,
+            currency: webhookEvent.currency,
+            payer: {
+              partyIdType: 'MSISDN',
+              partyId: '94713579023', // todo: hardcoded for now
+            },
+            payeeNote: 'PayQAM payment request',
+            payerMessage: 'Thank you for your payment',
+            reason: undefined,
+            status: 'SUCCESSFUL',
+          },
+          TransactionType.PAYMENT
+        );
+
+        this.logger.info('[DEBUG] Disbursement webhook called successfully', {
+          externalId,
+        });
+      }
 
       return {
         statusCode: 200,

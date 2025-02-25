@@ -234,6 +234,7 @@ export class CDKStack extends cdk.Stack {
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
@@ -319,6 +320,7 @@ export class CDKStack extends cdk.Stack {
         vpc: vpcConstruct.vpc,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
@@ -326,7 +328,10 @@ export class CDKStack extends cdk.Stack {
           PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
           MTN_PAYMENT_WEBHOOK_URL:
             process.env.MTN_PAYMENT_WEBHOOK_URL ||
-            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/payment',
+          MTN_DISBURSEMENT_WEBHOOK_URL:
+            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com/DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }
     );
@@ -352,7 +357,7 @@ export class CDKStack extends cdk.Stack {
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           MTN_DISBURSEMENT_WEBHOOK_URL:
             process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
-            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }
     );

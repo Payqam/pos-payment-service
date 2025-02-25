@@ -123,3 +123,24 @@ export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
       'Retry with exponential backoff; if persistent, contact MTN support for investigation.',
   },
 };
+
+interface Party {
+  partyIdType: string;
+  partyId: string;
+}
+
+interface ErrorReason {
+  code: string;
+  message: string;
+}
+export interface WebhookEvent {
+  financialTransactionId: string;
+  externalId: string;
+  amount: string;
+  currency: string;
+  payer: Party;
+  payerMessage?: string;
+  payeeNote?: string;
+  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
+  reason?: ErrorReason;
+}
