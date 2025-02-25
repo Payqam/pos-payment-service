@@ -307,33 +307,9 @@ export class MTNPaymentWebhookService {
         updateData.settlementAmount
       ) {
         this.logger.info('[DEBUG] Calling merchant webhook', {
-          externalId,
+          settlementId: updateData.settlementId,
           webhookUrl,
         });
-
-        // Create disbursement webhook event
-        const disbursementEvent = {
-          amount: updateData.settlementAmount.toString(),
-          currency: webhookEvent.currency,
-          financialTransactionId: `${externalId}_disbursement`,
-          externalId,
-          payer: {
-            partyIdType: 'MSISDN',
-            partyId: process.env.MTN_DISBURSEMENT_PARTY_ID || '',
-          },
-          payerMessage: 'Settlement transfer',
-          payeeNote: 'Merchant settlement',
-          status: 'SUCCESSFUL' as const,
-        };
-
-        this.logger.info('[DEBUG] Disbursement webhook payload', {
-          disbursementEvent,
-        });
-
-        await this.mtnService.callWebhook(
-          disbursementEvent,
-          TransactionType.TRANSFER
-        );
 
         await this.mtnService.callWebhook(
           {
@@ -350,11 +326,11 @@ export class MTNPaymentWebhookService {
             reason: undefined,
             status: 'SUCCESSFUL',
           },
-          TransactionType.PAYMENT
+          TransactionType.TRANSFER
         );
 
         this.logger.info('[DEBUG] Disbursement webhook called successfully', {
-          externalId,
+          settlementId: updateData.settlementId,
         });
       }
 
