@@ -15,14 +15,26 @@ interface SalesforceCredentials {
 interface SNSMessage {
   transactionId: string;
   status: string;
-  amount: number;
+  amount: string;
   merchantId: string;
   transactionType: string;
   metaData: { deviceId: string };
-  fee: number;
+  fee: string;
   type: string;
   customerPhone: string;
   createdOn: number;
+  currency: string;
+  exchangeRate: string;
+  processingFee: string;
+  netAmount: string;
+  externalTransactionId: string;
+  paymentMethod: string;
+  TransactionError: {
+    ErrorCode__c: string;
+    ErrorMessage__c: string;
+    ErrorType__c: string;
+    ErrorSource__c: string;
+  };
 }
 
 export class SalesforceSyncService {
@@ -143,15 +155,23 @@ export class SalesforceSyncService {
 
       const recordPayload = {
         OwnerId: process.env.SALESFORCE_OWNER_ID,
-        Name: message.transactionId,
+        ServiceType: message.paymentMethod,
+        transactionId__c: message.transactionId,
         status__c: message.status,
         amount__c: message.amount,
         merchantId__c: message.merchantId,
         transactionType__c: message.transactionType,
+        metaData__C: JSON.stringify(message.metaData),
         fee__c: message.fee,
-        transaction_date_time__c: message.createdOn,
-        device_id__c: message.metaData.deviceId,
+        Device_id__c: message.metaData.deviceId,
+        Transaction_Date_Time__c: message.createdOn,
         customer_phone__c: message.customerPhone,
+        Currency__c: message.currency,
+        ExchangeRate__c: message.exchangeRate,
+        ProcessingFee__c: message.processingFee,
+        NetAmount__c: message.netAmount,
+        ExternalTransactionId__c: message.externalTransactionId,
+        TransactionError: message.TransactionError,
       };
 
       this.logger.info('Creating Salesforce Payment record', { recordPayload });
