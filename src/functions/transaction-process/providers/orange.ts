@@ -101,9 +101,9 @@ export class OrangePaymentService {
    */
   private async createHeaders(): Promise<Record<string, string>> {
     const token = await this.generateToken();
-    const authToken = process.env.ORANGE_AUTH_TOKEN;
+    const authToken = process.env.ORANGE_X_AUTH_TOKEN;
     if (!authToken) {
-      throw new Error('ORANGE_AUTH_TOKEN environment variable is not set');
+      throw new Error('ORANGE_X_AUTH_TOKEN environment variable is not set');
     }
 
     return {
@@ -179,9 +179,9 @@ export class OrangePaymentService {
 
     try {
       const axiosInstance = await this.createAxiosInstance();
-      const merchantPhone = process.env.ORANGE_MERCHANT_PHONE;
+      const merchantPhone = process.env.ORANGE_PAYQAM_MERCHANT_PHONE;
       const notifyUrl = process.env.ORANGE_NOTIFY_URL;
-      const pin = process.env.ORANGE_PIN;
+      const pin = process.env.ORANGE_PAYQAM_PIN;
 
       if (!merchantPhone || !notifyUrl || !pin) {
         throw new Error('Required environment variables are not set');

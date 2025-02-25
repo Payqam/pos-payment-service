@@ -138,8 +138,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
-        endpoint: process.env.ORANGE_API_ENDPOINT || 'https://api.orange.com',
-        apiKey: process.env.ORANGE_API_KEY || 'orange_test_your_key_here',
+        clientId: process.env.ORANGE_CLIENT_ID || '',
+        xAuthToken: process.env.ORANGE_X_AUTH_TOKEN || '',
       },
     };
 
@@ -242,8 +242,12 @@ export class CDKStack extends cdk.Stack {
           VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
-          MTN_PAYMENT_WEBHOOK_URL: process.env
-            .MTN_PAYMENT_WEBHOOK_URL as string,
+          MTN_PAYMENT_WEBHOOK_URL: process.env.MTN_PAYMENT_WEBHOOK_URL as string,
+          ORANGE_CLIENT_ID: process.env.ORANGE_CLIENT_ID as string,
+          ORANGE_X_AUTH_TOKEN: process.env.ORANGE_X_AUTH_TOKEN as string,
+          ORANGE_PAYQAM_MERCHANT_PHONE: process.env.ORANGE_PAYQAM_MERCHANT_PHONE as string,
+          ORANGE_PAYQAM_PIN: process.env.ORANGE_PAYQAM_PIN as string,
+          ORANGE_NOTIFY_URL: process.env.ORANGE_NOTIFY_URL as string,
         },
       }
     );
@@ -304,9 +308,17 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        ORANGE_CLIENT_ID: process.env.ORANGE_CLIENT_ID as string,
+        ORANGE_X_AUTH_TOKEN: process.env.ORANGE_X_AUTH_TOKEN as string,
+        ORANGE_PAYQAM_MERCHANT_PHONE: process.env.ORANGE_PAYQAM_MERCHANT_PHONE as string,
+        ORANGE_PAYQAM_PIN: process.env.ORANGE_PAYQAM_PIN as string,
+        ORANGE_NOTIFY_URL: process.env.ORANGE_NOTIFY_URL as string,
       },
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
     // Create MTN payment webhook Lambda
@@ -686,8 +698,6 @@ export class CDKStack extends cdk.Stack {
       envName: props.envName,
       currentEnvVars: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        MTN_API_SECRET: mtnSecret.secretName,
-        STRIPE_API_SECRET: stripeSecret.secretName,
         ORANGE_API_SECRET: orangeSecret.secretName,
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
         PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
