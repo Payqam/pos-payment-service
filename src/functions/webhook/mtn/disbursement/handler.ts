@@ -146,7 +146,7 @@ export class MTNDisbursementWebhookService {
       // Query using settlementId in the SettlementIndex
       const result = await this.dbService.queryByGSI(
         {
-          settlementId: externalId,
+          uniqueId: externalId,
         },
         'SettlementIndex'
       );

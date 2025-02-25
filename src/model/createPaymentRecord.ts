@@ -8,7 +8,6 @@ export interface CreatePaymentRecord {
   customerPhone?: string;
   destinationId?: string;
   status: string;
-  createdOn: number;
   paymentProviderResponse?: stripe.Response<
     stripe.PaymentIntent | stripe.Refund
   >;
@@ -19,7 +18,13 @@ export interface CreatePaymentRecord {
   fee?: number;
   settlementAmount?: number;
   settlementStatus?: string;
-  settlementId?: string;
+  uniqueId?: string;
   settlementDate?: number;
   transactionType?: string;
+  GSI1SK: number;
+  GSI2SK: number;
+  exchangeRate?: string;
+  processingFee?: string;
+  netAmount?: string;
+  externalTransactionId?: string;
 }
