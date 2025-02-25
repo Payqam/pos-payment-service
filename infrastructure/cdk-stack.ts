@@ -355,9 +355,6 @@ export class CDKStack extends cdk.Stack {
           MTN_API_SECRET: mtnSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-          MTN_DISBURSEMENT_WEBHOOK_URL:
-            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
-            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }
     );

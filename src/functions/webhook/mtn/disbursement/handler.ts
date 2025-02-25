@@ -7,10 +7,7 @@ import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBService } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-import {
-  MtnPaymentService,
-  TransactionType,
-} from '../../../transaction-process/providers';
+import { MtnPaymentService } from '../../../transaction-process/providers';
 import { WebhookEvent } from '../../../../types/mtn';
 
 class WebhookError extends Error {
@@ -61,10 +58,10 @@ export class MTNDisbursementWebhookService {
         settlementStatus: status,
         settlementResponse: {
           status: webhookEvent.status,
-          reason: webhookEvent.reason,
+          reason: webhookEvent.reason || '',
           financialTransactionId: webhookEvent.financialTransactionId,
-          payeeNote: webhookEvent.payeeNote,
-          payerMessage: webhookEvent.payerMessage,
+          payeeNote: webhookEvent.payeeNote || '',
+          payerMessage: webhookEvent.payerMessage || '',
         },
       };
 
@@ -160,7 +157,7 @@ export class MTNDisbursementWebhookService {
       });
 
       const webhookEvent = this.parseWebhookEvent(event.body);
-      const { externalId } = webhookEvent;
+      const { externalId, status } = webhookEvent;
 
       this.logger.info('[DEBUG] Parsed disbursement webhook event', {
         webhookEvent,
@@ -188,70 +185,39 @@ export class MTNDisbursementWebhookService {
         externalId,
       });
 
-      const transactionStatus = await this.mtnService.checkTransactionStatus(
-        externalId,
-        TransactionType.TRANSFER
-      );
+      // const transactionStatus = await this.mtnService.checkTransactionStatus(
+      //   externalId,
+      //   TransactionType.TRANSFER
+      // );
 
       this.logger.info('[DEBUG] Disbursement status from MTN', {
         externalId,
-        transactionStatus,
+        status,
       });
 
       // Only update if the status is successful
-      if (transactionStatus.status === 'SUCCESSFUL') {
+      if (status === 'SUCCESSFUL') {
         this.logger.info('[DEBUG] Processing successful disbursement', {
           externalId,
-          transactionStatus,
+          status,
         });
 
-        await this.updateSettlementStatus(
-          transactionId,
-          transactionStatus.status,
-          webhookEvent
-        );
+        await this.updateSettlementStatus(transactionId, status, webhookEvent);
 
         await this.publishStatusUpdate(
           transactionId,
           externalId,
-          transactionStatus.status,
+          status,
           webhookEvent.amount,
           webhookEvent.currency
         );
-
-        // Call sandbox webhook if in sandbox environment
-        const environment = process.env.MTN_TARGET_ENVIRONMENT;
-        this.logger.info(
-          '[DEBUG] Checking sandbox environment for disbursement',
-          {
-            environment,
-            externalId,
-          }
-        );
-
-        if (environment === 'sandbox') {
-          this.logger.info('[DEBUG] Calling sandbox webhook for disbursement', {
-            externalId,
-            amount: webhookEvent.amount,
-            currency: webhookEvent.currency,
-          });
-
-          await this.mtnService.callWebhook(
-            webhookEvent,
-            TransactionType.TRANSFER
-          );
-        }
       } else {
         this.logger.warn('[DEBUG] Disbursement status not successful', {
           externalId,
-          transactionStatus,
+          status,
         });
 
-        await this.updateSettlementStatus(
-          transactionId,
-          transactionStatus.status,
-          webhookEvent
-        );
+        await this.updateSettlementStatus(transactionId, status, webhookEvent);
       }
 
       return {

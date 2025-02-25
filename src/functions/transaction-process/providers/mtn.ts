@@ -487,7 +487,7 @@ export class MtnPaymentService {
       const endpoint =
         type === TransactionType.PAYMENT
           ? `/collection/v1_0/requesttopay/${transactionId}`
-          : `/disbursement/v1_0/transfer/${transactionId}`;
+          : `/disbursement/v2_0/transfer/${transactionId}`;
 
       this.logger.info('[DEBUG] Making status check request', {
         transactionId,
