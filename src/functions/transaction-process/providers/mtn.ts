@@ -374,7 +374,6 @@ export class MtnPaymentService {
         amount,
         currency,
         paymentMethod: 'MTN',
-        createdOn: Math.floor(Date.now() / 1000),
         status: 'PENDING',
         mobileNo,
         merchantId,
@@ -382,6 +381,8 @@ export class MtnPaymentService {
         metaData,
         fee,
         settlementAmount,
+        GSI1SK: Math.floor(Date.now() / 1000),
+        GSI2SK: Math.floor(Date.now() / 1000),
       };
 
       await this.dbService.createPaymentRecord(paymentRecord);
