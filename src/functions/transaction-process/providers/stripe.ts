@@ -2,9 +2,10 @@ import stripe from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-import { CardData } from '../../../model';
+import { CardData, CreatePaymentRecord } from '../../../model';
 // import { CacheService } from '../../../services/cacheService';
 import { SNSService } from '../../../services/snsService';
+import { v4 as uuidv4 } from 'uuid';
 
 export class CardPaymentService {
   private readonly logger: Logger;
@@ -31,6 +32,7 @@ export class CardPaymentService {
     cardData: CardData,
     transactionType: string,
     merchantId: string,
+    customerPhone?: string,
     metaData?: Record<string, string>
   ): Promise<{ transactionId: string; status: string }> {
     this.logger.info('Processing card payment', {
@@ -47,6 +49,7 @@ export class CardPaymentService {
     switch (transactionType) {
       case 'CHARGE': {
         try {
+          const transactionId = uuidv4();
           const feePercentage = 0.02;
           const feeAmount = Math.floor(amount * feePercentage);
           const transferAmount = Math.max(amount - feeAmount, 0);
@@ -64,20 +67,29 @@ export class CardPaymentService {
               enabled: true,
               allow_redirects: 'never',
             },
+            metadata: {
+              transactionId: transactionId,
+            },
           });
 
           this.logger.info('Payment intent created', paymentIntent);
-          const record = {
-            transactionId: paymentIntent?.id as string,
+          const record: CreatePaymentRecord = {
+            transactionId: transactionId,
             merchantId: merchantId,
             amount,
             paymentMethod: 'CARD',
-            createdOn: Math.floor(Date.now() / 1000),
             status: paymentIntent.status,
             paymentProviderResponse: paymentIntent,
             transactionType: 'CHARGE',
             metaData: metaData,
             fee: feeAmount,
+            uniqueId: paymentIntent?.id as string,
+            GSI1SK: Math.floor(Date.now() / 1000),
+            GSI2SK: Math.floor(Date.now() / 1000),
+            exchangeRate: 'exchangeRate',
+            processingFee: 'processingFee',
+            netAmount: 'netAmount',
+            externalTransactionId: 'externalTransactionId',
           };
           await this.dbService.createPaymentRecord(record);
           this.logger.info('Payment record created in DynamoDB', record);
@@ -90,7 +102,8 @@ export class CardPaymentService {
           await this.snsService.publish(
             process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
-              transactionId: paymentIntent.id,
+              transactionId: transactionId,
+              paymentMethod: 'CARD',
               status: paymentIntent.status,
               type: 'CREATE',
               amount,
@@ -99,10 +112,16 @@ export class CardPaymentService {
               metaData: metaData,
               fee: feeAmount,
               createdOn: Math.floor(Date.now() / 1000),
+              customerPhone: customerPhone,
+              currency: cardData.currency,
+              exchangeRate: 'exchangeRate',
+              processingFee: 'processingFee',
+              netAmount: 'netAmount',
+              externalTransactionId: 'externalTransactionId',
             }
           );
           return {
-            transactionId: paymentIntent.id,
+            transactionId: transactionId,
             status: paymentIntent.status,
           };
         } catch (error) {
@@ -125,7 +144,8 @@ export class CardPaymentService {
             transactionId: refund?.id as string,
             amount,
             paymentMethod: 'CARD',
-            createdOn: Math.floor(Date.now() / 1000),
+            GSI1SK: Math.floor(Date.now() / 1000),
+            GSI2SK: Math.floor(Date.now() / 1000),
             status: refund.status as string,
             paymentProviderResponse: refund,
             metaData: metaData,
