@@ -3,7 +3,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { CardData, CreatePaymentRecord } from '../../../model';
-// import { CacheService } from '../../../services/cacheService';
+import { CacheService } from '../../../services/cacheService';
 import { SNSService } from '../../../services/snsService';
 import { v4 as uuidv4 } from 'uuid';
 
