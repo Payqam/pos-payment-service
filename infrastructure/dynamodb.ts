@@ -49,17 +49,33 @@ export class DynamoDBConstruct extends Construct {
     this.table.addGlobalSecondaryIndex({
       indexName: 'GSI1',
       partitionKey: {
-        name: 'merchantId',
+        name: 'status',
         type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'GSI1SK',
+        type: dynamodb.AttributeType.NUMBER,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI2',
+      partitionKey: {
+        name: 'paymentMethod',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'GSI2SK',
+        type: dynamodb.AttributeType.NUMBER,
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
     // Add GSI2 for settlement lookups
     this.table.addGlobalSecondaryIndex({
-      indexName: 'SettlementIndex',
+      indexName: 'GSI3',
       partitionKey: {
-        name: 'settlementId',
+        name: 'uniqueId',
         type: dynamodb.AttributeType.STRING,
       },
       projectionType: dynamodb.ProjectionType.ALL,

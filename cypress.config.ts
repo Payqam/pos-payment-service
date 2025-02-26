@@ -33,4 +33,12 @@ export default defineConfig({
     specPattern: '**/**/*.cy.{js,jsx,ts,tsx}',
     video: false,
   },
+  env: {
+    stripeApiKey: process.env.cypressstripeApiKey,
+    paymentServiceEndpoint: process.env.cypresspaymentServiceEndpoint,
+    paymentApiUrl: process.env.cypresspaymentApiUrl,
+    xApiKey: process.env.cypressxApiKey,
+    paymentMethodId: process.env.cypresspaymentMethodId,
+    transactionId: process.env.cypresstransactionId,
+  },
 });

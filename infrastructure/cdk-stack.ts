@@ -26,6 +26,10 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import { LambdaDashboard } from './cloudwatch-dashboards/lambda-dashboard';
+import { DynamoDBDashboard } from './cloudwatch-dashboards/dynamoDB-dashboard';
+import { SNSDashboard } from './cloudwatch-dashboards/sns-dashboard';
+import { ApiGatewayDashboard } from './cloudwatch-dashboards/apiGateway-dashboard';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -730,7 +734,37 @@ export class CDKStack extends cdk.Stack {
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
         PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
         MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
+        // TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
       },
+    });
+    const lambdaFunctionNames = [
+      transactionsProcessLambda.lambda.functionName,
+      stripeWebhookLambda.lambda.functionName,
+      mtnDisbursementWebhookLambda.lambda.functionName,
+      orangeWebhookLambda.lambda.functionName,
+      mtnPaymentWebhookLambda.lambda.functionName,
+      slackNotifierLambda.lambda.functionName,
+      salesforceSyncLambda.lambda.functionName,
+    ];
+    new LambdaDashboard(this, 'LambdaMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      lambdaFunctionNames: lambdaFunctionNames,
+    });
+    new DynamoDBDashboard(this, 'DynamoDBMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      dynamoTableName: dynamoDBConstruct.table.tableName,
+    });
+    new SNSDashboard(this, 'SnsMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      snsTopicName: snsConstruct.eventTopic.topicName,
+    });
+    new ApiGatewayDashboard(this, 'ApiGatewayMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      apiGatewayName: apiGateway.api.restApiName,
     });
 
     // Add stack outputs
