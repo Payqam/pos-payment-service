@@ -1,7 +1,7 @@
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-import { CacheService } from '../../../services/cacheService';
+// import { CacheService } from '../../../services/cacheService';
 import { v4 as uuidv4 } from 'uuid';
 import { CreatePaymentRecord } from '../../../model';
 import axios, { AxiosInstance } from 'axios';
@@ -22,7 +22,7 @@ export class OrangePaymentService {
   private readonly logger: Logger;
   private readonly secretsManagerService: SecretsManagerService;
   private readonly dbService: DynamoDBService;
-  private readonly cacheService: CacheService;
+  // private readonly cacheService: CacheService;
   private readonly baseUrl: string;
   private readonly tokenUrl: string;
   private currentToken: OrangeToken | null;
@@ -32,7 +32,7 @@ export class OrangePaymentService {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    this.cacheService = new CacheService();
+    // this.cacheService = new CacheService();
     this.baseUrl = process.env.ORANGE_API_BASE_URL || 'https://omdeveloper-gateway.orange.cm';
     this.tokenUrl = process.env.ORANGE_TOKEN_URL || 'https://omdeveloper.orange.cm/oauth2/token';
     this.currentToken = null;
@@ -74,7 +74,7 @@ export class OrangePaymentService {
       );
 
       const token: OrangeToken = response.data;
-      
+
       // Store token and calculate expiry time (subtract 60 seconds as buffer)
       this.currentToken = token;
       this.tokenExpiryTime = currentTime + (token.expires_in - 60);
@@ -129,6 +129,35 @@ export class OrangePaymentService {
   }
 
   /**
+   * Get the current status of a payment
+   * @param payToken - The payment token to check status for
+   * @returns The payment status response
+   */
+  public async getPaymentStatus(payToken: string): Promise<PaymentResponse> {
+    try {
+      const axiosInstance = await this.createAxiosInstance();
+      const response = await axiosInstance.get<PaymentResponse>(
+        `/omapi/1.0.2/mp/paymentstatus/${payToken}`
+      );
+
+      this.logger.info('Payment status check successful', {
+        payToken,
+        status: response.data.data.status,
+        inittxnstatus: response.data.data.inittxnstatus,
+        confirmtxnstatus: response.data.data.confirmtxnstatus
+      });
+
+      return response.data;
+    } catch (error) {
+      this.logger.error('Error checking payment status', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        payToken
+      });
+      throw new Error('Failed to check payment status');
+    }
+  }
+
+  /**
    * Initiates a merchant payment transaction
    * 
    * @returns PayToken for the payment
@@ -169,13 +198,13 @@ export class OrangePaymentService {
    */
   public async processPayment(
     amount: number,
-    mobileNo: string,
+    customerPhone: string,
     merchantId: string,
     merchantMobileNo: string,
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
   ): Promise<string> {
-    this.logger.info('Processing Orange Money payment', { amount, mobileNo });
+    this.logger.info('Processing Orange Money payment', { amount, customerPhone });
 
     try {
       const axiosInstance = await this.createAxiosInstance();
@@ -191,12 +220,12 @@ export class OrangePaymentService {
       const payToken = await this.initiateMerchantPayment();
 
       // Step 2: Process the payment
-      const orderId = uuidv4();
+      const orderId = uuidv4().replace(/-/g, '').substring(0, 8);
       const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
         notifUrl: notifyUrl,
         channelUserMsisdn: merchantPhone,
         amount,
-        subscriberMsisdn: mobileNo,
+        subscriberMsisdn: customerPhone,
         pin,
         orderId,
         description: metaData?.description || 'PayQam payment',
@@ -204,7 +233,7 @@ export class OrangePaymentService {
       });
 
       const paymentData = response.data.data;
-      
+
       // Create payment record
       const record: OrangePaymentRecord = {
         transactionId: paymentData.txnid,
@@ -238,7 +267,7 @@ export class OrangePaymentService {
       this.logger.error('Error processing Orange Money payment', {
         error: error instanceof Error ? error.message : 'Unknown error',
         amount,
-        mobileNo
+        customerPhone
       });
       throw error;
     }

@@ -550,12 +550,6 @@ export class CDKStack extends cdk.Stack {
         },
       },
       {
-        path: 'webhook-orange',
-        method: 'POST',
-        lambda: orangeWebhookLambda.lambda,
-        apiKeyRequired: true,
-      },
-      {
         path: 'transaction/status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
@@ -605,6 +599,40 @@ export class CDKStack extends cdk.Stack {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
               received: { type: apigateway.JsonSchemaType.BOOLEAN },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/orange',
+        method: 'POST',
+        lambda: orangeWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'OrangeWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  payToken: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'OrangeWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
             },
           },
         },
