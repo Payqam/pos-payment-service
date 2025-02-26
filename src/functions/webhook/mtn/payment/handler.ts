@@ -20,7 +20,7 @@ interface PaymentRecordUpdate {
     status: string;
     reason?: string;
   };
-  settlementId?: string;
+  uniqueId?: string; // Disbursement Settlement Id for MTN
   settlementStatus?: string;
   settlementDate?: number;
   settlementAmount?: number;
@@ -99,13 +99,13 @@ export class MTNPaymentWebhookService {
         });
       }
 
-      const settlementId = await this.mtnService.initiateTransfer(
+      const uniqueId = await this.mtnService.initiateTransfer(
         amount,
         result.Item.merchantMobileNo,
         currency
       );
 
-      if (!settlementId) {
+      if (!uniqueId) {
         throw new WebhookError('Failed to initiate transfer', 500, {
           transactionId,
           amount,
@@ -113,7 +113,7 @@ export class MTNPaymentWebhookService {
         });
       }
 
-      return settlementId;
+      return uniqueId;
     } catch (error) {
       if (error instanceof WebhookError) throw error;
       throw new WebhookError('Error processing instant disbursement', 500, {
@@ -144,7 +144,7 @@ export class MTNPaymentWebhookService {
       const amountNumber = parseFloat(amount);
       const settlementAmount = this.calculateSettlementAmount(amountNumber);
       const updateData: PaymentRecordUpdate = {
-        status: 'SUCCESS',
+        status: 'SUCCESSFUL',
         paymentProviderResponse: {
           status: webhookEvent.status,
           reason: webhookEvent.payeeNote,
@@ -154,7 +154,7 @@ export class MTNPaymentWebhookService {
 
       if (this.instantDisbursementEnabled) {
         try {
-          updateData.settlementId = await this.processInstantDisbursement(
+          updateData.uniqueId = await this.processInstantDisbursement(
             externalId,
             settlementAmount,
             currency
@@ -285,14 +285,14 @@ export class MTNPaymentWebhookService {
         type: 'PAYMENT',
         amount: amount,
         currency: currency,
-        settlementId: updateData.settlementId,
+        uniqueId: updateData.uniqueId,
         settlementStatus: updateData.settlementStatus,
       });
 
       this.logger.info('Webhook processed successfully', {
         externalId,
         status: updateData.status,
-        settlementId: updateData.settlementId,
+        uniqueId: updateData.uniqueId,
         settlementStatus: updateData.settlementStatus,
       });
 
@@ -303,18 +303,18 @@ export class MTNPaymentWebhookService {
       if (
         environment === 'sandbox' &&
         webhookUrl &&
-        updateData.settlementId &&
+        updateData.uniqueId &&
         updateData.settlementAmount
       ) {
         this.logger.info('[DEBUG] Calling merchant webhook', {
-          settlementId: updateData.settlementId,
+          uniqueId: updateData.uniqueId,
           webhookUrl,
         });
 
         await this.mtnService.callWebhook(
           {
             financialTransactionId: uuidv4(),
-            externalId: updateData.settlementId,
+            externalId: updateData.uniqueId,
             amount: webhookEvent.amount,
             currency: webhookEvent.currency,
             payer: {
@@ -330,7 +330,7 @@ export class MTNPaymentWebhookService {
         );
 
         this.logger.info('[DEBUG] Disbursement webhook called successfully', {
-          settlementId: updateData.settlementId,
+          uniqueId: updateData.uniqueId,
         });
       }
 

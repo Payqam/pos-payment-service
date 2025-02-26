@@ -65,7 +65,10 @@ export class MTNDisbursementWebhookService {
         },
       };
 
-      await this.dbService.updatePaymentRecord(transactionId, updateData);
+      await this.dbService.updatePaymentRecordByTransactionId(
+        transactionId,
+        updateData
+      );
 
       this.logger.info('[DEBUG] Settlement status updated successfully', {
         transactionId,
@@ -86,7 +89,7 @@ export class MTNDisbursementWebhookService {
    */
   private async publishStatusUpdate(
     transactionId: string,
-    settlementId: string,
+    uniqueId: string, // Disbursement Settlement ID for MTN
     status: string,
     amount: string,
     currency: string
@@ -94,7 +97,7 @@ export class MTNDisbursementWebhookService {
     try {
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
         transactionId,
-        settlementId,
+        uniqueId,
         status,
         type: 'SETTLEMENT',
         amount,
@@ -104,7 +107,7 @@ export class MTNDisbursementWebhookService {
       throw new WebhookError('Failed to publish status update', 500, {
         error,
         transactionId,
-        settlementId,
+        uniqueId,
       });
     }
   }
@@ -164,12 +167,12 @@ export class MTNDisbursementWebhookService {
         externalId,
       });
 
-      // Query using settlementId in the SettlementIndex
+      // Query using uniqueId in the GSI3
       const result = await this.dbService.queryByGSI(
         {
           uniqueId: externalId,
         },
-        'SettlementIndex'
+        'GSI3'
       );
 
       if (!result.Items?.[0]) {
@@ -181,20 +184,21 @@ export class MTNDisbursementWebhookService {
 
       const transactionId = result.Items[0].transactionId;
 
-      this.logger.info('[DEBUG] Checking disbursement status with MTN', {
+      // TODO: Check again with MTN?
+      /*this.logger.info('[DEBUG] Checking disbursement status with MTN', {
         externalId,
       });
 
-      // const transactionStatus = await this.mtnService.checkTransactionStatus(
-      //   externalId,
-      //   TransactionType.TRANSFER
-      // );
+      const transactionStatus = await this.mtnService.checkTransactionStatus(
+        externalId,
+        TransactionType.TRANSFER
+      );
 
       this.logger.info('[DEBUG] Disbursement status from MTN', {
         externalId,
         status,
       });
-
+*/
       // Only update if the status is successful
       if (status === 'SUCCESSFUL') {
         this.logger.info('[DEBUG] Processing successful disbursement', {

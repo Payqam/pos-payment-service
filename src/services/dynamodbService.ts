@@ -19,7 +19,7 @@ interface AdditionalTransactionFields {
   paymentMethod?: string;
   paymentProviderResponse?: Record<string, unknown>;
   settlementStatus?: string;
-  settlementId?: string;
+  uniqueId?: string;
   settlementDate?: number;
   fee?: number;
   settlementAmount?: number;
@@ -83,7 +83,7 @@ export class DynamoDBService {
       paymentMethod: item.paymentMethod,
       paymentProviderResponse: item.paymentProviderResponse,
       settlementStatus: item.settlementStatus,
-      settlementId: item.settlementId,
+      uniqueId: item.uniqueId,
       settlementDate: item.settlementDate,
       fee: item.fee,
       settlementAmount: item.settlementAmount,
@@ -201,7 +201,7 @@ export class DynamoDBService {
   /**
    * Queries an item using a Global Secondary Index
    *
-   * @param key - Key to query with (e.g., { settlementId: 'xyz' })
+   * @param key - Key to query with (e.g., { uniqueId: 'xyz' })
    * @param indexName - Name of the GSI to use
    * @returns The first matching item, if any
    */
