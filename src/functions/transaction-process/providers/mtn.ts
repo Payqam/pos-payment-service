@@ -11,6 +11,9 @@ import {
   WebhookEvent,
 } from '../../../types/mtn';
 import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
+import * as http from 'http';
+import * as https from 'https';
+import { URL } from 'url';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
   process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
@@ -282,22 +285,56 @@ export class MtnPaymentService {
         webhookUrl,
       });
 
-      this.logger.info('[DEBUG] Webhook payload:', {
-        event,
-        type,
-        url: webhookUrl,
-      });
+      // Parse the URL to determine if it's HTTP or HTTPS
+      const url = new URL(webhookUrl);
+      const isHttps = url.protocol === 'https:';
 
-      await axios.post(webhookUrl, event, {
+      // Create options for the request
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(JSON.stringify(event)),
         },
-      });
+      };
 
-      this.logger.info('[DEBUG] Webhook call successful', {
-        event,
-        type,
-        financialTransactionId: event.financialTransactionId,
+      // Create a promise to handle the async request
+      await new Promise((resolve, reject) => {
+        const req = (isHttps ? https : http).request(options, (res) => {
+          let data = '';
+
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            this.logger.info('[DEBUG] Webhook call successful', {
+              event,
+              type,
+              financialTransactionId: event.financialTransactionId,
+              statusCode: res.statusCode,
+              responseData: data,
+            });
+            resolve(data);
+          });
+        });
+
+        req.on('error', (error) => {
+          this.logger.error('[DEBUG] Webhook call failed', {
+            error: error.message,
+            event,
+            type,
+            webhookUrl,
+          });
+          reject(error);
+        });
+
+        // Write the data and end the request
+        req.write(JSON.stringify(event));
+        req.end();
       });
     } catch (error) {
       this.logger.error('[DEBUG] Webhook call failed', {
@@ -306,6 +343,7 @@ export class MtnPaymentService {
         type,
         webhookUrl,
       });
+      throw error;
     }
   }
 
