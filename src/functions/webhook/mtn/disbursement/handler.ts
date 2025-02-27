@@ -57,12 +57,6 @@ export class MTNDisbursementWebhookService {
     transactionId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
-    this.logger.info('[DEBUG] Handling failed transfer', {
-      transactionId,
-      status: transactionStatus.status,
-      reason: transactionStatus.reason,
-    });
-
     try {
       const errorReason = transactionStatus.reason;
       const errorMapping =
@@ -81,11 +75,6 @@ export class MTNDisbursementWebhookService {
         }
       );
 
-      this.logger.error('[DEBUG] Transfer failed with enhanced error', {
-        error: enhancedError,
-        transactionId,
-      });
-
       return {
         settlementStatus: 'FAILED',
         settlementResponse: {
@@ -99,11 +88,8 @@ export class MTNDisbursementWebhookService {
         },
       };
     } catch (error) {
-      this.logger.error('[DEBUG] Error in handleFailedTransfer', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        transactionId,
-      });
-      throw error;
+      this.logger.error('Failed to handle the failed payment');
+      throw new Error('Failed to handle the failed transfer');
     }
   }
 
@@ -115,11 +101,6 @@ export class MTNDisbursementWebhookService {
     transactionId: string,
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
-    this.logger.info('[DEBUG] Updating settlement status', {
-      transactionId,
-      transactionStatusResponse,
-    });
-
     try {
       const updateData =
         transactionStatusResponse.status === 'SUCCESSFUL'
@@ -139,17 +120,9 @@ export class MTNDisbursementWebhookService {
             );
 
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
-
-      this.logger.info('[DEBUG] Settlement status updated successfully', {
-        transactionId,
-        transactionStatusResponse,
-      });
     } catch (error) {
-      this.logger.error('[DEBUG] Failed to update settlement status', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        transactionId,
-      });
-      throw error;
+      this.logger.error('Failed to update the settlement status');
+      throw new Error('Failed to update the settlement status');
     }
   }
 
@@ -193,9 +166,6 @@ export class MTNDisbursementWebhookService {
 
     try {
       const webhookEvent = JSON.parse(body) as WebhookEvent;
-      this.logger.info('[DEBUG] Parsed disbursement webhook event', {
-        webhookEvent,
-      });
 
       // Validate required fields
       if (
@@ -209,10 +179,7 @@ export class MTNDisbursementWebhookService {
 
       return webhookEvent;
     } catch (error) {
-      this.logger.error('[DEBUG] Failed to parse disbursement webhook event', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        body,
-      });
+      this.logger.error('Invalid webhook payload', body);
       throw new WebhookError('Invalid webhook payload', 400);
     }
   }
@@ -224,18 +191,8 @@ export class MTNDisbursementWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
-      this.logger.info('[DEBUG] Received MTN disbursement webhook', {
-        body: event.body,
-        headers: event.headers,
-      });
-
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
-
-      this.logger.info('[DEBUG] Parsed disbursement webhook event', {
-        webhookEvent,
-        externalId,
-      });
 
       // Query using uniqueId in the GSI3
       const result = await this.dbService.queryByGSI(
@@ -246,27 +203,15 @@ export class MTNDisbursementWebhookService {
       );
 
       if (!result.Items?.[0]) {
-        this.logger.error('[DEBUG] Disbursement transaction not found', {
-          externalId,
-        });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
       const transactionId = result.Items[0].transactionId;
 
-      this.logger.info('[DEBUG] Checking disbursement status with MTN', {
-        externalId,
-      });
-
       const transactionStatus = await this.mtnService.checkTransactionStatus(
         externalId,
         TransactionType.TRANSFER
       );
-
-      this.logger.info('[DEBUG] Disbursement status from MTN', {
-        externalId,
-        transactionStatus,
-      });
 
       await this.updateSettlementStatus(transactionId, transactionStatus);
 
