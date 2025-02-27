@@ -1,40 +1,11 @@
+import testData from 'cypress/fixtures/test_data.json';
+let paymentMethodId, transactionId, uniqueId;
+
 describe('Negative Payment Scenarios - Card Validation', () => {
   const paymentApiUrl = `${Cypress.env('paymentApiUrl')}payment_methods`;
   const stripeApiKey = Cypress.env('stripeApiKey');
 
-  const invalidCardTests = [
-    {
-      title: 'Invalid card number',
-      body: { 'card[number]': '1234567890123456' },
-    },
-
-    { title: 'Empty card number', body: { 'card[number]': ' ' } },
-    { title: 'Short-length card number', body: { 'card[number]': '424242' } },
-    {
-      title: 'Extra-long card number',
-      body: { 'card[number]': '42424242424242424242' },
-    },
-    {
-      title: 'Alphanumeric card number',
-      body: { 'card[number]': '4242abcd4242abcd' },
-    },
-    { title: 'Invalid expiry month', body: { 'card[exp_month]': '13' } },
-    { title: 'Expiry year in the past', body: { 'card[exp_year]': '2020' } },
-    {
-      title: 'Just-expired card',
-      body: { 'card[exp_month]': '10', 'card[exp_year]': '2023' },
-    },
-    { title: 'Maximum valid expiry year', body: { 'card[exp_year]': '2090' } },
-    { title: 'Invalid CVC number', body: { 'card[cvc]': '12a' } },
-    { title: 'CVC longer than allowed', body: { 'card[cvc]': '12345' } },
-    { title: 'Empty CVC', body: { 'card[cvc]': ' ' } },
-    {
-      title: 'CVC with letters/special characters',
-      body: { 'card[cvc]': '12$%' },
-    },
-  ];
-
-  invalidCardTests.forEach((test) => {
+  testData.invalidCardTests.forEach((test) => {
     it(`Verify 402 response for ${test.title}`, () => {
       cy.request({
         method: 'POST',
@@ -55,6 +26,8 @@ describe('Negative Payment Scenarios - Card Validation', () => {
         expect(response.status).to.eq(402);
         expect(response.status).to.not.eq(200);
         expect(response.body).to.have.property('error');
+        expect(response.body.error).to.have.property('code', test.code);
+        expect(response.body.error).to.have.property('message', test.message);
         cy.task(
           'log',
           `${test.title} - Response: ${JSON.stringify(response.body)}`
@@ -120,7 +93,7 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
   });
 });
 
-describe('Verify 400 response for Empty fields and unsupported Payment Scenarios - Card Validation', () => {
+describe('Empty fields and unsupported Payment Scenarios - Card Validation', () => {
   const paymentApiUrl = `${Cypress.env('paymentApiUrl')}payment_methods`;
   const stripeApiKey = Cypress.env('stripeApiKey');
 
@@ -149,7 +122,7 @@ describe('Verify 400 response for Empty fields and unsupported Payment Scenarios
   ];
 
   emptyFieldTests.forEach((test) => {
-    it(`Verify API response for ${test.title}`, () => {
+    it(`Verify 400 response for ${test.title}`, () => {
       cy.request({
         method: 'POST',
         url: paymentApiUrl,
@@ -178,4 +151,407 @@ describe('Verify 400 response for Empty fields and unsupported Payment Scenarios
   });
 });
 
+describe('Decline Card Payment', () => {
+  testData.declineCard.forEach((card) => {
+    describe(`Verify Decline Payment -  ${card.title}`, () => {
+      it(`Create a Payment Method with ${card.title}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+          },
+          form: true,
+          body: {
+            type: 'card',
+            'card[number]': card.card_number,
+            'card[exp_month]': '12',
+            'card[exp_year]': '2025',
+            'card[cvc]': '123',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property('id');
+          paymentMethodId = response.body.id;
+          cy.task('log', response.body);
+          cy.task('log', paymentMethodId);
+          Cypress.env('paymentMethodId', paymentMethodId);
+          cy.wait(500);
+        });
+      });
 
+      it(`Verify 500 response for ${card.title}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': `${Cypress.env('x-api-key')}`,
+          },
+          body: {
+            merchantId: 'unique_merchant_identifier',
+            amount: 120000,
+            transactionType: 'CHARGE',
+            paymentMethod: 'CARD',
+            customerPhone: '3333',
+            cardData: {
+              paymentMethodId: Cypress.env('paymentMethodId'),
+              cardName: card.title,
+              destinationId: 'acct_1QmXUNPsBq4jlflt',
+              currency: 'eur',
+            },
+            metaData: {
+              deviceId: 'device_identifier',
+              location: 'transaction_location',
+              timestamp: 'transaction_timestamp',
+            },
+          },
+          failOnStatusCode: false,
+        }).then((response) => {
+          cy.task('log', response.body);
+          expect(response.status).to.eq(500);
+          expect(response.body.details).to.include(card.decline_reason);
+        });
+      });
+    });
+  });
+
+  testData.declineCardIncorrectNumber.forEach((card) => {
+    describe(`Verify Decline Payment -  ${card.title}`, () => {
+      it(`verify 402 response for ${card.title}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+          },
+          form: true,
+          body: {
+            type: 'card',
+            'card[number]': card.card_number,
+            'card[exp_month]': '12',
+            'card[exp_year]': '2025',
+            'card[cvc]': '123',
+          },
+          failOnStatusCode: false,
+        }).then((response) => {
+          expect(response.status).to.eq(402);
+          cy.task('log', response.body);
+          cy.wait(500);
+        });
+      });
+    });
+  });
+});
+
+describe('Fraud Prevention Card Payment', () => {
+  testData.fraudPrevention.forEach((card) => {
+    describe(`Verify Fraud Payment -  ${card.type}`, () => {
+      it(`Create a Payment Method with ${card.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+          },
+          form: true,
+          body: {
+            type: 'card',
+            'card[number]': card.number,
+            'card[exp_month]': '12',
+            'card[exp_year]': '2025',
+            'card[cvc]': '123',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property('id');
+          paymentMethodId = response.body.id;
+          cy.task('log', response.body);
+          cy.task('log', paymentMethodId);
+          Cypress.env('paymentMethodId', paymentMethodId);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify 500 response for ${card.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': `${Cypress.env('x-api-key')}`,
+          },
+          body: {
+            merchantId: 'unique_merchant_identifier',
+            amount: 120000,
+            transactionType: 'CHARGE',
+            paymentMethod: 'CARD',
+            customerPhone: '3333',
+            cardData: {
+              paymentMethodId: Cypress.env('paymentMethodId'),
+              cardName: card.type,
+              destinationId: 'acct_1QmXUNPsBq4jlflt',
+              currency: 'eur',
+            },
+            metaData: {
+              deviceId: 'device_identifier',
+              location: 'transaction_location',
+              timestamp: 'transaction_timestamp',
+            },
+          },
+          failOnStatusCode: false,
+        }).then((response) => {
+          cy.task('log', response.body);
+          expect(response.status).to.eq(500);
+          expect(response.body.details).to.include(card.decline_details);
+        });
+      });
+    });
+  });
+
+  testData.elevatedRisk.forEach((card) => {
+    describe(`Verify Fraud Payment -  ${card.type}`, () => {
+      it(`Create a Payment Method with ${card.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+          },
+          form: true,
+          body: {
+            type: 'card',
+            'card[number]': card.number,
+            'card[exp_month]': '12',
+            'card[exp_year]': '2025',
+            'card[cvc]': '123',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property('id');
+          paymentMethodId = response.body.id;
+          cy.task('log', response.body);
+          cy.task('log', paymentMethodId);
+          Cypress.env('paymentMethodId', paymentMethodId);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify 200 response for ${card.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': `${Cypress.env('x-api-key')}`,
+          },
+          body: {
+            merchantId: 'unique_merchant_identifier',
+            amount: 120000,
+            transactionType: 'CHARGE',
+            paymentMethod: 'CARD',
+            customerPhone: '3333',
+            cardData: {
+              paymentMethodId: Cypress.env('paymentMethodId'),
+              cardName: card.type,
+              destinationId: 'acct_1QmXUNPsBq4jlflt',
+              currency: 'eur',
+            },
+            metaData: {
+              deviceId: 'device_identifier',
+              location: 'transaction_location',
+              timestamp: 'transaction_timestamp',
+            },
+          },
+        }).then((response) => {
+          cy.task('log', response.body);
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property(
+            'message',
+            'Payment processed successfully'
+          );
+          expect(response.body).to.have.property('transactionDetails');
+          expect(response.body.transactionDetails).to.have.property(
+            'transactionId'
+          );
+          expect(response.body.transactionDetails).to.have.property(
+            'status',
+            'succeeded'
+          );
+
+          transactionId = response.body.transactionDetails.transactionId;
+          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
+          Cypress.env('transactionId', transactionId);
+          cy.wait(500);
+        });
+      });
+
+      it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': Cypress.env('x-api-key'),
+          },
+        }).then((response) => {
+          cy.task('log', response.body);
+          expect(response.status).to.eq(200);
+          expect(
+            response.body.transaction.Item.paymentProviderResponse.outcome
+          ).to.have.property('risk_level', 'elevated');
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
+        });
+        cy.wait(500);
+      });
+
+      it(`Verify Payment on Stripe for ${card.type}`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('uniqueId')}`, // Or /charges/{charge_id}
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+
+          expect(response.body).to.have.property('status', 'succeeded');
+          expect(response.body).to.have.property('amount', 120000);
+          expect(response.body).to.have.property('currency', 'eur');
+          expect(response.body.transfer_data).to.have.property(
+            'amount',
+            117600
+          );
+        });
+      });
+    });
+  });
+
+  testData.CVC_Check_Fails.forEach((card) => {
+    describe(`Verify Fraud Payment -  ${card.type}`, () => {
+      it(`Create a Payment Method with ${card.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+          },
+          form: true,
+          body: {
+            type: 'card',
+            'card[number]': card.number,
+            'card[exp_month]': '12',
+            'card[exp_year]': '2025',
+            'card[cvc]': '123',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property('id');
+          paymentMethodId = response.body.id;
+          cy.task('log', response.body);
+          cy.task('log', paymentMethodId);
+          Cypress.env('paymentMethodId', paymentMethodId);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify 200 response for ${card.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': `${Cypress.env('x-api-key')}`,
+          },
+          body: {
+            merchantId: 'unique_merchant_identifier',
+            amount: 120000,
+            transactionType: 'CHARGE',
+            paymentMethod: 'CARD',
+            customerPhone: '3333',
+            cardData: {
+              paymentMethodId: Cypress.env('paymentMethodId'),
+              cardName: card.type,
+              destinationId: 'acct_1QmXUNPsBq4jlflt',
+              currency: 'eur',
+            },
+            metaData: {
+              deviceId: 'device_identifier',
+              location: 'transaction_location',
+              timestamp: 'transaction_timestamp',
+            },
+          },
+        }).then((response) => {
+          cy.task('log', response.body);
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property(
+            'message',
+            'Payment processed successfully'
+          );
+          expect(response.body).to.have.property('transactionDetails');
+          expect(response.body.transactionDetails).to.have.property(
+            'transactionId'
+          );
+          expect(response.body.transactionDetails).to.have.property(
+            'status',
+            'succeeded'
+          );
+
+          transactionId = response.body.transactionDetails.transactionId;
+          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
+          Cypress.env('transactionId', transactionId);
+          cy.wait(500);
+        });
+      });
+
+      it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': Cypress.env('x-api-key'),
+          },
+        }).then((response) => {
+          cy.task('log', response.body);
+          expect(response.status).to.eq(200);
+          expect(
+            response.body.transaction.Item.paymentProviderResponse
+              .payment_method_details.card.checks
+          ).to.have.property('cvc_check', 'fail');
+
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
+        });
+        cy.wait(500);
+      });
+
+      it(`Verify Payment on Stripe for ${card.type}`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('uniqueId')}`, // Or /charges/{charge_id}
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+
+          expect(response.body).to.have.property('status', 'succeeded');
+          expect(response.body).to.have.property('amount', 120000);
+          expect(response.body).to.have.property('currency', 'eur');
+          expect(response.body.transfer_data).to.have.property(
+            'amount',
+            117600
+          );
+        });
+      });
+    });
+  });
+});
