@@ -58,7 +58,7 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     statusCode: 400,
     retryable: true,
     suggestedAction:
-      'Inform the user about rejection and allow them to retry if necessary.',
+      'Inform the payer about rejection and allow them to retry if necessary.',
   },
   [MTNRequestToPayErrorReason.EXPIRED]: {
     label: 'PayerExpired',
@@ -67,7 +67,7 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     statusCode: 408,
     retryable: true,
     suggestedAction:
-      'Notify the user about expiration and initiate a new payment request if required.',
+      'Notify the payer about expiration and initiate a new payment request if required.',
   },
   [MTNRequestToPayErrorReason.ONGOING]: {
     label: 'PayerOngoing',
@@ -85,7 +85,7 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     statusCode: 503,
     retryable: true,
     suggestedAction:
-      'Notify the user about the delay and retry status checks periodically until resolved.',
+      'Notify the payer about the delay and retry status checks periodically until resolved.',
   },
   [MTNRequestToPayErrorReason.NOT_FOUND]: {
     label: 'PayerNotFound',
@@ -140,7 +140,7 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     statusCode: 503,
     retryable: true,
     suggestedAction:
-      'Retry after a delay; notify users of potential downtime if retries fail consistently.',
+      'Retry after a delay; notify payer of potential downtime if retries fail consistently.',
   },
   [MTNRequestToPayErrorReason.INTERNAL_PROCESSING_ERROR]: {
     label: 'RequestToPayPayerInternalProcessingError',
@@ -268,7 +268,7 @@ export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
     statusCode: 503,
     retryable: true,
     suggestedAction:
-      'Retry after a delay; notify users of potential downtime if retries fail consistently.',
+      'Retry after a delay; notify payee of potential downtime if retries fail consistently.',
   },
 };
 

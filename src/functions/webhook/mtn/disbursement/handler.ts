@@ -87,8 +87,8 @@ export class MTNDisbursementWebhookService {
       });
 
       return {
-        status: 'FAILED',
-        paymentProviderResponse: {
+        settlementStatus: 'FAILED',
+        settlementResponse: {
           status: transactionStatus.status,
           errorMessage: enhancedError.message,
           reason: transactionStatus.reason as string,
