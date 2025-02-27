@@ -93,6 +93,9 @@ export class MTNPaymentWebhookService {
           transactionId,
         });
       }
+      this.logger.info('[DEBUG] Result from db', {
+        result,
+      });
 
       const uniqueId = await this.mtnService.initiateTransfer(
         amount,
@@ -367,7 +370,7 @@ export class MTNPaymentWebhookService {
             currency: webhookEvent.currency,
             payer: {
               partyIdType: 'MSISDN',
-              partyId: '94713579023', // todo: hardcoded for now
+              partyId: result.Item?.merchantMobileNo,
             },
             payeeNote: 'PayQAM payment request',
             payerMessage: 'Thank you for your payment',

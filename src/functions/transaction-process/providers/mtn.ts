@@ -128,8 +128,8 @@ export class MtnPaymentService {
       headers.Authorization = `Bearer ${token.access_token}`;
     }
 
-    // Add reference ID if provided, otherwise generate new one
-    headers['X-Reference-Id'] = transactionId || uuidv4();
+    // Add reference ID if provided
+    if (transactionId) headers['X-Reference-Id'] = transactionId;
 
     // Add callback URL based on transaction type
     if (process.env.MTN_PAYMENT_WEBHOOK_URL) {
@@ -522,11 +522,11 @@ export class MtnPaymentService {
     });
 
     try {
-      const axiosInstance = await this.createAxiosInstance(type, transactionId);
+      const axiosInstance = await this.createAxiosInstance(type);
       const endpoint =
         type === TransactionType.PAYMENT
           ? `/collection/v1_0/requesttopay/${transactionId}`
-          : `/disbursement/v2_0/transfer/${transactionId}`;
+          : `/disbursement/v1_0/transfer/${transactionId}`;
 
       this.logger.info('[DEBUG] Making status check request', {
         transactionId,
@@ -574,8 +574,10 @@ export class MtnPaymentService {
     });
 
     try {
+      const transactionId = uuidv4();
       const axiosInstance = await this.createAxiosInstance(
-        TransactionType.TRANSFER
+        TransactionType.TRANSFER,
+        transactionId
       );
 
       // Log the request details (mask sensitive data)
@@ -585,7 +587,6 @@ export class MtnPaymentService {
         recipientMobileNo: recipientMobileNo.replace(/\d(?=\d{4})/g, '*'),
       });
 
-      const transactionId = uuidv4();
       const response = await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,

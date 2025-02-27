@@ -7,7 +7,10 @@ import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBService } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-import { MtnPaymentService } from '../../../transaction-process/providers';
+import {
+  MtnPaymentService,
+  TransactionType,
+} from '../../../transaction-process/providers';
 import { WebhookEvent } from '../../../../types/mtn';
 
 class WebhookError extends Error {
@@ -184,8 +187,7 @@ export class MTNDisbursementWebhookService {
 
       const transactionId = result.Items[0].transactionId;
 
-      // TODO: Check again with MTN?
-      /*this.logger.info('[DEBUG] Checking disbursement status with MTN', {
+      this.logger.info('[DEBUG] Checking disbursement status with MTN', {
         externalId,
       });
 
@@ -196,9 +198,8 @@ export class MTNDisbursementWebhookService {
 
       this.logger.info('[DEBUG] Disbursement status from MTN', {
         externalId,
-        status,
+        transactionStatus,
       });
-*/
       // Only update if the status is successful
       if (status === 'SUCCESSFUL') {
         this.logger.info('[DEBUG] Processing successful disbursement', {
