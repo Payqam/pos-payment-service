@@ -1,0 +1,333 @@
+{
+  "testCard": [
+    {"type": "Visa", "number": "4242424242424242"}
+  ],
+
+  "testCards": [
+    { "type": "Visa", "number": "4242424242424242" },
+    { "type": "Visa (debit)", "number": "4000056655665556" },
+    { "type": "MasterCard", "number": "5555555555554444" },
+    { "type": "MasterCard (2-series)", "number": "2223003122003222" },
+    { "type": "MasterCard (debit)", "number": "5200828282828210" },
+    { "type": "MasterCard (prepaid)", "number": "5105105105105100" },
+    { "type": "American Express", "number": "378282246310005" },
+    { "type": "American Express", "number": "371449635398431" },
+    { "type": "Discover", "number": "6011111111111117" },
+    { "type": "Discover", "number": "6011000990139424" },
+    { "type": "Discover (debit)", "number": "6011981111111113" },
+    { "type": "Diners Club", "number": "3056930009020004" },
+    { "type": "Diners Club (14-digit card)", "number": "36227206271667" },
+    { "type": "BCcard and DinaCard", "number": "6555900000604105" },
+    { "type": "JCB", "number": "3566002020360505" },
+    { "type": "UnionPay", "number": "6200000000000005" },
+    { "type": "UnionPay (19-digit card)", "number": "6205500000000000004" }
+  ],
+
+  "testCoBrand": [
+    { "type": "Cartes Bancaires/Visa", "number": "4000002500001001" },
+    { "type": "Cartes Bancaires/Mastercard", "number": "5555552500001001" },
+    { "type": "eftpos Australia/Visa", "number": "4000050360000001" },
+    { "type": "eftpos Australia/Mastercard", "number": "5555050360000080" }
+  ],
+
+  "testCardsbyAmericas": [
+    { "type": "United States (US) - Visa", "number": "4242424242424242" },
+    { "type": "Argentina (AR) - Visa", "number": "4000000320000021" },
+    { "type": "Brazil (BR) - Visa", "number": "4000000760000002" },
+    { "type": "Canada (CA) - Visa", "number": "4000001240000000" },
+    { "type": "Chile (CL) - Visa", "number": "4000001520000001" },
+    { "type": "Colombia (CO) - Visa", "number": "4000001700000003" },
+    { "type": "Costa Rica (CR) - Visa", "number": "4000001880000005" },
+    { "type": "Ecuador (EC) - Visa", "number": "4000002180000000" },
+    { "type": "Mexico (MX) - Visa", "number": "4000004840008001" },
+    { "type": "Mexico (MX) - Carnet", "number": "5062210000000009" },
+    { "type": "Panama (PA) - Visa", "number": "4000005910000000" },
+    { "type": "Paraguay (PY) - Visa", "number": "4000006000000066" },
+    { "type": "Peru (PE) - Visa", "number": "4000006040000068" },
+    { "type": "Uruguay (UY) - Visa", "number": "4000008580000003" }
+  ],
+
+  "testCardsbyEurope&MiddleEast": [
+    { "type": "United Arab Emirates (AE) - Visa", "number": "4000007840000001" },
+    { "type": "United Arab Emirates (AE) - Mastercard", "number": "5200007840000022" },
+    { "type": "Austria (AT) - Visa", "number": "4000000400000008" },
+    { "type": "Belgium (BE) - Visa", "number": "4000000560000004" },
+    { "type": "Bulgaria (BG) - Visa", "number": "4000001000000000" },
+    { "type": "Belarus (BY) - Visa", "number": "4000001120000005" },
+    { "type": "Croatia (HR) - Visa", "number": "4000001910000009" },
+    { "type": "Cyprus (CY) - Visa", "number": "4000001960000008" },
+    { "type": "Czech Republic (CZ) - Visa", "number": "4000002030000002" },
+    { "type": "Denmark (DK) - Visa", "number": "4000002080000001" },
+    { "type": "Estonia (EE) - Visa", "number": "4000002330000009" },
+    { "type": "Finland (FI) - Visa", "number": "4000002460000001" },
+    { "type": "France (FR) - Visa", "number": "4000002500000003" },
+    { "type": "Germany (DE) - Visa", "number": "4000002760000016" },
+    { "type": "Gibraltar (GI) - Visa", "number": "4000002920000005" },
+    { "type": "Greece (GR) - Visa", "number": "4000003000000030" },
+    { "type": "Hungary (HU) - Visa", "number": "4000003480000005" },
+    { "type": "Ireland (IE) - Visa", "number": "4000003720000005" },
+    { "type": "Italy (IT) - Visa", "number": "4000003800000008" },
+    { "type": "Latvia (LV) - Visa", "number": "4000004280000005" },
+    { "type": "Liechtenstein (LI) - Visa", "number": "4000004380000004" },
+    { "type": "Lithuania (LT) - Visa", "number": "4000004400000000" },
+    { "type": "Luxembourg (LU) - Visa", "number": "4000004420000006" },
+    { "type": "Malta (MT) - Visa", "number": "4000004700000007" },
+    { "type": "Netherlands (NL) - Visa", "number": "4000005280000002" },
+    { "type": "Norway (NO) - Visa", "number": "4000005780000007" },
+    { "type": "Poland (PL) - Visa", "number": "4000006160000005" },
+    { "type": "Portugal (PT) - Visa", "number": "4000006200000007" },
+    { "type": "Romania (RO) - Visa", "number": "4000006420000001" },
+    { "type": "Saudi Arabia (SA) - Visa", "number": "4000006820000007" },
+    { "type": "Slovenia (SI) - Visa", "number": "4000007050000006" },
+    { "type": "Slovakia (SK) - Visa", "number": "4000007030000001" },
+    { "type": "Spain (ES) - Visa", "number": "4000007240000007" },
+    { "type": "Sweden (SE) - Visa", "number": "4000007520000008" },
+    { "type": "Switzerland (CH) - Visa", "number": "4000007560000009" },
+    { "type": "United Kingdom (GB) - Visa", "number": "4000008260000000" },
+    { "type": "United Kingdom (GB) - Visa (debit)", "number": "4000058260000005" },
+    { "type": "United Kingdom (GB) - Mastercard", "number": "5555558265554449" }
+  ],
+
+  "testCardsbyAsiaPacific": [
+    { "type": "Australia (AU) - Visa", "number": "4000000360000006" },
+    { "type": "China (CN) - Visa", "number": "4000001560000002" },
+    { "type": "Hong Kong (HK) - Visa", "number": "4000003440000004" },
+    { "type": "India (IN) - Visa", "number": "4000003560000008" },
+    { "type": "Japan (JP) - Visa", "number": "4000003920000003" },
+    { "type": "Japan (JP) - JCB", "number": "3530111333300000" },
+    { "type": "Malaysia (MY) - Visa", "number": "4000004580000002" },
+    { "type": "New Zealand (NZ) - Visa", "number": "4000005540000008" },
+    { "type": "Singapore (SG) - Visa", "number": "4000007020000003" },
+    { "type": "Taiwan (TW) - Visa", "number": "4000001580000008" },
+    { "type": "Thailand (TH) - Visa (credit)", "number": "4000007640000003" }
+  ],
+
+  "testCardsRequiresAction": [
+    { "type": "UnionPay (debit)", "number": "6200000000000047" }
+  ],
+
+  "testCardsRequiresActions": [
+    { "type": "Thailand (TH) - Visa (debit)", "number": "4000057640000008" }
+  ],
+
+  "testCardsFraudulentAndDisputes": [
+    { "type": "Fraudulent", "number": "4000000000000259" },
+    { "type": "Multiple disputes", "number": "4000000404000079" },
+    { "type": "Visa Compelling Evidence 3.0", "number": "4000000404000038" },
+    { "type": "Visa compliance", "number": "4000008400000779" }
+  ],
+
+  "testCardsNotReceived": [
+    { "type": "Not received", "number": "4000000000002685" }
+  ],
+
+  "testCardsInquiry": [
+    { "type": "Inquiry", "number": "4000000000001976" }
+  ],
+
+  "testCardsWarning": [
+    { "type": "Warning", "number": "4000000000005423" }
+  ],
+
+  "testCardsRefund": [
+    { "type": "Asynchronous success", "number": "4000000000007726" },
+    { "type": "Asynchronous failure", "number": "4000000000005126" }
+  ],
+
+  "testCardAvailable": [
+    { "type": "US Card", "number": "4000000000000077" },
+    { "type": "International Card", "number": "4000003720000278" }
+  ],
+
+  "invalidCardTests":[
+  {
+    "title": "Invalid card number",
+    "body": { "card[number]": "1234567890123456" },
+    "code": "incorrect_number",
+    "message": "Your card number is incorrect."
+  },
+  {
+    "title": "Empty card number",
+    "body": { "card[number]": " " },
+    "code": "invalid_number",
+    "message": "The card number is not a valid credit card number."
+  },
+  {
+    "title": "Short-length card number",
+    "body": { "card[number]": "424242" },
+    "code": "invalid_number",
+    "message": "The card number is not a valid credit card number."
+  },
+  {
+    "title": "Extra-long card number",
+    "body": { "card[number]": "42424242424242424242" },
+    "code": "incorrect_number",
+    "message": "Your card number is incorrect."
+  },
+  {
+    "title": "Alphanumeric card number",
+    "body": { "card[number]": "4242abcd4242abcd" },
+    "code": "incorrect_number",
+    "message": "Your card number is incorrect."
+  },
+  {
+    "title": "Invalid expiry month",
+    "body": { "card[exp_month]": "13" },
+    "code": "invalid_expiry_month",
+    "message": "Your card's expiration month is invalid."
+  },
+  {
+    "title": "Expiry year in the past",
+    "body": { "card[exp_year]": "2020" },
+    "code": "invalid_expiry_year",
+    "message": "Your card's expiration year is invalid."
+  },
+  {
+    "title": "Just-expired card",
+    "body": { "card[exp_month]": "10", "card[exp_year]": "2023" },
+    "code": "invalid_expiry_year",
+    "message": "Your card's expiration year is invalid."
+  },
+  {
+    "title": "Maximum valid expiry year",
+    "body": { "card[exp_year]": "2090" },
+    "code": "invalid_expiry_year",
+    "message": "Your card's expiration year is invalid."
+  },
+  {
+    "title": "Invalid CVC number",
+    "body": { "card[cvc]": "12a" },
+    "code": "invalid_cvc",
+    "message": "Your card's security code is invalid."
+  },
+  {
+    "title": "CVC longer than allowed",
+    "body": { "card[cvc]": "12345" },
+    "code": "invalid_cvc",
+    "message": "Your card's security code is invalid."
+  },
+  {
+    "title": "Empty CVC",
+    "body": { "card[cvc]": " " },
+    "code": "invalid_cvc",
+    "message": "Your card's security code is invalid."
+  },
+  {
+    "title": "CVC with letters/special characters",
+    "body": { "card[cvc]": "12$%" },
+    "code": "invalid_cvc",
+    "message": "Your card's security code is invalid."
+  }
+],
+
+  "declineCard":[
+  {
+    "title": "Generic decline",
+    "card_number": "4000000000000002",
+    "decline_reason": "Your card was declined."
+  },
+  {
+    "title": "Insufficient funds decline",
+    "card_number": "4000000000009995",
+    "decline_reason": "Your card has insufficient funds."
+  },
+  {
+    "title": "Lost card decline",
+    "card_number": "4000000000009987",
+    "decline_reason": "Your card was declined."
+  },
+  {
+    "title": "Stolen card decline",
+    "card_number": "4000000000009979",
+    "decline_reason": "Your card was declined."
+  },
+  {
+    "title": "Expired card decline",
+    "card_number": "4000000000000069",
+    "decline_reason": "Your card has expired."
+  },
+  {
+    "title": "Incorrect CVC decline",
+    "card_number": "4000000000000127",
+    "decline_reason": "Your card's security code is incorrect."
+  },
+  {
+    "title": "Processing error decline",
+    "card_number": "4000000000000119",
+    "decline_reason": "An error occurred while processing your card. Try again in a little bit."
+  },
+
+  {
+    "title": "Exceeding velocity limit decline",
+    "card_number": "4000000000006975",
+    "decline_reason": "Your card was declined for making repeated attempts too frequently or exceeding its amount limit."
+  },
+    {
+      "title": "Decline after attaching",
+      "card_number": "4000000000000341",
+      "decline_reason": "Your card was declined"
+    }
+  ],
+  "declineCardIncorrectNumber":[
+{
+  "title": "Incorrect number decline",
+  "card_number": "4242424242424241",
+  "decline_reason": "The provided PaymentMethod was previously used with a PaymentIntent without Customer attachment, shared with a connected account without Customer attachment, or was detached from a Customer. It may not be used again. To use a PaymentMethod multiple times, you must attach it to a Customer first."
+}
+    ],
+
+  "fraudPrevention": [
+    {
+      "type": "Always blocked - Highest risk",
+      "number": "4100000000000019",
+      "decline_details": "Your card was declined."
+    },
+    {
+      "type": "Elevated risk - Might be blocked",
+      "number": "4000000000004954",
+      "decline_details": "Your card was declined."
+    }
+    ],
+
+  "elevatedRisk": [
+    {
+      "type": "Elevated risk - Might be queued for review",
+      "number": "4000000000009235",
+      "property": "risk_level",
+      "value": "elevated",
+      "response": "response.body.transaction.Item.paymentProviderResponse.outcome"
+    }
+  ],
+
+  "CVC_Check_Fails": [
+    {
+      "type": "CVC check fails",
+      "number": "4000000000000101",
+      "decline_details": "Your card was declined."
+    }
+  ],
+
+  "fraud_Address": [
+    {
+      "type": "Postal code check fails",
+      "number": "4000000000000036",
+      "decline_details": "Your card was declined."
+    },
+    {
+      "type": "Line1 check fails",
+      "number": "4000000000000028",
+      "decline_details": "Your card was declined."
+    },
+    {
+      "type": "Address checks fail",
+      "number": "4000000000000010",
+      "decline_details": "Your card was declined."
+    },
+    {
+      "type": "Address unavailable",
+      "number": "4000000000000044",
+      "decline_details": "Your card was declined."
+    }
+  ]
+}
+
