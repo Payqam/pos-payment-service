@@ -145,27 +145,6 @@ export class DynamoDBService {
   }
 
   /**
-   * Updates a payment record in the DynamoDB table using transaction ID.
-   * This method first retrieves the record using GSI, then updates it using the primary key.
-   *
-   * @param transactionId - The transaction ID to update
-   * @param updateFields - Fields to update (null values will be removed)
-   */
-  public async updatePaymentRecordByTransactionId<U>(
-    transactionId: string,
-    updateFields: U
-  ): Promise<void> {
-    // First get the record using GSI to obtain primary key
-    const result = await this.getItem({ transactionId });
-    if (!result) {
-      throw new Error(`Transaction not found: ${transactionId}`);
-    }
-
-    // Update the record using primary key
-    await this.updatePaymentRecord({ transactionId }, updateFields);
-  }
-
-  /**
    * Retrieves an item from the DynamoDB table using GetItemCommand.
    *
    * @param key - The primary key of the record to retrieve.

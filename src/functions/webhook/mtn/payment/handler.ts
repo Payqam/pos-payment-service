@@ -221,6 +221,7 @@ export class MTNPaymentWebhookService {
         status: 'FAILED',
         paymentProviderResponse: {
           status: transactionStatus.status,
+          errorMessage: enhancedError.message,
           reason: transactionStatus.reason as string,
           retryable: errorMapping.retryable,
           suggestedAction: errorMapping.suggestedAction,

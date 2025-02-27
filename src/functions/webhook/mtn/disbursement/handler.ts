@@ -11,7 +11,15 @@ import {
   MtnPaymentService,
   TransactionType,
 } from '../../../transaction-process/providers';
-import { WebhookEvent } from '../../../../types/mtn';
+import {
+  MTN_TRANSFER_ERROR_MAPPINGS,
+  MTNTransferErrorReason,
+  WebhookEvent,
+} from '../../../../types/mtn';
+import {
+  EnhancedError,
+  ErrorCategory,
+} from '../../../../../utils/errorHandler';
 
 class WebhookError extends Error {
   constructor(
@@ -42,40 +50,99 @@ export class MTNDisbursementWebhookService {
   }
 
   /**
+   * Handles failed payment processing
+   * @throws WebhookError if processing fails
+   */
+  private async handleFailedTransfer(
+    transactionId: string,
+    transactionStatus: WebhookEvent
+  ): Promise<Record<string, unknown>> {
+    this.logger.info('[DEBUG] Handling failed transfer', {
+      transactionId,
+      status: transactionStatus.status,
+      reason: transactionStatus.reason,
+    });
+
+    try {
+      const errorReason = transactionStatus.reason;
+      const errorMapping =
+        MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+
+      // Create enhanced error for logging and tracking
+      const enhancedError = new EnhancedError(
+        errorMapping.statusCode as unknown as string,
+        ErrorCategory.PROVIDER_ERROR,
+        errorMapping.message,
+        {
+          retryable: errorMapping.retryable,
+          suggestedAction: errorMapping.suggestedAction,
+          httpStatus: errorMapping.statusCode,
+          originalError: transactionStatus.reason,
+        }
+      );
+
+      this.logger.error('[DEBUG] Transfer failed with enhanced error', {
+        error: enhancedError,
+        transactionId,
+      });
+
+      return {
+        status: 'FAILED',
+        paymentProviderResponse: {
+          status: transactionStatus.status,
+          errorMessage: enhancedError.message,
+          reason: transactionStatus.reason as string,
+          retryable: errorMapping.retryable,
+          suggestedAction: errorMapping.suggestedAction,
+          httpStatus: errorMapping.statusCode,
+          errorCategory: enhancedError.category,
+        },
+      };
+    } catch (error) {
+      this.logger.error('[DEBUG] Error in handleFailedTransfer', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Updates the settlement status in DynamoDB
    * @throws WebhookError if update fails
    */
   private async updateSettlementStatus(
     transactionId: string,
-    status: string,
-    webhookEvent: WebhookEvent
+    transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     this.logger.info('[DEBUG] Updating settlement status', {
       transactionId,
-      status,
-      webhookEvent,
+      transactionStatusResponse,
     });
 
     try {
-      const updateData = {
-        settlementStatus: status,
-        settlementResponse: {
-          status: webhookEvent.status,
-          reason: webhookEvent.reason || '',
-          financialTransactionId: webhookEvent.financialTransactionId,
-          payeeNote: webhookEvent.payeeNote || '',
-          payerMessage: webhookEvent.payerMessage || '',
-        },
-      };
+      const updateData =
+        transactionStatusResponse.status === 'SUCCESSFUL'
+          ? {
+              settlementStatus: transactionStatusResponse.status,
+              settlementResponse: {
+                status: transactionStatusResponse.status,
+                financialTransactionId:
+                  transactionStatusResponse.financialTransactionId,
+                payeeNote: transactionStatusResponse.payeeNote || '',
+                payerMessage: transactionStatusResponse.payerMessage || '',
+              },
+            }
+          : await this.handleFailedTransfer(
+              transactionId,
+              transactionStatusResponse
+            );
 
-      await this.dbService.updatePaymentRecordByTransactionId(
-        transactionId,
-        updateData
-      );
+      await this.dbService.updatePaymentRecord({ transactionId }, updateData);
 
       this.logger.info('[DEBUG] Settlement status updated successfully', {
         transactionId,
-        status,
+        transactionStatusResponse,
       });
     } catch (error) {
       this.logger.error('[DEBUG] Failed to update settlement status', {
@@ -163,7 +230,7 @@ export class MTNDisbursementWebhookService {
       });
 
       const webhookEvent = this.parseWebhookEvent(event.body);
-      const { externalId, status } = webhookEvent;
+      const { externalId } = webhookEvent;
 
       this.logger.info('[DEBUG] Parsed disbursement webhook event', {
         webhookEvent,
@@ -200,30 +267,8 @@ export class MTNDisbursementWebhookService {
         externalId,
         transactionStatus,
       });
-      // Only update if the status is successful
-      if (status === 'SUCCESSFUL') {
-        this.logger.info('[DEBUG] Processing successful disbursement', {
-          externalId,
-          status,
-        });
 
-        await this.updateSettlementStatus(transactionId, status, webhookEvent);
-
-        await this.publishStatusUpdate(
-          transactionId,
-          externalId,
-          status,
-          webhookEvent.amount,
-          webhookEvent.currency
-        );
-      } else {
-        this.logger.warn('[DEBUG] Disbursement status not successful', {
-          externalId,
-          status,
-        });
-
-        await this.updateSettlementStatus(transactionId, status, webhookEvent);
-      }
+      await this.updateSettlementStatus(transactionId, transactionStatus);
 
       return {
         statusCode: 200,

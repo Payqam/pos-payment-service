@@ -4,13 +4,7 @@ import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { CreatePaymentRecord } from '../../../model';
-import {
-  MTNRequestToPayErrorCode,
-  MTNErrorResponse,
-  MTN_ERROR_MAPPINGS,
-  WebhookEvent,
-} from '../../../types/mtn';
-import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
+import { WebhookEvent } from '../../../types/mtn';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
@@ -474,34 +468,8 @@ export class MtnPaymentService {
         transactionId,
       });
 
-      if (axios.isAxiosError(error)) {
-        const errorResponse = error.response?.data as MTNErrorResponse;
-        const errorCode = errorResponse?.errorCode as MTNRequestToPayErrorCode;
-
-        if (errorCode && MTN_ERROR_MAPPINGS[errorCode]) {
-          const errorMapping = MTN_ERROR_MAPPINGS[errorCode];
-          this.logger.error('MTN specific error encountered', {
-            errorCode,
-            errorMapping,
-            transactionId,
-          });
-
-          throw new EnhancedError(
-            errorMapping.label,
-            ErrorCategory.PROVIDER_ERROR,
-            errorMapping.message,
-            {
-              retryable: errorMapping.retryable,
-              suggestedAction: errorMapping.suggestedAction,
-              originalError: errorResponse,
-              httpStatus: errorMapping.statusCode,
-            }
-          );
-        }
-      }
-
       // If not a mapped MTN error, throw the original error
-      throw error;
+      throw new Error('Failed to process the payment');
     }
   }
 
