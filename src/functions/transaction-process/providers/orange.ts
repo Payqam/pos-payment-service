@@ -1,17 +1,15 @@
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-// import { CacheService } from '../../../services/cacheService';
-import { v4 as uuidv4 } from 'uuid';
+// import { SNSService } from '../../../services/snsService';
 import { CreatePaymentRecord } from '../../../model';
+import { v4 as uuidv4 } from 'uuid';
 import axios, { AxiosInstance } from 'axios';
-import * as querystring from 'querystring';
+import querystring from 'querystring';
 import {
   OrangeToken,
   PaymentInitResponse,
-  PaymentResponse,
-  OrangePaymentRecord,
-  TransactionType
+  PaymentResponse
 } from '../interfaces/orange';
 
 /**
@@ -22,7 +20,7 @@ export class OrangePaymentService {
   private readonly logger: Logger;
   private readonly secretsManagerService: SecretsManagerService;
   private readonly dbService: DynamoDBService;
-  // private readonly cacheService: CacheService;
+  // private readonly snsService: SNSService;
   private readonly baseUrl: string;
   private readonly tokenUrl: string;
   private currentToken: OrangeToken | null;
@@ -32,7 +30,7 @@ export class OrangePaymentService {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    // this.cacheService = new CacheService();
+    // this.snsService = new SNSService();
     this.baseUrl = process.env.ORANGE_API_BASE_URL || 'https://omdeveloper-gateway.orange.cm';
     this.tokenUrl = process.env.ORANGE_TOKEN_URL || 'https://omdeveloper.orange.cm/oauth2/token';
     this.currentToken = null;
@@ -220,14 +218,14 @@ export class OrangePaymentService {
       const payToken = await this.initiateMerchantPayment();
 
       // Step 2: Process the payment
-      const orderId = uuidv4().replace(/-/g, '').substring(0, 8);
+      const transactionId = uuidv4().replace(/-/g, '').slice(0, 20);
       const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
         notifUrl: notifyUrl,
         channelUserMsisdn: merchantPhone,
         amount,
         subscriberMsisdn: customerPhone,
         pin,
-        orderId,
+        orderId: transactionId,
         description: metaData?.description || 'PayQam payment',
         payToken
       });
@@ -235,34 +233,31 @@ export class OrangePaymentService {
       const paymentData = response.data.data;
 
       // Create payment record
-      const record: OrangePaymentRecord = {
-        transactionId: paymentData.txnid,
+      const record: CreatePaymentRecord = {
+        transactionId: transactionId,
         merchantId,
         amount,
         paymentMethod: 'ORANGE',
-        createdOn: Math.floor(Date.now() / 1000),
         status: paymentData.status,
-        paymentProviderResponse: paymentData,
+        currency,
+        customerPhone,
+        GSI1SK: Math.floor(Date.now() / 1000),
+        GSI2SK: Math.floor(Date.now() / 1000),
+        exchangeRate: 'exchangeRate',
+        processingFee: 'processingFee',
+        netAmount: 'netAmount',
+        externalTransactionId: paymentData.txnid,
+        uniqueId: payToken,
         metaData: {
           ...metaData,
           payToken,
-          orderId
+          txnid: paymentData.txnid
         }
       };
 
-      // Convert to CreatePaymentRecord for database storage
-      const dbRecord: CreatePaymentRecord = {
-        ...record,
-        paymentProviderResponse: undefined, // Remove Orange-specific response
-        metaData: {
-          ...record.metaData,
-          orangeResponse: JSON.stringify(paymentData) // Store Orange response as string in metadata
-        }
-      };
+      await this.dbService.createPaymentRecord(record);
 
-      await this.dbService.createPaymentRecord(dbRecord);
-
-      return paymentData.txnid;
+      return transactionId;
     } catch (error) {
       this.logger.error('Error processing Orange Money payment', {
         error: error instanceof Error ? error.message : 'Unknown error',

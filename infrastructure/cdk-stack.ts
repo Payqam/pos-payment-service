@@ -305,6 +305,7 @@ export class CDKStack extends cdk.Stack {
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
+    
     // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,
