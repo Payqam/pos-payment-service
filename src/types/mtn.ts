@@ -62,7 +62,7 @@ export interface MTNErrorMapping {
  */
 export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
   [MTNRequestToPayErrorCode.PAYER_FAILED]: {
-    label: 'PayerFailed',
+    label: 'RequestToPayPayerFailed',
     message:
       "The transaction failed due to an issue with the payer's account or wallet balance.",
     statusCode: 400,
@@ -71,7 +71,7 @@ export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
       'Notify the payer of the failure and suggest verifying their wallet balance or account status.',
   },
   [MTNRequestToPayErrorCode.PAYER_REJECTED]: {
-    label: 'PayerRejected',
+    label: 'RequestToPayPayerRejected',
     message: 'The payer explicitly rejected the payment request.',
     statusCode: 400,
     retryable: true,
@@ -79,7 +79,7 @@ export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
       'Inform the user about rejection and allow them to retry if necessary.',
   },
   [MTNRequestToPayErrorCode.PAYER_EXPIRED]: {
-    label: 'PayerExpired',
+    label: 'RequestToPayPayerExpired',
     message:
       'The payer did not respond within the allowed time frame (e.g., OTP expired).',
     statusCode: 408,
@@ -88,7 +88,7 @@ export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
       'Notify the user about expiration and initiate a new payment request if required.',
   },
   [MTNRequestToPayErrorCode.PAYER_NOT_FOUND]: {
-    label: 'PayerNotFound',
+    label: 'RequestToPayPayerNotFound',
     message: "The payer's MSISDN is invalid or unregistered.",
     statusCode: 404,
     retryable: false,
@@ -96,7 +96,7 @@ export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
       'Verify that the MSISDN includes a valid country code and retry with corrected details.',
   },
   [MTNRequestToPayErrorCode.PAYER_NOT_ALLOWED_TO_RECEIVE]: {
-    label: 'PayerNotAllowedToReceive',
+    label: 'RequestToPayPayerNotAllowedToReceive',
     message:
       'The payer is restricted from receiving payments due to account limitations.',
     statusCode: 403,
@@ -104,6 +104,7 @@ export const MTN_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
     suggestedAction:
       'Contact MTN support for clarification on account restrictions or suggest alternatives.',
   },
+
   [MTNRequestToPayErrorCode.PAYER_SERVICE_UNAVAILABLE]: {
     label: 'ServiceUnavailable',
     message: "MTN's service is temporarily unavailable.",
@@ -188,6 +189,36 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     suggestedAction:
       'Contact MTN support for clarification on account restrictions or suggest alternatives.',
   },
+  [MTNRequestToPayErrorReason.PAYER_NOT_ALLOWED]: {
+    label: 'RequestToPayPayerNotAllowed',
+    message: 'The payer is restricted from receiving payments.',
+    statusCode: 403,
+    retryable: false,
+    suggestedAction:
+      'Contact MTN support for clarification on account restrictions.',
+  },
+  [MTNRequestToPayErrorReason.PAYER_NOT_ALLOWED_TARGET_ENVIRONMENT]: {
+    label: 'RequestToPayPayerNotAllowedTargetEnvironment',
+    message: 'The payer is restricted in the target environment.',
+    statusCode: 403,
+    retryable: false,
+    suggestedAction:
+      'Contact MTN support for clarification on account restrictions.',
+  },
+  [MTNRequestToPayErrorReason.PAYER_INVALID_CALLBACK_URL_HOST]: {
+    label: 'RequestToPayPayerInvalidCallbackUrlHost',
+    message: 'Invalid callback url is provided or configured',
+    statusCode: 403,
+    retryable: false,
+    suggestedAction: 'Contact MTN developer support for clarification.',
+  },
+  [MTNRequestToPayErrorReason.PAYER_INVALID_CURRENCY]: {
+    label: 'PAYER_INVALID_CURRENCY',
+    message: 'Invalid currency is configured',
+    statusCode: 403,
+    retryable: false,
+    suggestedAction: 'Contact MTN developer support for clarification.',
+  },
   [MTNRequestToPayErrorReason.PAYER_SERVICE_UNAVAILABLE]: {
     label: 'ServiceUnavailable',
     message: "MTN's service is temporarily unavailable.",
@@ -204,6 +235,14 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     retryable: true,
     suggestedAction:
       'Retry with exponential backoff; if persistent, contact MTN support for investigation.',
+  },
+  [MTNRequestToPayErrorReason.PAYER_COULD_NOT_PERFORM_TRANSACTION]: {
+    label: 'RequestToPayPayerCouldNotPerformTransaction',
+    message: 'Could not perform the transaction.',
+    statusCode: 500,
+    retryable: true,
+    suggestedAction:
+      'Retry after a delay; if persistent, contact MTN support for investigation.',
   },
 };
 

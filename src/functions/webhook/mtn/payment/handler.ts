@@ -22,20 +22,6 @@ import {
   ErrorCategory,
 } from '../../../../../utils/errorHandler';
 
-interface PaymentRecordUpdate {
-  status: string;
-  paymentProviderResponse?: {
-    status: string;
-    reason?: string;
-  };
-  uniqueId?: string; // Disbursement Settlement Id for MTN
-  settlementStatus?: string;
-  settlementDate?: number;
-  settlementAmount?: number;
-  fee?: number;
-  errorResponse?: EnhancedError;
-}
-
 class WebhookError extends Error {
   constructor(
     message: string,
@@ -142,7 +128,7 @@ export class MTNPaymentWebhookService {
     amount: string,
     currency: string,
     webhookEvent: WebhookEvent
-  ): Promise<PaymentRecordUpdate> {
+  ): Promise<Record<string, unknown>> {
     this.logger.info('[DEBUG] Handling successful payment', {
       externalId,
       amount,
@@ -152,7 +138,7 @@ export class MTNPaymentWebhookService {
     try {
       const amountNumber = parseFloat(amount);
       const settlementAmount = this.calculateSettlementAmount(amountNumber);
-      const updateData: PaymentRecordUpdate = {
+      const updateData: Record<string, unknown> = {
         status: 'SUCCESSFUL',
         paymentProviderResponse: {
           status: webhookEvent.status,
@@ -196,14 +182,7 @@ export class MTNPaymentWebhookService {
   private async handleFailedPayment(
     externalId: string,
     transactionStatus: WebhookEvent
-  ): Promise<{
-    paymentProviderResponse: {
-      reason: string;
-      status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
-    };
-    errorResponse: EnhancedError;
-    status: string;
-  }> {
+  ): Promise<Record<string, unknown>> {
     this.logger.info('[DEBUG] Handling failed payment', {
       externalId,
       status: transactionStatus.status,
@@ -216,7 +195,6 @@ export class MTNPaymentWebhookService {
         MTN_REQUEST_TO_PAY_ERROR_MAPPINGS[
           errorReason as MTNRequestToPayErrorReason
         ];
-      console.log('---mapping--------', errorMapping);
 
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
@@ -241,8 +219,11 @@ export class MTNPaymentWebhookService {
         paymentProviderResponse: {
           status: transactionStatus.status,
           reason: transactionStatus.reason as string,
+          retryable: errorMapping.retryable,
+          suggestedAction: errorMapping.suggestedAction,
+          httpStatus: errorMapping.statusCode,
+          errorCategory: enhancedError.category,
         },
-        errorResponse: enhancedError,
       };
     } catch (error) {
       this.logger.error('[DEBUG] Error in handleFailedPayment', {
@@ -331,7 +312,7 @@ export class MTNPaymentWebhookService {
         transactionStatus,
       });
 
-      const updateData: PaymentRecordUpdate =
+      const updateData: Record<string, unknown> =
         transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
               externalId,
@@ -341,8 +322,8 @@ export class MTNPaymentWebhookService {
             )
           : await this.handleFailedPayment(externalId, transactionStatus);
 
-      await this.dbService.updatePaymentRecordByTransactionId(
-        externalId,
+      await this.dbService.updatePaymentRecord(
+        { transactionId: externalId },
         updateData
       );
 
@@ -381,7 +362,7 @@ export class MTNPaymentWebhookService {
         await this.mtnService.callWebhook(
           {
             financialTransactionId: uuidv4(),
-            externalId: updateData.uniqueId,
+            externalId: updateData.uniqueId as string,
             amount: webhookEvent.amount,
             currency: webhookEvent.currency,
             payer: {
