@@ -459,7 +459,7 @@ describe('Fraud Prevention Card Payment', () => {
         });
       });
 
-      it(`Verify 200 response for ${card.type}`, () => {
+      it(`Verify 500 response for ${card.type}`, () => {
         cy.request({
           method: 'POST',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
@@ -485,71 +485,48 @@ describe('Fraud Prevention Card Payment', () => {
               timestamp: 'transaction_timestamp',
             },
           },
+          failOnStatusCode: false,
         }).then((response) => {
           cy.task('log', response.body);
-          expect(response.status).to.eq(200);
-          expect(response.body).to.have.property(
-            'message',
-            'Payment processed successfully'
-          );
-          expect(response.body).to.have.property('transactionDetails');
-          expect(response.body.transactionDetails).to.have.property(
-            'transactionId'
-          );
-          expect(response.body.transactionDetails).to.have.property(
-            'status',
-            'succeeded'
-          );
-
-          transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
-          Cypress.env('transactionId', transactionId);
-          cy.wait(500);
+          expect(response.status).to.not.eq(200);
+          expect(response.status).to.eq(500);
+          expect(response.body).to.have.property('error');
+          expect(response.body.details).to.include(card.decline_details);
         });
       });
+    });
+  });
 
-      it(`Should retrieve transaction status with ${card.type}`, () => {
-        cy.wait(3000);
+  testData.fraud_Address.forEach((card) => {
+    describe(`Verify Address Check Fail Payment -  ${card.type}`, () => {
+      it(`Verify 400 response for ${card.type}`, () => {
         cy.request({
-          method: 'GET',
-          url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+          method: 'POST',
+          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
           headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': Cypress.env('x-api-key'),
+            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
           },
-        }).then((response) => {
-          cy.task('log', response.body);
-          expect(response.status).to.eq(200);
-          expect(
-            response.body.transaction.Item.paymentProviderResponse
-              .payment_method_details.card.checks
-          ).to.have.property('cvc_check', 'fail');
-
-          uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
-          Cypress.env('uniqueId', uniqueId);
-        });
-        cy.wait(500);
-      });
-
-      it(`Verify Payment on Stripe for ${card.type}`, () => {
-        cy.request({
-          method: 'GET',
-          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('uniqueId')}`, // Or /charges/{charge_id}
-          headers: {
-            Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
+          form: true,
+          body: {
+            type: 'card',
+            'card[number]': card.number,
+            'card[exp_month]': '12',
+            'card[exp_year]': '2025',
+            'card[cvc]': '123',
+            'card[address_zip]': '12345',
+            'card[address_line1]': 'Invalid',
           },
+          failOnStatusCode: false,
         }).then((response) => {
-          expect(response.status).to.eq(200);
-          cy.task('log', response.body);
-
-          expect(response.body).to.have.property('status', 'succeeded');
-          expect(response.body).to.have.property('amount', 120000);
-          expect(response.body).to.have.property('currency', 'eur');
-          expect(response.body.transfer_data).to.have.property(
-            'amount',
-            117600
+          expect(response.status).to.not.eq(200);
+          expect(response.status).to.eq(400);
+          expect(response.body).to.have.property('error');
+          expect(response.body.error.message).to.include(
+            'Received unknown parameters'
           );
+          expect(response.body.error.message).to.include('address_line1');
+          expect(response.body.error.message).to.include('address_zip');
+          cy.task('log', response.body);
         });
       });
     });

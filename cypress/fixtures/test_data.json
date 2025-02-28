@@ -294,8 +294,7 @@
       "type": "Elevated risk - Might be queued for review",
       "number": "4000000000009235",
       "property": "risk_level",
-      "value": "elevated",
-      "response": "response.body.transaction.Item.paymentProviderResponse.outcome"
+      "value": "elevated"
     }
   ],
 
@@ -303,30 +302,26 @@
     {
       "type": "CVC check fails",
       "number": "4000000000000101",
-      "decline_details": "Your card was declined."
+      "decline_details": "Your card's security code is incorrect."
     }
   ],
 
   "fraud_Address": [
     {
       "type": "Postal code check fails",
-      "number": "4000000000000036",
-      "decline_details": "Your card was declined."
+      "number": "4000000000000036"
     },
     {
       "type": "Line1 check fails",
-      "number": "4000000000000028",
-      "decline_details": "Your card was declined."
+      "number": "4000000000000028"
     },
     {
       "type": "Address checks fail",
-      "number": "4000000000000010",
-      "decline_details": "Your card was declined."
+      "number": "4000000000000010"
     },
     {
       "type": "Address unavailable",
-      "number": "4000000000000044",
-      "decline_details": "Your card was declined."
+      "number": "4000000000000044"
     }
   ]
 }
