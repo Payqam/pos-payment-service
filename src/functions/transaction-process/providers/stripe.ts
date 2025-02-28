@@ -1,4 +1,4 @@
-import stripe from 'stripe';
+import stripe, {Stripe} from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
@@ -54,36 +54,90 @@ export class CardPaymentService {
           const feeAmount = Math.floor(amount * feePercentage);
           const transferAmount = Math.max(amount - feeAmount, 0);
 
-          const paymentIntent = await stripeClient.paymentIntents.create({
-            amount,
-            currency: cardData.currency as string,
-            payment_method: cardData.paymentMethodId,
-            confirm: true,
-            transfer_data: {
-              amount: transferAmount,
-              destination: cardData.destinationId as string,
-            },
-            automatic_payment_methods: {
-              enabled: true,
-              allow_redirects: 'never',
-            },
-            metadata: {
-              transactionId: transactionId,
-            },
-          });
+          let paymentIntent;
+          try {
+            paymentIntent = await stripeClient.paymentIntents.create({
+              amount,
+              currency: cardData.currency as string,
+              payment_method: cardData.paymentMethodId,
+              confirm: true,
+              transfer_data: {
+                amount: transferAmount,
+                destination: cardData.destinationId as string,
+              },
+              automatic_payment_methods: {
+                enabled: true,
+                allow_redirects: 'never',
+              },
+              metadata: {
+                transactionId: transactionId,
+              },
+            });
+          } catch (paymentError) {
+            this.logger.error('Error creating payment intent', paymentError);
+
+            const failedRecord: CreatePaymentRecord = {
+              transactionId,
+              merchantId,
+              amount,
+              paymentMethod: 'CARD',
+              status: 'FAILED',
+              paymentProviderResponse: paymentError?.raw?.payment_intent,
+              transactionType: 'CHARGE',
+              metaData,
+              fee: feeAmount,
+              uniqueId: (paymentError as any).raw.payment_intent.id,
+              GSI1SK: Math.floor(Date.now() / 1000),
+              GSI2SK: Math.floor(Date.now() / 1000),
+              exchangeRate: 'N/A',
+              processingFee: 'N/A',
+              netAmount: 'N/A',
+              externalTransactionId: 'N/A',
+            };
+
+            await this.snsService.publish(
+              process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+              {
+                transactionId,
+                paymentMethod: 'Stripe',
+                status: 'FAILED',
+                type: 'CREATE',
+                amount,
+                merchantId,
+                transactionType: 'CHARGE',
+                metaData,
+                fee: feeAmount,
+                createdOn: Math.floor(Date.now() / 1000),
+                customerPhone,
+                currency: cardData.currency,
+                exchangeRate: 'exchangeRate',
+                processingFee: 'processingFee',
+                netAmount: 'netAmount',
+                externalTransactionId: 'externalTransactionId',
+              }
+            );
+            await this.dbService.createPaymentRecord(failedRecord);
+            this.logger.info(
+              'Failed payment record created in DynamoDB',
+              failedRecord
+            );
+
+            throw paymentError;
+          }
 
           this.logger.info('Payment intent created', paymentIntent);
+
           const record: CreatePaymentRecord = {
-            transactionId: transactionId,
-            merchantId: merchantId,
+            transactionId,
+            merchantId,
             amount,
             paymentMethod: 'CARD',
             status: paymentIntent.status,
             paymentProviderResponse: paymentIntent,
             transactionType: 'CHARGE',
-            metaData: metaData,
+            metaData,
             fee: feeAmount,
-            uniqueId: paymentIntent?.id as string,
+            uniqueId: paymentIntent.id as string,
             GSI1SK: Math.floor(Date.now() / 1000),
             GSI2SK: Math.floor(Date.now() / 1000),
             exchangeRate: 'exchangeRate',
@@ -91,28 +145,29 @@ export class CardPaymentService {
             netAmount: 'netAmount',
             externalTransactionId: 'externalTransactionId',
           };
+
           await this.dbService.createPaymentRecord(record);
           this.logger.info('Payment record created in DynamoDB', record);
-          // Only cache if enabled
-          if (process.env.ENABLE_CACHE === 'true') {
-            const key = `payment:${record.transactionId}`;
-            // await this.cacheService.setValue(key, record, 3600);
-            this.logger.info('Payment record stored in Redis', { key });
-          }
+
+          // if (process.env.ENABLE_CACHE === 'true') {
+          //   const key = `payment:${record.transactionId}`;
+          //   this.logger.info('Payment record stored in Redis', { key });
+          // }
+
           await this.snsService.publish(
             process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
-              transactionId: transactionId,
-              paymentMethod: 'CARD',
+              transactionId,
+              paymentMethod: 'Stripe',
               status: paymentIntent.status,
               type: 'CREATE',
               amount,
-              merchantId: merchantId,
+              merchantId,
               transactionType: 'CHARGE',
-              metaData: metaData,
+              metaData,
               fee: feeAmount,
               createdOn: Math.floor(Date.now() / 1000),
-              customerPhone: customerPhone,
+              customerPhone,
               currency: cardData.currency,
               exchangeRate: 'exchangeRate',
               processingFee: 'processingFee',
@@ -120,12 +175,13 @@ export class CardPaymentService {
               externalTransactionId: 'externalTransactionId',
             }
           );
+
           return {
-            transactionId: transactionId,
+            transactionId,
             status: paymentIntent.status,
           };
         } catch (error) {
-          this.logger.error('Error creating payment record', error);
+          this.logger.error('Error processing charge', error);
           throw error;
         }
       }
