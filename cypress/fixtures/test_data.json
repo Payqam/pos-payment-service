@@ -47,7 +47,7 @@
     { "type": "Uruguay (UY) - Visa", "number": "4000008580000003" }
   ],
 
-  "testCardsbyEurope&MiddleEast": [
+  "testCardsbyEurope_MiddleEast": [
     { "type": "United Arab Emirates (AE) - Visa", "number": "4000007840000001" },
     { "type": "United Arab Emirates (AE) - Mastercard", "number": "5200007840000022" },
     { "type": "Austria (AT) - Visa", "number": "4000000400000008" },
@@ -323,6 +323,30 @@
       "type": "Address unavailable",
       "number": "4000000000000044"
     }
-  ]
+  ],
+
+  "invalidPayloads":[
+  {
+    "testName": "SQL Injection",
+    "payload": {
+      "type": "card",
+      "card[number]": "' OR 1=1 --",
+      "card[exp_month]": "12",
+      "card[exp_year]": "2025",
+      "card[cvc]": "123"
+    }
+  },
+  {
+    "testName": "Cross-Site Scripting (XSS)",
+    "payload": {
+      "type": "card",
+      "card[number]": "<script>alert('XSS')</script>",
+      "card[exp_month]": "12",
+      "card[exp_year]": "2025",
+      "card[cvc]": "123"
+    }
+  }
+]
+
 }
 
