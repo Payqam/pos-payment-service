@@ -163,15 +163,11 @@ export class ErrorHandler {
       );
     }
 
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return this.createErrorResponse(
-      'SYSTEM_ERROR',
+      'UNEXPECTED_ERROR',
       ErrorCategory.SYSTEM_ERROR,
-      defaultMessage,
-      {
-        retryable: false,
-        suggestedAction:
-          'Please try again later or contact support if the issue persists',
-      }
+      errorMessage
     );
   }
 }
