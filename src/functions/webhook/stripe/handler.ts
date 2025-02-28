@@ -38,14 +38,36 @@ export class StripeWebhookService {
   private async publishStatusUpdate(
     transactionId: string,
     status: string,
-    amount: string
+    amount: string,
+    updateData: Record<string, unknown>
   ): Promise<void> {
     try {
+      const paymentProviderResponse = updateData.paymentProviderResponse as {
+        last_payment_error: {
+          code: string;
+          message: string;
+          type: string;
+        };
+      };
+      this.logger.info('Publishing status update', updateData);
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
         transactionId,
         status,
-        type: 'UPDATE',
+        type:
+          status === 'INTENT_FAILED' || status === 'REFUND_FAILED'
+            ? 'FAILED'
+            : 'UPDATE',
         amount,
+        TransactionError:
+          status === 'INTENT_FAILED' || status === 'REFUND_FAILED'
+            ? {
+                ErrorCode: paymentProviderResponse.last_payment_error.code,
+                ErrorMessage:
+                  paymentProviderResponse.last_payment_error.message,
+                ErrorType: paymentProviderResponse.last_payment_error.type,
+                ErrorSource: 'POS',
+              }
+            : undefined,
       });
     } catch (error) {
       this.logger.error('Failed to publish status update', { error });
@@ -70,16 +92,22 @@ export class StripeWebhookService {
         return 5;
       case 'CHARGE_UPDATED':
         return 6;
-      case 'REFUND_CREATED':
+      case 'CHARGE_REFUNDED':
         return 7;
-      case 'REFUND_UPDATED':
+      case 'CHARGE_REFUND_UPDATED':
         return 8;
-      case 'REFUND_FAILED':
+      case 'REFUND_CREATED':
         return 9;
-      case 'INTENT_FAILED':
+      case 'REFUND_UPDATED':
         return 10;
-      case 'INTENT_CANCELLED':
+      case 'REFUND_FAILED':
         return 11;
+      case 'INTENT_FAILED':
+        return 12;
+      case 'INTENT_CANCELLED':
+        return 13;
+      case 'CHARGE_FAILED':
+        return 14;
       default:
         return 0;
     }
@@ -118,9 +146,10 @@ export class StripeWebhookService {
       );
       this.logger.info('Record updated successfully:', updatedRecord);
       await this.publishStatusUpdate(
-        key.uniqueId,
+        transactionId,
         updateData.status as string,
-        updateData.amount as string
+        updateData.amount as string,
+        updateData
       );
     } catch (error) {
       this.logger.error('Failed to update record:', { error });
@@ -143,6 +172,7 @@ export class StripeWebhookService {
 
     const updateData = {
       status,
+      refundId: 'refund' in paymentIntent ? paymentIntent.id : undefined,
       paymentProviderResponse: paymentIntent,
     };
 
@@ -182,6 +212,24 @@ export class StripeWebhookService {
           await this.handlePaymentEvent(
             stripeEvent.data.object as stripe.Charge,
             'CHARGE_UPDATED'
+          );
+          break;
+        case 'charge.failed':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Charge,
+            'CHARGE_FAILED'
+          );
+          break;
+        case 'charge.refunded':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Charge,
+            'CHARGE_REFUNDED'
+          );
+          break;
+        case 'charge.refund.updated':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Refund,
+            'CHARGE_REFUND_UPDATED'
           );
           break;
         case 'payment_intent.succeeded':

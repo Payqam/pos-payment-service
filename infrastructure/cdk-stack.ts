@@ -238,6 +238,7 @@ export class CDKStack extends cdk.Stack {
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
@@ -246,12 +247,6 @@ export class CDKStack extends cdk.Stack {
           VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
-          MTN_PAYMENT_WEBHOOK_URL: process.env.MTN_PAYMENT_WEBHOOK_URL as string,
-          ORANGE_CLIENT_ID: process.env.ORANGE_CLIENT_ID as string,
-          ORANGE_X_AUTH_TOKEN: process.env.ORANGE_X_AUTH_TOKEN as string,
-          ORANGE_PAYQAM_MERCHANT_PHONE: process.env.ORANGE_PAYQAM_MERCHANT_PHONE as string,
-          ORANGE_PAYQAM_PIN: process.env.ORANGE_PAYQAM_PIN as string,
-          ORANGE_NOTIFY_URL: process.env.ORANGE_NOTIFY_URL as string,
         },
       }
     );
@@ -336,6 +331,7 @@ export class CDKStack extends cdk.Stack {
         vpc: vpcConstruct.vpc,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
@@ -343,7 +339,10 @@ export class CDKStack extends cdk.Stack {
           PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
           MTN_PAYMENT_WEBHOOK_URL:
             process.env.MTN_PAYMENT_WEBHOOK_URL ||
-            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/payment',
+          MTN_DISBURSEMENT_WEBHOOK_URL:
+            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com/DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }
     );
@@ -367,9 +366,6 @@ export class CDKStack extends cdk.Stack {
           MTN_API_SECRET: mtnSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-          MTN_DISBURSEMENT_WEBHOOK_URL:
-            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
-            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
         },
       }
     );
@@ -509,7 +505,7 @@ export class CDKStack extends cdk.Stack {
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
-              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              transactionId: { type: apigateway.JsonSchemaType.STRING },
               status: { type: apigateway.JsonSchemaType.STRING },
             },
           },
@@ -548,7 +544,7 @@ export class CDKStack extends cdk.Stack {
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
-              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              transactionId: { type: apigateway.JsonSchemaType.STRING },
               status: { type: apigateway.JsonSchemaType.STRING },
             },
           },
@@ -560,7 +556,7 @@ export class CDKStack extends cdk.Stack {
         lambda: transactionsProcessLambda.lambda,
         apiKeyRequired: true,
         requestParameters: {
-          'method.request.querystring.transactionId': true, //TODO: Update this according to the actual schema
+          'method.request.querystring.transactionId': true,
         },
         responseModel: {
           modelName: 'TransactionStatusResponseModel',
@@ -724,20 +720,57 @@ export class CDKStack extends cdk.Stack {
       webAcl: wafConstruct.webAcl,
     });
 
-    new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
-      lambda: transactionsProcessLambda.lambda,
-      apiGateway: apiGateway.api,
-      stage: props.envName,
-      envName: props.envName,
-      currentEnvVars: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        ORANGE_API_SECRET: orangeSecret.secretName,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
-        MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
-        // TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-      },
-    });
+    // This is required to add the circular dependencies
+    new UpdateLambdaEnv(
+      this,
+      'UpdateLambdaEnvironmentForTransactionProcessLambda',
+      {
+        lambda: transactionsProcessLambda.lambda,
+        apiGateway: apiGateway.api,
+        stage: props.envName,
+        envName: props.envName,
+        currentEnvVars: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_TARGET_ENVIRONMENT:
+            (process.env.MTN_TARGET_ENVIRONMENT as string) || 'sandbox',
+          MTN_API_SECRET: mtnSecret.secretName,
+          ORANGE_API_SECRET: orangeSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
+          ENABLE_CACHE: enableCache ? 'true' : 'false',
+          VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          KMS_TRANSPORT_KEY: key.keyArn,
+        },
+        newEnvVars: { MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment' },
+      }
+    );
+    new UpdateLambdaEnv(
+      this,
+      'UpdateLambdaEnvironmentForMTNPaymentWebhookLambda',
+      {
+        lambda: mtnPaymentWebhookLambda.lambda,
+        apiGateway: apiGateway.api,
+        stage: props.envName,
+        envName: props.envName,
+        currentEnvVars: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          INSTANT_DISBURSEMENT_ENABLED:
+            process.env.INSTANT_DISBURSEMENT_ENABLED || 'true',
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE || '2.5',
+        },
+        newEnvVars: {
+          MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment',
+          MTN_DISBURSEMENT_WEBHOOK_URL: 'webhooks/mtn/disbursement',
+        },
+      }
+    );
+
     const lambdaFunctionNames = [
       transactionsProcessLambda.lambda.functionName,
       stripeWebhookLambda.lambda.functionName,
