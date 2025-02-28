@@ -79,7 +79,8 @@ export class OrangePaymentService {
 
       this.logger.info('Generated new Orange token', {
         expiresIn: token.expires_in,
-        tokenType: token.token_type
+        tokenType: token.token_type,
+        expiryTime: this.tokenExpiryTime
       });
 
       return token;
@@ -179,6 +180,63 @@ export class OrangePaymentService {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       throw new Error('Failed to initiate merchant payment');
+    }
+  }
+
+  /**
+   * Initiates a disbursement transaction
+   * @param amount Amount to disburse
+   * @param merchantMobileNo Merchant's mobile number
+   * @returns PaymentInitResponse
+   */
+  public async initDisbursement(): Promise<PaymentInitResponse> {
+    try {
+      const token = await this.generateToken();
+      const headers = await this.createHeaders();
+
+      const response = await axios.post(
+        `${this.baseUrl}/omapi/1.0.2/cashin/init`,
+        {},
+        { headers }
+      );
+
+      return response.data;
+    } catch (error) {
+      this.logger.error('Error initiating disbursement', { error });
+      throw new Error('Failed to initiate disbursement');
+    }
+  }
+
+  /**
+   * Executes a disbursement payment
+   * @param params Disbursement parameters
+   * @returns PaymentResponse
+   */
+  public async executeDisbursement(params: {
+    channelUserMsisdn: string;
+    amount: string;
+    subscriberMsisdn: string;
+    orderId: string;
+    description: string;
+    payToken: string;
+  }): Promise<PaymentResponse> {
+    try {
+      const token = await this.generateToken();
+      const headers = await this.createHeaders();
+
+      const response = await axios.post(
+        `${this.baseUrl}/omapi/1.0.2/cashin/pay`,
+        {
+          ...params,
+          pin: process.env.ORANGE_DISBURSEMENT_PIN
+        },
+        { headers }
+      );
+
+      return response.data;
+    } catch (error) {
+      this.logger.error('Error executing disbursement', { error });
+      throw new Error('Failed to execute disbursement');
     }
   }
 
