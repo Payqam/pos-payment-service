@@ -1,12 +1,8 @@
-describe('Dispute', () => {
-  (
-    Cypress.env('testCardsFraudulentAndDisputes') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
+import testData from 'cypress/fixtures/test_data.json';
+let paymentMethodId, transactionId, uniqueId;
 
+describe('Dispute', () => {
+  testData.testCardsFraudulentAndDisputes.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -101,6 +97,9 @@ describe('Dispute', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -108,7 +107,7 @@ describe('Dispute', () => {
       it(`Verify Payment on Stripe for ${dispute.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -152,14 +151,7 @@ describe('Dispute', () => {
 });
 
 describe('Dispute - Not Received', () => {
-  (
-    Cypress.env('testCardsNotReceived') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsNotReceived.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -254,6 +246,9 @@ describe('Dispute - Not Received', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -261,7 +256,7 @@ describe('Dispute - Not Received', () => {
       it(`Verify Payment on Stripe for ${dispute.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -305,14 +300,7 @@ describe('Dispute - Not Received', () => {
 });
 
 describe('Dispute - Inquiry', () => {
-  (
-    Cypress.env('testCardsInquiry') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsInquiry.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -407,6 +395,9 @@ describe('Dispute - Inquiry', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -458,14 +449,7 @@ describe('Dispute - Inquiry', () => {
 });
 
 describe('Dispute - Warning', () => {
-  (
-    Cypress.env('testCardsWarning') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsWarning.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -560,6 +544,9 @@ describe('Dispute - Warning', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
