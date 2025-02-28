@@ -90,13 +90,15 @@ export class StripeWebhookService {
    * if the new event's status is higher than the existing one.
    */
   private async updateRecordIfHigherStatus(
-    key: { transactionId: string },
+    key: { uniqueId: string },
     newStatus: string,
     updateData: Record<string, unknown>
   ): Promise<void> {
     try {
       this.logger.info('updateRecordIfHigherStatus');
-      const currentRecord = await this.dbService.getItem(key);
+      const queryResult = await this.dbService.queryByGSI(key, 'GSI3');
+      const currentRecord = queryResult.Items?.[0];
+      const transactionId = currentRecord?.transactionId;
       this.logger.info('currentRecord', currentRecord);
       if (currentRecord && currentRecord?.Item?.status) {
         const currentPriority = this.getStatusPriority(
@@ -105,18 +107,18 @@ export class StripeWebhookService {
         const newPriority = this.getStatusPriority(newStatus);
         if (newPriority <= currentPriority) {
           this.logger.info(
-            `Skipping update for transaction ${key.transactionId}: current status (${currentRecord?.Item?.status}) has higher or equal priority than new status (${newStatus}).`
+            `Skipping update for transaction ${key.uniqueId}: current status (${currentRecord?.Item?.status}) has higher or equal priority than new status (${newStatus}).`
           );
           return;
         }
       }
       const updatedRecord = await this.dbService.updatePaymentRecord(
-        key,
+        { transactionId: transactionId },
         updateData
       );
       this.logger.info('Record updated successfully:', updatedRecord);
       await this.publishStatusUpdate(
-        key.transactionId,
+        key.uniqueId,
         updateData.status as string,
         updateData.amount as string
       );
@@ -131,12 +133,12 @@ export class StripeWebhookService {
   ): Promise<void> {
     this.logger.info(`Processing event with status: ${status}`, paymentIntent);
 
-    const transactionId =
+    const uniqueId =
       'payment_intent' in paymentIntent
         ? (paymentIntent.payment_intent as string)
         : paymentIntent.id;
 
-    const key = { transactionId };
+    const key = { uniqueId };
     this.logger.info('key', key);
 
     const updateData = {

@@ -26,6 +26,10 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as destinations from 'aws-cdk-lib/aws-logs-destinations';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import { LambdaDashboard } from './cloudwatch-dashboards/lambda-dashboard';
+import { DynamoDBDashboard } from './cloudwatch-dashboards/dynamoDB-dashboard';
+import { SNSDashboard } from './cloudwatch-dashboards/sns-dashboard';
+import { ApiGatewayDashboard } from './cloudwatch-dashboards/apiGateway-dashboard';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -234,6 +238,7 @@ export class CDKStack extends cdk.Stack {
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
           ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
@@ -242,8 +247,6 @@ export class CDKStack extends cdk.Stack {
           VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
-          MTN_PAYMENT_WEBHOOK_URL: process.env
-            .MTN_PAYMENT_WEBHOOK_URL as string,
         },
       }
     );
@@ -319,6 +322,7 @@ export class CDKStack extends cdk.Stack {
         vpc: vpcConstruct.vpc,
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
@@ -326,7 +330,10 @@ export class CDKStack extends cdk.Stack {
           PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
           MTN_PAYMENT_WEBHOOK_URL:
             process.env.MTN_PAYMENT_WEBHOOK_URL ||
-            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/payment',
+          MTN_DISBURSEMENT_WEBHOOK_URL:
+            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
+            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com/DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }
     );
@@ -350,9 +357,6 @@ export class CDKStack extends cdk.Stack {
           MTN_API_SECRET: mtnSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-          MTN_DISBURSEMENT_WEBHOOK_URL:
-            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
-            'http://webhook.site/531ed359-8c71-4865-8652-ba5026a05bbb', // Sample webhook
         },
       }
     );
@@ -492,7 +496,7 @@ export class CDKStack extends cdk.Stack {
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
-              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              transactionId: { type: apigateway.JsonSchemaType.STRING },
               status: { type: apigateway.JsonSchemaType.STRING },
             },
           },
@@ -531,7 +535,7 @@ export class CDKStack extends cdk.Stack {
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
-              transactionId: { type: apigateway.JsonSchemaType.STRING }, //TODO: Update this according to the actual schema
+              transactionId: { type: apigateway.JsonSchemaType.STRING },
               status: { type: apigateway.JsonSchemaType.STRING },
             },
           },
@@ -549,7 +553,7 @@ export class CDKStack extends cdk.Stack {
         lambda: transactionsProcessLambda.lambda,
         apiKeyRequired: true,
         requestParameters: {
-          'method.request.querystring.transactionId': true, //TODO: Update this according to the actual schema
+          'method.request.querystring.transactionId': true,
         },
         responseModel: {
           modelName: 'TransactionStatusResponseModel',
@@ -679,20 +683,85 @@ export class CDKStack extends cdk.Stack {
       webAcl: wafConstruct.webAcl,
     });
 
-    new UpdateLambdaEnv(this, 'UpdateLambdaEnvironment', {
-      lambda: transactionsProcessLambda.lambda,
-      apiGateway: apiGateway.api,
-      stage: props.envName,
+    // This is required to add the circular dependencies
+    new UpdateLambdaEnv(
+      this,
+      'UpdateLambdaEnvironmentForTransactionProcessLambda',
+      {
+        lambda: transactionsProcessLambda.lambda,
+        apiGateway: apiGateway.api,
+        stage: props.envName,
+        envName: props.envName,
+        currentEnvVars: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          STRIPE_API_SECRET: stripeSecret.secretName,
+          MTN_TARGET_ENVIRONMENT:
+            (process.env.MTN_TARGET_ENVIRONMENT as string) || 'sandbox',
+          MTN_API_SECRET: mtnSecret.secretName,
+          ORANGE_API_SECRET: orangeSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
+          ENABLE_CACHE: enableCache ? 'true' : 'false',
+          VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          KMS_TRANSPORT_KEY: key.keyArn,
+        },
+        newEnvVars: { MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment' },
+      }
+    );
+    new UpdateLambdaEnv(
+      this,
+      'UpdateLambdaEnvironmentForMTNPaymentWebhookLambda',
+      {
+        lambda: mtnPaymentWebhookLambda.lambda,
+        apiGateway: apiGateway.api,
+        stage: props.envName,
+        envName: props.envName,
+        currentEnvVars: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          INSTANT_DISBURSEMENT_ENABLED:
+            process.env.INSTANT_DISBURSEMENT_ENABLED || 'true',
+          PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE || '2.5',
+        },
+        newEnvVars: {
+          MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment',
+          MTN_DISBURSEMENT_WEBHOOK_URL: 'webhooks/mtn/disbursement',
+        },
+      }
+    );
+
+    const lambdaFunctionNames = [
+      transactionsProcessLambda.lambda.functionName,
+      stripeWebhookLambda.lambda.functionName,
+      mtnDisbursementWebhookLambda.lambda.functionName,
+      orangeWebhookLambda.lambda.functionName,
+      mtnPaymentWebhookLambda.lambda.functionName,
+      slackNotifierLambda.lambda.functionName,
+      salesforceSyncLambda.lambda.functionName,
+    ];
+    new LambdaDashboard(this, 'LambdaMonitoringDashboard', {
       envName: props.envName,
-      currentEnvVars: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        MTN_API_SECRET: mtnSecret.secretName,
-        STRIPE_API_SECRET: stripeSecret.secretName,
-        ORANGE_API_SECRET: orangeSecret.secretName,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        PAYQAM_FEE_PERCENTAGE: process.env.PAYQAM_FEE_PERCENTAGE as string,
-        MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
-      },
+      namespace: props.namespace,
+      lambdaFunctionNames: lambdaFunctionNames,
+    });
+    new DynamoDBDashboard(this, 'DynamoDBMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      dynamoTableName: dynamoDBConstruct.table.tableName,
+    });
+    new SNSDashboard(this, 'SnsMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      snsTopicName: snsConstruct.eventTopic.topicName,
+    });
+    new ApiGatewayDashboard(this, 'ApiGatewayMonitoringDashboard', {
+      envName: props.envName,
+      namespace: props.namespace,
+      apiGatewayName: apiGateway.api.restApiName,
     });
 
     // Add stack outputs

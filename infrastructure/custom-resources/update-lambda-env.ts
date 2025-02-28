@@ -10,6 +10,7 @@ interface UpdateLambdaEnvProps {
   stage: string;
   envName: string;
   currentEnvVars: { [key: string]: string }; // Add this to pass current env vars
+  newEnvVars: { [key: string]: string }; // Add this to pass new env vars
 }
 
 export class UpdateLambdaEnv extends Construct {
@@ -26,7 +27,16 @@ export class UpdateLambdaEnv extends Construct {
           Environment: {
             Variables: {
               ...props.currentEnvVars, // Use passed environment variables
-              MTN_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/webhook/mtn`,
+              ...(props.newEnvVars.MTN_PAYMENT_WEBHOOK_URL
+                ? {
+                    MTN_PAYMENT_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/${props.newEnvVars.MTN_PAYMENT_WEBHOOK_URL}`,
+                  }
+                : {}),
+              ...(props.newEnvVars.MTN_PAYMENT_WEBHOOK_URL
+                ? {
+                    MTN_DISBURSEMENT_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/${props.newEnvVars.MTN_DISBURSEMENT_WEBHOOK_URL}`,
+                  }
+                : {}),
             },
           },
         },
