@@ -22,7 +22,9 @@ export class CardPaymentService {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    // this.cacheService = new CacheService();
+    // if (process.env.ENABLE_CACHE === 'true') {
+    //   this.cacheService = new CacheService();
+    // }
     this.snsService = SNSService.getInstance();
     this.logger.info('init()');
   }

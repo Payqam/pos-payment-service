@@ -99,13 +99,6 @@ export class TransactionProcessService {
       );
     }
 
-    // TODO: We need to decide what are the data fields that need to be decrypted.
-    // let decryptedPhone = customerPhone;
-    // if (customerPhone) {
-    //   decryptedPhone = await this.kmsService.decryptData(customerPhone);
-    //   this.logger.info('Decrypted customer phone:', decryptedPhone);
-    // }
-
     const transactionResult = await this.paymentService.processPayment({
       amount,
       paymentMethod,

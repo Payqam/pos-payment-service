@@ -5,35 +5,22 @@ import {
 } from 'aws-lambda';
 import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
-import { MtnPaymentService } from '../../../transaction-process/providers';
+import {
+  MtnPaymentService,
+  TransactionType,
+} from '../../../transaction-process/providers';
 import { DynamoDBService } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-
-interface WebhookEvent {
-  financialTransactionId: string;
-  externalId: string;
-  amount: string;
-  currency: string;
-  payer: {
-    partyIdType: string;
-    partyId: string;
-  };
-  payeeNote?: string;
-  status: string;
-}
-
-interface PaymentRecordUpdate {
-  status: string;
-  paymentProviderResponse?: {
-    status: string;
-    reason?: string;
-  };
-  settlementId?: string;
-  settlementStatus?: string;
-  settlementDate?: number;
-  settlementAmount?: number;
-  fee?: number;
-}
+import {
+  MTN_REQUEST_TO_PAY_ERROR_MAPPINGS,
+  MTNRequestToPayErrorReason,
+  WebhookEvent,
+} from '../../../../types/mtn';
+import { v4 as uuidv4 } from 'uuid';
+import {
+  EnhancedError,
+  ErrorCategory,
+} from '../../../../../utils/errorHandler';
 
 class WebhookError extends Error {
   constructor(
@@ -107,13 +94,13 @@ export class MTNPaymentWebhookService {
         });
       }
 
-      const settlementId = await this.mtnService.initiateTransfer(
+      const uniqueId = await this.mtnService.initiateTransfer(
         amount,
         result.Item.merchantMobileNo,
         currency
       );
 
-      if (!settlementId) {
+      if (!uniqueId) {
         throw new WebhookError('Failed to initiate transfer', 500, {
           transactionId,
           amount,
@@ -121,7 +108,7 @@ export class MTNPaymentWebhookService {
         });
       }
 
-      return settlementId;
+      return uniqueId;
     } catch (error) {
       if (error instanceof WebhookError) throw error;
       throw new WebhookError('Error processing instant disbursement', 500, {
@@ -141,35 +128,88 @@ export class MTNPaymentWebhookService {
     amount: string,
     currency: string,
     webhookEvent: WebhookEvent
-  ): Promise<PaymentRecordUpdate> {
-    const amountNumber = parseFloat(amount);
-    const settlementAmount = this.calculateSettlementAmount(amountNumber);
-    const updateData: PaymentRecordUpdate = {
-      status: 'SUCCESS',
-      paymentProviderResponse: {
-        status: webhookEvent.status,
-        reason: webhookEvent.payeeNote,
-      },
-      fee: amountNumber - settlementAmount,
-    };
+  ): Promise<Record<string, unknown>> {
+    try {
+      const amountNumber = parseFloat(amount);
+      const settlementAmount = this.calculateSettlementAmount(amountNumber);
+      const updateData: Record<string, unknown> = {
+        status: 'SUCCESSFUL',
+        paymentProviderResponse: {
+          status: webhookEvent.status,
+          reason: webhookEvent.payeeNote,
+        },
+        fee: amountNumber - settlementAmount,
+      };
 
-    if (this.instantDisbursementEnabled) {
-      try {
-        updateData.settlementId = await this.processInstantDisbursement(
-          externalId,
-          settlementAmount,
-          currency
-        );
-        updateData.settlementStatus = 'PENDING';
-        updateData.settlementDate = Date.now();
-        updateData.settlementAmount = settlementAmount;
-      } catch (error) {
-        this.logger.error('Failed to process instant disbursement', { error });
-        // Continue with payment success even if disbursement fails
+      if (this.instantDisbursementEnabled) {
+        try {
+          updateData.uniqueId = await this.processInstantDisbursement(
+            externalId,
+            settlementAmount,
+            currency
+          );
+          updateData.settlementStatus = 'PENDING';
+          updateData.settlementDate = Date.now();
+          updateData.settlementAmount = settlementAmount;
+        } catch (error) {
+          this.logger.error('Failed to process instant disbursement', {
+            error,
+          });
+          // Continue with payment success even if disbursement fails
+        }
       }
-    }
 
-    return updateData;
+      return updateData;
+    } catch (error) {
+      this.logger.error('Failed to handle the successful payment');
+      throw new Error('Failed to handle the successful payment');
+    }
+  }
+
+  /**
+   * Handles failed payment processing
+   * @throws WebhookError if processing fails
+   */
+  private async handleFailedPayment(
+    externalId: string,
+    transactionStatus: WebhookEvent
+  ): Promise<Record<string, unknown>> {
+    try {
+      const errorReason = transactionStatus.reason;
+      const errorMapping =
+        MTN_REQUEST_TO_PAY_ERROR_MAPPINGS[
+          errorReason as MTNRequestToPayErrorReason
+        ];
+
+      // Create enhanced error for logging and tracking
+      const enhancedError = new EnhancedError(
+        errorMapping.statusCode as unknown as string,
+        ErrorCategory.PROVIDER_ERROR,
+        errorMapping.message,
+        {
+          retryable: errorMapping.retryable,
+          suggestedAction: errorMapping.suggestedAction,
+          httpStatus: errorMapping.statusCode,
+          originalError: transactionStatus.reason,
+        }
+      );
+
+      return {
+        status: 'FAILED',
+        paymentProviderResponse: {
+          status: transactionStatus.status,
+          errorMessage: enhancedError.message,
+          reason: transactionStatus.reason as string,
+          retryable: errorMapping.retryable,
+          suggestedAction: errorMapping.suggestedAction,
+          httpStatus: errorMapping.statusCode,
+          errorCategory: enhancedError.category,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Failed to handle the failed payment');
+      throw new Error('Failed to handle the failed payment');
+    }
   }
 
   /**
@@ -178,29 +218,24 @@ export class MTNPaymentWebhookService {
    */
   private parseWebhookEvent(body: string | null): WebhookEvent {
     if (!body) {
-      throw new WebhookError('No body in webhook event', 400);
+      throw new WebhookError('No body provided in webhook', 400);
     }
 
     try {
-      const event = JSON.parse(body) as WebhookEvent;
-
+      const webhookEvent = JSON.parse(body) as WebhookEvent;
+      // Validate required fields
       if (
-        !event.externalId ||
-        !event.amount ||
-        !event.currency ||
-        !event.status
+        !webhookEvent.externalId ||
+        !webhookEvent.amount ||
+        !webhookEvent.currency ||
+        !webhookEvent.status
       ) {
-        throw new WebhookError(
-          'Missing required fields in webhook event',
-          400,
-          { event }
-        );
+        throw new WebhookError('Missing required fields in webhook event', 400);
       }
 
-      return event;
+      return webhookEvent;
     } catch (error) {
-      if (error instanceof WebhookError) throw error;
-      throw new WebhookError('Invalid webhook payload', 400, { error });
+      throw new WebhookError('Invalid webhook payload', 400);
     }
   }
 
@@ -211,37 +246,34 @@ export class MTNPaymentWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
-      this.logger.info('Received MTN webhook event', { event });
-
       const webhookEvent = this.parseWebhookEvent(event.body);
-      const { externalId, amount, currency, status } = webhookEvent;
+      const { externalId, amount, currency } = webhookEvent;
 
       const result = await this.dbService.getItem({
         transactionId: externalId,
       });
-
-      if (!result?.Item) {
+      if (!result) {
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
-      const updateData =
-        status === 'SUCCESSFUL'
+      const transactionStatus: WebhookEvent =
+        await this.mtnService.checkTransactionStatus(
+          externalId,
+          TransactionType.PAYMENT
+        );
+
+      const updateData: Record<string, unknown> =
+        transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
               externalId,
               amount,
               currency,
               webhookEvent
             )
-          : {
-              status: 'FAILED',
-              paymentProviderResponse: {
-                status: webhookEvent.status,
-                reason: webhookEvent.payeeNote,
-              },
-            };
+          : await this.handleFailedPayment(externalId, transactionStatus);
 
-      await this.dbService.updatePaymentRecordByTransactionId(
-        externalId,
+      await this.dbService.updatePaymentRecord(
+        { transactionId: externalId },
         updateData
       );
 
@@ -251,9 +283,45 @@ export class MTNPaymentWebhookService {
         type: 'PAYMENT',
         amount: amount,
         currency: currency,
-        settlementId: updateData.settlementId,
+        uniqueId: updateData.uniqueId,
         settlementStatus: updateData.settlementStatus,
       });
+
+      this.logger.info('Webhook processed successfully', {
+        externalId,
+        status: updateData.status,
+        uniqueId: updateData.uniqueId,
+        settlementStatus: updateData.settlementStatus,
+      });
+
+      // Call sandbox disbursement webhook if in sandbox environment
+      const environment = process.env.MTN_TARGET_ENVIRONMENT;
+      const webhookUrl = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
+
+      if (
+        environment === 'sandbox' &&
+        webhookUrl &&
+        updateData.uniqueId &&
+        updateData.settlementAmount
+      ) {
+        await this.mtnService.callWebhook(
+          {
+            financialTransactionId: uuidv4(),
+            externalId: updateData.uniqueId as string,
+            amount: webhookEvent.amount,
+            currency: webhookEvent.currency,
+            payer: {
+              partyIdType: 'MSISDN',
+              partyId: result.Item?.merchantMobileNo,
+            },
+            payeeNote: 'PayQAM payment request',
+            payerMessage: 'Thank you for your payment',
+            reason: undefined,
+            status: 'SUCCESSFUL',
+          },
+          TransactionType.TRANSFER
+        );
+      }
 
       return {
         statusCode: 200,
