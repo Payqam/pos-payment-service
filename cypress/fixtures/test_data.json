@@ -346,7 +346,10 @@
       "card[cvc]": "123"
     }
   }
-]
-
+],
+  "idempotency":[
+    {
+      "idempotencyKey": "unique-key-123"
+    }]
 }
 
