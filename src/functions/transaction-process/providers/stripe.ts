@@ -3,7 +3,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { CardData, CreatePaymentRecord } from '../../../model';
-// import { CacheService } from '../../../services/cacheService';
+import { CacheService } from '../../../services/cacheService';
 import { SNSService } from '../../../services/snsService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -14,7 +14,7 @@ export class CardPaymentService {
 
   private readonly dbService: DynamoDBService;
 
-  // private readonly cacheService: CacheService;
+  private readonly cacheService: CacheService;
 
   private readonly snsService: SNSService;
 
@@ -22,7 +22,9 @@ export class CardPaymentService {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    // this.cacheService = new CacheService();
+    if (process.env.ENABLE_CACHE === 'true') {
+      this.cacheService = new CacheService();
+    }
     this.snsService = SNSService.getInstance();
     this.logger.info('init()');
   }
@@ -96,14 +98,13 @@ export class CardPaymentService {
           // Only cache if enabled
           if (process.env.ENABLE_CACHE === 'true') {
             const key = `payment:${record.transactionId}`;
-            // await this.cacheService.setValue(key, record, 3600);
+            await this.cacheService.setValue(key, record, 3600);
             this.logger.info('Payment record stored in Redis', { key });
           }
           await this.snsService.publish(
             process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
-              transactionId: transactionId,
-              paymentMethod: 'CARD',
+              transactionId: paymentIntent.id,
               status: paymentIntent.status,
               type: 'CREATE',
               amount,

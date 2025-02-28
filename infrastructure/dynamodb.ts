@@ -71,7 +71,7 @@ export class DynamoDBConstruct extends Construct {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
-    // Add GSI2 for settlement lookups
+    // Add GSI3 for settlement lookups
     this.table.addGlobalSecondaryIndex({
       indexName: 'GSI3',
       partitionKey: {

@@ -4,6 +4,10 @@ import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { CreatePaymentRecord } from '../../../model';
+import { WebhookEvent } from '../../../types/mtn';
+import * as http from 'http';
+import * as https from 'https';
+import { URL } from 'url';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
   process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
@@ -118,8 +122,8 @@ export class MtnPaymentService {
       headers.Authorization = `Bearer ${token.access_token}`;
     }
 
-    // Add reference ID if provided, otherwise generate new one
-    headers['X-Reference-Id'] = transactionId || uuidv4();
+    // Add reference ID if provided
+    if (transactionId) headers['X-Reference-Id'] = transactionId;
 
     // Add callback URL based on transaction type
     if (process.env.MTN_PAYMENT_WEBHOOK_URL) {
@@ -234,6 +238,71 @@ export class MtnPaymentService {
   }
 
   /**
+   * Calls a webhook for sandbox testing
+   * @param event - Webhook Event
+   * @param type - Transaction type (PAYMENT or TRANSFER)
+   * @returns Promise<void>
+   */
+  public async callWebhook(
+    event: WebhookEvent,
+    type: TransactionType
+  ): Promise<void> {
+    const environment = process.env.MTN_TARGET_ENVIRONMENT;
+    const webhookUrl =
+      type === TransactionType.PAYMENT
+        ? process.env.MTN_PAYMENT_WEBHOOK_URL
+        : process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
+
+    if (!webhookUrl || environment !== 'sandbox') {
+      return;
+    }
+
+    try {
+      // Parse the URL to determine if it's HTTP or HTTPS
+      const url = new URL(webhookUrl);
+      const isHttps = url.protocol === 'https:';
+
+      // Create options for the request
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(JSON.stringify(event)),
+        },
+      };
+
+      // Create a promise to handle the async request
+      await new Promise((resolve, reject) => {
+        const req = (isHttps ? https : http).request(options, (res) => {
+          let data = '';
+
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            resolve(data);
+          });
+        });
+
+        req.on('error', (error) => {
+          reject(error);
+        });
+
+        // Write the data and end the request
+        req.write(JSON.stringify(event));
+        req.end();
+      });
+    } catch (error) {
+      this.logger.info('Failed to call the webhook');
+      throw new Error('Failed to call the webhook');
+    }
+  }
+
+  /**
    * Processes a payment request from a customer.
    * Creates a payment request via MTN's collection API and stores the transaction in DynamoDB.
    *
@@ -252,17 +321,8 @@ export class MtnPaymentService {
     merchantMobileNo: string,
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
-  ): Promise<string> {
+  ): Promise<{ transactionId: string; status: string } | string> {
     const transactionId = uuidv4();
-    this.logger.info('Processing MTN payment', {
-      transactionId,
-      amount,
-      mobileNo,
-      merchantId,
-      merchantMobileNo,
-      currency,
-    });
-
     try {
       const axiosInstance = await this.createAxiosInstance(
         TransactionType.PAYMENT,
@@ -308,13 +368,40 @@ export class MtnPaymentService {
         status: 'PENDING',
       });
 
-      return transactionId;
+      // Check if we're in sandbox environment
+      const targetEnvironment = process.env.MTN_TARGET_ENVIRONMENT;
+      if (targetEnvironment === 'sandbox') {
+        await this.callWebhook(
+          {
+            financialTransactionId: uuidv4(),
+            externalId: transactionId,
+            amount: amount as unknown as string,
+            currency,
+            payer: {
+              partyIdType: 'MSISDN',
+              partyId: mobileNo,
+            },
+            payeeNote: 'PayQAM payment request',
+            payerMessage: 'Thank you for your payment',
+            reason: undefined,
+            status: 'SUCCESSFUL',
+          },
+          TransactionType.PAYMENT
+        );
+      }
+
+      return {
+        transactionId,
+        status: 'PENDING',
+      };
     } catch (error) {
       this.logger.error('Failed to process payment', {
         error: error instanceof Error ? error.message : 'Unknown error',
         transactionId,
       });
-      throw error;
+
+      // If not a mapped MTN error, throw the original error
+      throw new Error('Failed to process the payment');
     }
   }
 
@@ -328,7 +415,7 @@ export class MtnPaymentService {
   public async checkTransactionStatus(
     transactionId: string,
     type: TransactionType
-  ): Promise<string> {
+  ): Promise<WebhookEvent> {
     try {
       const axiosInstance = await this.createAxiosInstance(type);
       const endpoint =
@@ -337,14 +424,11 @@ export class MtnPaymentService {
           : `/disbursement/v1_0/transfer/${transactionId}`;
 
       const response = await axiosInstance.get(endpoint);
-      return response.data.status;
+
+      return response.data;
     } catch (error) {
-      this.logger.error('Error checking transaction status', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        transactionId,
-        type,
-      });
-      throw error;
+      this.logger.error('Failed to check the transaction status');
+      throw new Error('Failed to check the transaction status');
     }
   }
 
@@ -363,19 +447,14 @@ export class MtnPaymentService {
     currency: string = 'EUR'
   ): Promise<string> {
     try {
+      const transactionId = uuidv4();
       const axiosInstance = await this.createAxiosInstance(
-        TransactionType.TRANSFER
+        TransactionType.TRANSFER,
+        transactionId
       );
 
-      // Log the request details (mask sensitive data)
-      this.logger.info('Initiating MTN transfer', {
-        amount,
-        currency,
-        recipientMobileNo: recipientMobileNo.replace(/\d(?=\d{4})/g, '*'),
-      });
-
-      const transactionId = uuidv4();
-      const response = await axiosInstance.post('/disbursement/v1_0/transfer', {
+      // TODO: Log the request details (mask sensitive data)
+      await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,
         externalId: transactionId,
@@ -387,20 +466,10 @@ export class MtnPaymentService {
         payeeNote: 'Payment from your customer',
       });
 
-      // Log successful transfer
-      this.logger.info('Transfer initiated successfully', {
-        transactionId,
-        status: response.status,
-        statusText: response.statusText,
-      });
-
       return transactionId;
     } catch (error) {
-      // Log detailed error information
-      this.logger.error('Failed to initiate transfer', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      throw error;
+      this.logger.error('Failed to initiate transfer');
+      throw new Error('Failed to initiate transfer');
     }
   }
 }
