@@ -1,4 +1,4 @@
-import stripe, {Stripe} from 'stripe';
+import stripe, { Stripe } from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
@@ -75,7 +75,9 @@ export class CardPaymentService {
                 transactionId: transactionId,
               },
             });
-          } catch (paymentError) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-expect-error
+          } catch (paymentError: never) {
             this.logger.error('Error creating payment intent', paymentError);
 
             const failedRecord: CreatePaymentRecord = {
@@ -84,11 +86,11 @@ export class CardPaymentService {
               amount,
               paymentMethod: 'CARD',
               status: 'FAILED',
-              paymentProviderResponse: paymentError?.raw?.payment_intent,
+              paymentProviderResponse: paymentError.raw?.payment_intent,
               transactionType: 'CHARGE',
               metaData,
               fee: feeAmount,
-              uniqueId: (paymentError as any).raw.payment_intent.id,
+              uniqueId: paymentError.raw.payment_intent.id,
               GSI1SK: Math.floor(Date.now() / 1000),
               GSI2SK: Math.floor(Date.now() / 1000),
               exchangeRate: 'N/A',
@@ -126,7 +128,6 @@ export class CardPaymentService {
 
             throw paymentError;
           }
-
           this.logger.info('Payment intent created', paymentIntent);
 
           const record: CreatePaymentRecord = {
@@ -189,45 +190,97 @@ export class CardPaymentService {
       }
 
       case 'REFUND': {
+        const transactionId = uuidv4();
         try {
-          const refund = await stripeClient.refunds.create({
-            payment_intent: cardData.paymentIntentId,
-            amount: amount ? amount : undefined,
-            reason: cardData.reason as stripe.RefundCreateParams.Reason,
-            reverse_transfer: cardData.reverse_transfer,
-          });
+          let refund;
+          try {
+            refund = await stripeClient.refunds.create({
+              payment_intent: cardData.paymentIntentId,
+              amount: amount ? amount : undefined,
+              reason: cardData.reason as stripe.RefundCreateParams.Reason,
+              reverse_transfer: cardData.reverse_transfer,
+            });
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-expect-error
+          } catch (refundError: never) {
+            this.logger.error('Error creating refund', refundError);
+
+            const failedRecord: CreatePaymentRecord = {
+              transactionId,
+              merchantId,
+              amount,
+              paymentMethod: 'CARD',
+              status: 'FAILED',
+              paymentProviderResponse: refundError?.raw,
+              transactionType: 'REFUND',
+              metaData,
+              uniqueId: refundError?.raw?.refund?.id,
+              GSI1SK: Math.floor(Date.now() / 1000),
+              GSI2SK: Math.floor(Date.now() / 1000),
+              exchangeRate: 'N/A',
+              processingFee: 'N/A',
+              netAmount: 'N/A',
+              externalTransactionId: 'N/A',
+            };
+
+            await this.dbService.createPaymentRecord(failedRecord);
+            this.logger.info(
+              'Failed refund record created in DynamoDB',
+              failedRecord
+            );
+
+            await this.snsService.publish(
+              process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+              {
+                transactionId,
+                status: 'FAILED',
+                type: 'CREATE',
+                amount,
+                merchantId,
+                transactionType: 'REFUND',
+                metaData,
+              }
+            );
+
+            throw refundError;
+          }
 
           this.logger.info('Refund processed', refund);
-          const record = {
-            transactionId: refund?.id as string,
+
+          const record: CreatePaymentRecord = {
+            transactionId: transactionId,
             amount,
             paymentMethod: 'CARD',
             GSI1SK: Math.floor(Date.now() / 1000),
             GSI2SK: Math.floor(Date.now() / 1000),
             status: refund.status as string,
             paymentProviderResponse: refund,
-            metaData: metaData,
+            metaData,
             transactionType: 'REFUND',
+            uniqueId: refund.id as string,
           };
+
           await this.dbService.createPaymentRecord(record);
           await this.snsService.publish(
             process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
-              transactionId: refund.id,
+              paymentMethod: 'Stripe',
+              transactionId: transactionId,
               status: refund.status,
               type: 'CREATE',
               amount,
-              merchantId: merchantId,
-              transactionType: 'CHARGE',
-              metaData: metaData,
+              merchantId,
+              transactionType: 'REFUND',
+              metaData,
             }
           );
+
           return {
-            transactionId: refund.id,
+            transactionId: transactionId,
             status: refund.status as string,
           };
         } catch (error) {
-          this.logger.error('Error processing refund', error);
+          this.logger.error('Unexpected error processing refund', error);
           throw error;
         }
       }

@@ -92,18 +92,22 @@ export class StripeWebhookService {
         return 5;
       case 'CHARGE_UPDATED':
         return 6;
-      case 'REFUND_CREATED':
+      case 'CHARGE_REFUNDED':
         return 7;
-      case 'REFUND_UPDATED':
+      case 'CHARGE_REFUND_UPDATED':
         return 8;
-      case 'REFUND_FAILED':
+      case 'REFUND_CREATED':
         return 9;
-      case 'INTENT_FAILED':
+      case 'REFUND_UPDATED':
         return 10;
-      case 'INTENT_CANCELLED':
+      case 'REFUND_FAILED':
         return 11;
-      case 'CHARGE_FAILED':
+      case 'INTENT_FAILED':
         return 12;
+      case 'INTENT_CANCELLED':
+        return 13;
+      case 'CHARGE_FAILED':
+        return 14;
       default:
         return 0;
     }
@@ -168,6 +172,7 @@ export class StripeWebhookService {
 
     const updateData = {
       status,
+      refundId: 'refund' in paymentIntent ? paymentIntent.id : undefined,
       paymentProviderResponse: paymentIntent,
     };
 
@@ -213,6 +218,18 @@ export class StripeWebhookService {
           await this.handlePaymentEvent(
             stripeEvent.data.object as stripe.Charge,
             'CHARGE_FAILED'
+          );
+          break;
+        case 'charge.refunded':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Charge,
+            'CHARGE_REFUNDED'
+          );
+          break;
+        case 'charge.refund.updated':
+          await this.handlePaymentEvent(
+            stripeEvent.data.object as stripe.Refund,
+            'CHARGE_REFUND_UPDATED'
           );
           break;
         case 'payment_intent.succeeded':
