@@ -234,7 +234,7 @@ export class OrangeWebhookService {
         channelUserMsisdn: process.env.ORANGE_PAYQAM_MERCHANT_PHONE!,
         amount: disbursementAmount,
         subscriberMsisdn: transaction.merchantMobileNo, 
-        orderId: `DISB_${transaction.transactionId}`,
+        orderId: `${transaction.transactionId}`,
         description: `Disbursement for transaction ${transaction.transactionId}`,
         payToken: initResponse.data.payToken
       });
@@ -242,7 +242,7 @@ export class OrangeWebhookService {
       const result = {
         status: disbursementResponse.data.status,
         payToken: initResponse.data.payToken,
-        orderId: `DISB_${transaction.transactionId}`
+        orderId: `${transaction.transactionId}`
       };
 
       this.logger.info('Disbursement processed successfully', {
