@@ -25,13 +25,13 @@ interface PaymentRecordUpdate {
   paymentProviderResponse: {
     status: string;
     inittxnstatus?: string;
+    confirmtxnstatus?: string;
   };
   disbursementStatus?: string;
   disbursementAmount?: number;
   disbursementPayToken?: string;
   disbursementResponse?: {
     status: string;
-    inittxnstatus?: string;
     orderId?: string;
   };
   fee?: number;
@@ -106,24 +106,58 @@ export class OrangeWebhookService {
   }
 
   private determinePaymentStatus(paymentResponse: PaymentResponse): string {
-    const { status, inittxnstatus } = paymentResponse.data;
-    
-    // Check status first
-    if (status === 'SUCCESS') {
-      return 'SUCCESS';
-    }
-    
-    // Check if payment was rejected or failed
-    if (status === 'FAILED' || inittxnstatus === 'FAILED') {
-      return 'FAILED';
-    }
-    
-    // If still processing
-    if (inittxnstatus === 'SUCCESS') {
+    const status = paymentResponse.data.status;
+    const initStatus = paymentResponse.data.inittxnstatus;
+    const confirmStatus = paymentResponse.data.confirmtxnstatus;
+
+    this.logger.info('Determining payment status', {
+      status,
+      initStatus,
+      confirmStatus
+    });
+
+    // If the payment is still pending, keep it as pending
+    if (status === 'PENDING' && initStatus === '200' && !confirmStatus) {
       return 'PENDING';
     }
-    
-    return 'FAILED'; // Default to failed if status is unclear
+
+    // If we have a successful confirmation, mark as success
+    if (confirmStatus === '200') {
+      return 'SUCCESS';
+    }
+
+    // If init failed or confirmation failed, mark as failed
+    if (initStatus !== '200' || (confirmStatus && confirmStatus !== '200')) {
+      return 'FAILED';
+    }
+
+    return status || 'FAILED'; // Default to failed if status is unclear
+  }
+
+  /**
+   * Removes undefined values from an object recursively
+   */
+  private removeUndefined(obj: any): any {
+    if (obj === null || obj === undefined) {
+      return undefined;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.removeUndefined(item)).filter(item => item !== undefined);
+    }
+
+    if (typeof obj === 'object') {
+      const cleaned: any = {};
+      for (const key in obj) {
+        const value = this.removeUndefined(obj[key]);
+        if (value !== undefined) {
+          cleaned[key] = value;
+        }
+      }
+      return Object.keys(cleaned).length ? cleaned : undefined;
+    }
+
+    return obj;
   }
 
   private async updatePaymentRecord(
@@ -131,11 +165,23 @@ export class OrangeWebhookService {
     update: PaymentRecordUpdate
   ): Promise<void> {
     try {
-      await this.dbService.updatePaymentRecordByTransactionId(
-        transactionId,
-        update
-      );
+      // Clean the update payload by removing undefined values
+      const cleanedUpdate = this.removeUndefined(update);
+      
+      if (!cleanedUpdate) {
+        throw new Error('Update payload is empty after cleaning undefined values');
+      }
+
+      // Create the key object with the correct structure
+      const key = { transactionId };
+
+      await this.dbService.updatePaymentRecord(key, cleanedUpdate);
     } catch (error) {
+      this.logger.error('Error updating payment record', {
+        error,
+        transactionId,
+        update: JSON.stringify(update)
+      });
       throw new WebhookError('Failed to update payment record', 500, error);
     }
   }
@@ -170,8 +216,7 @@ export class OrangeWebhookService {
   }> {
     try {
       if (!transaction.merchantMobileNo) {
-        this.logger.error('Merchant mobile number not found', { transactionId: transaction.transactionId });
-        return { status: 'FAILED' };
+        throw new Error('Merchant mobile number not found');
       }
 
       // Calculate disbursement amount (90% of payment amount)
@@ -181,28 +226,35 @@ export class OrangeWebhookService {
       const initResponse = await this.orangeService.initDisbursement();
       
       if (!initResponse.data?.payToken) {
-        this.logger.error('Failed to get payToken for disbursement', { transactionId: transaction.transactionId });
-        return { status: 'FAILED' };
+        throw new Error('Failed to get payToken for disbursement');
       }
 
       // Execute disbursement
       const disbursementResponse = await this.orangeService.executeDisbursement({
-        channelUserMsisdn: process.env.ORANGE_CHANNEL_MSISDN!,
+        channelUserMsisdn: process.env.ORANGE_PAYQAM_MERCHANT_PHONE!,
         amount: disbursementAmount,
-        subscriberMsisdn: transaction.merchantMobileNo,
+        subscriberMsisdn: transaction.merchantMobileNo, 
         orderId: `DISB_${transaction.transactionId}`,
         description: `Disbursement for transaction ${transaction.transactionId}`,
         payToken: initResponse.data.payToken
       });
 
-      return {
+      const result = {
         status: disbursementResponse.data.status,
         payToken: initResponse.data.payToken,
         orderId: `DISB_${transaction.transactionId}`
       };
+
+      this.logger.info('Disbursement processed successfully', {
+        transactionId: transaction.transactionId,
+        disbursementAmount,
+        result
+      });
+
+      return result;
     } catch (error) {
       this.logger.error('Disbursement failed', { 
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error', 
         transactionId: transaction.transactionId 
       });
       return { status: 'FAILED' };
@@ -226,72 +278,83 @@ export class OrangeWebhookService {
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
+      // // Don't process disbursement for pending payments
+      // if (status === 'PENDING') {
+      //   const updatePayload: PaymentRecordUpdate = {
+      //     status,
+      //     paymentProviderResponse: {
+      //       status,
+      //       inittxnstatus: paymentResponse.data.inittxnstatus || undefined
+      //     }
+      //   };
+
+      //   await this.updatePaymentRecord(transaction.transactionId, updatePayload);
+        
+      //   return {
+      //     statusCode: 200,
+      //     body: JSON.stringify({ message: 'Payment is still pending' })
+      //   };
+      // }
+
       const updatePayload: PaymentRecordUpdate = {
         status,
         paymentProviderResponse: {
           status,
-          ...(paymentResponse.data.inittxnstatus && {
-            inittxnstatus: paymentResponse.data.inittxnstatus
-          })
+          inittxnstatus: paymentResponse.data.inittxnstatus || undefined,
+          confirmtxnstatus: paymentResponse.data.confirmtxnstatus || undefined
         }
       };
 
-      // TEMPORARY: Process disbursement regardless of status for testing
-      // TODO: Change back to if (status === 'SUCCESS') for production
-      if (true) { // Always process disbursement for testing
-        this.logger.info('Processing disbursement for testing', { 
-          status, 
-          transactionId: transaction.transactionId 
-        });
-        
+      // TEMPORARY: Process disbursement for failed payments (testing only)
+      this.logger.info('SANDBOX: Processing disbursement for testing', { status });
+      if (status === 'PENDING') {  
         const disbursementResult = await this.processDisbursement(transaction, amount);
         
-        // Calculate and store fee and settlement amount
-        const paymentAmount = parseFloat(amount);
-        const fee = Math.floor(paymentAmount * 0.1);
-        const settlementAmount = paymentAmount - fee;
+        // Only add disbursement data if we have valid results
+        // if (disbursementResult.status !== 'FAILED') {
+          const paymentAmount = parseFloat(amount);
+          const fee = Math.floor(paymentAmount * 0.1);
+          const settlementAmount = paymentAmount - fee;
 
-        // Only add defined values to avoid DynamoDB errors
-        if (disbursementResult.status) {
-          updatePayload.disbursementStatus = disbursementResult.status;
-        }
-        if (disbursementResult.payToken) {
-          updatePayload.disbursementPayToken = disbursementResult.payToken;
-        }
-        if (disbursementResult.orderId) {
-          updatePayload.disbursementResponse = {
-            status: disbursementResult.status,
-            orderId: disbursementResult.orderId
-          };
-        }
-        updatePayload.fee = fee;
-        updatePayload.settlementAmount = settlementAmount;
-        updatePayload.disbursementAmount = settlementAmount;
+          Object.assign(updatePayload, {
+            disbursementStatus: disbursementResult.status,
+            disbursementPayToken: disbursementResult.payToken,
+            disbursementResponse: {
+              status: disbursementResult.status,
+              orderId: disbursementResult.orderId
+            },
+            fee,
+            settlementAmount
+          });
+        // } else {
+        //   updatePayload.disbursementStatus = 'FAILED';
+        // }
       }
 
-      // Update payment record with status and response details
+      // Update the transaction record
       await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
-      // Publish status update
+      // Publish the status update
       await this.publishStatusUpdate(transaction.transactionId, status, amount, currency);
 
       return {
         statusCode: 200,
-        headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({ message: 'Webhook processed successfully' }),
+        body: JSON.stringify({ 
+          message: 'Webhook processed successfully',
+          status,
+          transactionId: transaction.transactionId
+        })
       };
     } catch (error) {
       if (error instanceof WebhookError) {
         return {
           statusCode: error.statusCode,
-          headers: API.DEFAULT_HEADERS,
           body: JSON.stringify({ error: error.message }),
         };
       }
 
       return {
         statusCode: 500,
-        headers: API.DEFAULT_HEADERS,
         body: JSON.stringify({ error: 'Internal server error' }),
       };
     }

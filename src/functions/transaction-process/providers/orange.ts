@@ -25,6 +25,9 @@ export class OrangePaymentService {
   private readonly tokenUrl: string;
   private currentToken: OrangeToken | null;
   private tokenExpiryTime: number;
+  private readonly TOKEN_EXPIRY_BUFFER = 300; // 5 minutes buffer
+  private readonly MAX_RETRIES = 3;
+  private readonly RETRY_DELAY = 1000; // 1 second
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
@@ -48,7 +51,7 @@ export class OrangePaymentService {
     try {
       // Check if we have a valid cached token
       const currentTime = Math.floor(Date.now() / 1000);
-      if (this.currentToken && currentTime < this.tokenExpiryTime) {
+      if (this.currentToken && currentTime < this.tokenExpiryTime - this.TOKEN_EXPIRY_BUFFER) {
         this.logger.info('Using cached token');
         return this.currentToken;
       }
@@ -73,9 +76,9 @@ export class OrangePaymentService {
 
       const token: OrangeToken = response.data;
 
-      // Store token and calculate expiry time (subtract 60 seconds as buffer)
+      // Store token and calculate expiry time with buffer
       this.currentToken = token;
-      this.tokenExpiryTime = currentTime + (token.expires_in - 60);
+      this.tokenExpiryTime = currentTime + token.expires_in;
 
       this.logger.info('Generated new Orange token', {
         expiresIn: token.expires_in,
@@ -91,6 +94,40 @@ export class OrangePaymentService {
       });
       throw new Error('Failed to generate Orange token');
     }
+  }
+
+  /**
+   * Executes an API request with retry logic for token expiration
+   * @param requestFn The API request function to execute
+   * @returns The API response
+   */
+  private async executeWithRetry<T>(requestFn: () => Promise<T>): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        return await requestFn();
+      } catch (error) {
+        lastError = error as Error;
+        
+        // If it's a 401 error and we haven't reached max retries
+        if (axios.isAxiosError(error) && error.response?.status === 401 && attempt < this.MAX_RETRIES) {
+          this.logger.warn(`Token expired, attempt ${attempt}/${this.MAX_RETRIES}. Refreshing token...`);
+          
+          // Force token refresh
+          this.currentToken = null;
+          this.tokenExpiryTime = 0;
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+          continue;
+        }
+        
+        throw error;
+      }
+    }
+    
+    throw lastError || new Error('Max retries exceeded');
   }
 
   /**
@@ -133,27 +170,29 @@ export class OrangePaymentService {
    * @returns The payment status response
    */
   public async getPaymentStatus(payToken: string): Promise<PaymentResponse> {
-    try {
-      const axiosInstance = await this.createAxiosInstance();
-      const response = await axiosInstance.get<PaymentResponse>(
-        `/omapi/1.0.2/mp/paymentstatus/${payToken}`
-      );
+    return this.executeWithRetry(async () => {
+      try {
+        const axiosInstance = await this.createAxiosInstance();
+        const response = await axiosInstance.get<PaymentResponse>(
+          `/omapi/1.0.2/mp/paymentstatus/${payToken}`
+        );
 
-      this.logger.info('Payment status check successful', {
-        payToken,
-        status: response.data.data.status,
-        inittxnstatus: response.data.data.inittxnstatus,
-        confirmtxnstatus: response.data.data.confirmtxnstatus
-      });
+        this.logger.info('Payment status check successful', {
+          payToken,
+          status: response.data.data.status,
+          inittxnstatus: response.data.data.inittxnstatus,
+          confirmtxnstatus: response.data.data.confirmtxnstatus
+        });
 
-      return response.data;
-    } catch (error) {
-      this.logger.error('Error checking payment status', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        payToken
-      });
-      throw new Error('Failed to check payment status');
-    }
+        return response.data;
+      } catch (error) {
+        this.logger.error('Error checking payment status', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          payToken
+        });
+        throw error;
+      }
+    });
   }
 
   /**
@@ -162,25 +201,27 @@ export class OrangePaymentService {
    * @returns PayToken for the payment
    */
   private async initiateMerchantPayment(): Promise<string> {
-    try {
-      const axiosInstance = await this.createAxiosInstance();
-      const response = await axiosInstance.post<PaymentInitResponse>(
-        '/omapi/1.0.2/mp/init',
-        {}
-      );
+    return this.executeWithRetry(async () => {
+      try {
+        const axiosInstance = await this.createAxiosInstance();
+        const response = await axiosInstance.post<PaymentInitResponse>(
+          '/omapi/1.0.2/mp/init',
+          {}
+        );
 
-      this.logger.info('Payment initialization successful', {
-        message: response.data.message,
-        payToken: response.data.data.payToken
-      });
+        this.logger.info('Payment initialization successful', {
+          message: response.data.message,
+          payToken: response.data.data.payToken
+        });
 
-      return response.data.data.payToken;
-    } catch (error) {
-      this.logger.error('Error initiating merchant payment', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw new Error('Failed to initiate merchant payment');
-    }
+        return response.data.data.payToken;
+      } catch (error) {
+        this.logger.error('Error initiating merchant payment', {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        throw new Error('Failed to initiate merchant payment');
+      }
+    });
   }
 
   /**
@@ -190,21 +231,23 @@ export class OrangePaymentService {
    * @returns PaymentInitResponse
    */
   public async initDisbursement(): Promise<PaymentInitResponse> {
-    try {
-      const token = await this.generateToken();
-      const headers = await this.createHeaders();
+    return this.executeWithRetry(async () => {
+      try {
+        const token = await this.generateToken();
+        const headers = await this.createHeaders();
 
-      const response = await axios.post(
-        `${this.baseUrl}/omapi/1.0.2/cashin/init`,
-        {},
-        { headers }
-      );
+        const response = await axios.post(
+          `${this.baseUrl}/omapi/1.0.2/cashin/init`,
+          {},
+          { headers }
+        );
 
-      return response.data;
-    } catch (error) {
-      this.logger.error('Error initiating disbursement', { error });
-      throw new Error('Failed to initiate disbursement');
-    }
+        return response.data;
+      } catch (error) {
+        this.logger.error('Error initiating disbursement', { error });
+        throw new Error('Failed to initiate disbursement');
+      }
+    });
   }
 
   /**
@@ -220,24 +263,26 @@ export class OrangePaymentService {
     description: string;
     payToken: string;
   }): Promise<PaymentResponse> {
-    try {
-      const token = await this.generateToken();
-      const headers = await this.createHeaders();
+    return this.executeWithRetry(async () => {
+      try {
+        const token = await this.generateToken();
+        const headers = await this.createHeaders();
 
-      const response = await axios.post(
-        `${this.baseUrl}/omapi/1.0.2/cashin/pay`,
-        {
-          ...params,
-          pin: process.env.ORANGE_DISBURSEMENT_PIN
-        },
-        { headers }
-      );
+        const response = await axios.post(
+          `${this.baseUrl}/omapi/1.0.2/cashin/pay`,
+          {
+            ...params,
+            pin: process.env.ORANGE_PAYQAM_PIN
+          },
+          { headers }
+        );
 
-      return response.data;
-    } catch (error) {
-      this.logger.error('Error executing disbursement', { error });
-      throw new Error('Failed to execute disbursement');
-    }
+        return response.data;
+      } catch (error) {
+        this.logger.error('Error executing disbursement', { error });
+        throw new Error('Failed to execute disbursement');
+      }
+    });
   }
 
   /**
@@ -264,11 +309,11 @@ export class OrangePaymentService {
 
     try {
       const axiosInstance = await this.createAxiosInstance();
-      const merchantPhone = process.env.ORANGE_PAYQAM_MERCHANT_PHONE;
+      const payqamMerchantPhone = process.env.ORANGE_PAYQAM_MERCHANT_PHONE;
       const notifyUrl = process.env.ORANGE_NOTIFY_URL;
       const pin = process.env.ORANGE_PAYQAM_PIN;
 
-      if (!merchantPhone || !notifyUrl || !pin) {
+      if (!payqamMerchantPhone || !notifyUrl || !pin) {
         throw new Error('Required environment variables are not set');
       }
 
@@ -279,7 +324,7 @@ export class OrangePaymentService {
       const transactionId = uuidv4().replace(/-/g, '').slice(0, 20);
       const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
         notifUrl: notifyUrl,
-        channelUserMsisdn: merchantPhone,
+        channelUserMsisdn: payqamMerchantPhone,
         amount,
         subscriberMsisdn: customerPhone,
         pin,
@@ -294,6 +339,7 @@ export class OrangePaymentService {
       const record: CreatePaymentRecord = {
         transactionId: transactionId,
         merchantId,
+        merchantMobileNo,
         amount,
         paymentMethod: 'ORANGE',
         status: paymentData.status,
