@@ -13,6 +13,19 @@ import {
 } from '../interfaces/orange';
 
 /**
+ * Orange API credentials structure
+ */
+interface OrangeCredentials {
+  baseUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  xAuthToken: string;
+  notifyUrl: string;
+  merchantPhone: string;
+  merchantPin: string;
+}
+
+/**
  * Service class for handling Orange Money payment operations.
  * Supports both collection (customer payments) and disbursement (merchant transfers) operations.
  */
@@ -21,24 +34,47 @@ export class OrangePaymentService {
   private readonly secretsManagerService: SecretsManagerService;
   private readonly dbService: DynamoDBService;
   // private readonly snsService: SNSService;
-  private readonly baseUrl: string;
-  private readonly tokenUrl: string;
   private currentToken: OrangeToken | null;
   private tokenExpiryTime: number;
   private readonly TOKEN_EXPIRY_BUFFER = 300; // 5 minutes buffer
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000; // 1 second
+  private credentials: OrangeCredentials | null;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
     // this.snsService = new SNSService();
-    this.baseUrl = process.env.ORANGE_API_BASE_URL || 'https://omdeveloper-gateway.orange.cm';
-    this.tokenUrl = process.env.ORANGE_TOKEN_URL || 'https://omdeveloper.orange.cm/oauth2/token';
     this.currentToken = null;
     this.tokenExpiryTime = 0;
+    this.credentials = null;
     this.logger.info('init()');
+  }
+
+  /**
+   * Retrieves Orange API credentials from AWS Secrets Manager
+   */
+  private async getOrangeCredentials(): Promise<OrangeCredentials> {
+    if (this.credentials) {
+      return this.credentials;
+    }
+
+    const secret = await this.secretsManagerService.getSecret(
+      process.env.ORANGE_API_SECRET as string
+    );
+
+    this.credentials = {
+      baseUrl: secret.baseUrl,
+      tokenUrl: secret.tokenUrl,
+      clientId: secret.clientId,
+      xAuthToken: secret.xAuthToken,
+      notifyUrl: secret.notifyUrl,
+      merchantPhone: secret.merchantPhone,
+      merchantPin: secret.merchantPin,
+    };
+
+    return this.credentials;
   }
 
   /**
@@ -56,20 +92,17 @@ export class OrangePaymentService {
         return this.currentToken;
       }
 
-      const clientId = process.env.ORANGE_CLIENT_ID;
-      if (!clientId) {
-        throw new Error('ORANGE_CLIENT_ID environment variable is not set');
-      }
+      const credentials = await this.getOrangeCredentials();
 
       const response = await axios.post(
-        this.tokenUrl,
+        credentials.tokenUrl,
         querystring.stringify({
           grant_type: 'client_credentials'
         }),
         {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': `Basic ${clientId}`
+            'Authorization': `Basic ${credentials.clientId}`
           }
         }
       );
@@ -90,7 +123,7 @@ export class OrangePaymentService {
     } catch (error) {
       this.logger.error('Error generating Orange token', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        tokenUrl: this.tokenUrl
+        tokenUrl: (await this.getOrangeCredentials()).tokenUrl
       });
       throw new Error('Failed to generate Orange token');
     }
@@ -136,31 +169,28 @@ export class OrangePaymentService {
    * @returns Headers object for the API request
    */
   private async createHeaders(): Promise<Record<string, string>> {
+    const credentials = await this.getOrangeCredentials();
     const token = await this.generateToken();
-    const authToken = process.env.ORANGE_X_AUTH_TOKEN;
-    if (!authToken) {
-      throw new Error('ORANGE_X_AUTH_TOKEN environment variable is not set');
-    }
 
     return {
       'WSO2-Authorization': `Bearer ${token.access_token}`,
-      'X-AUTH-TOKEN': authToken,
+      'X-AUTH-TOKEN': credentials.xAuthToken,
       'Content-Type': 'application/json',
       'accept': 'application/json'
     };
   }
 
   /**
-   * Creates a new axios instance with the current token.
-   * A new instance is created for each call to ensure we're using fresh tokens.
-   * 
-   * @returns An axios instance configured with the appropriate credentials and token
+   * Creates an Axios instance with proper headers and base URL for Orange API requests
    */
   private async createAxiosInstance(): Promise<AxiosInstance> {
+    const credentials = await this.getOrangeCredentials();
     const headers = await this.createHeaders();
+
     return axios.create({
-      baseURL: this.baseUrl,
-      headers
+      baseURL: credentials.baseUrl,
+      headers,
+      timeout: 10000,
     });
   }
 
@@ -237,7 +267,7 @@ export class OrangePaymentService {
         const headers = await this.createHeaders();
 
         const response = await axios.post(
-          `${this.baseUrl}/omapi/1.0.2/cashin/init`,
+          `${(await this.getOrangeCredentials()).baseUrl}/omapi/1.0.2/cashin/init`,
           {},
           { headers }
         );
@@ -269,10 +299,10 @@ export class OrangePaymentService {
         const headers = await this.createHeaders();
 
         const response = await axios.post(
-          `${this.baseUrl}/omapi/1.0.2/cashin/pay`,
+          `${(await this.getOrangeCredentials()).baseUrl}/omapi/1.0.2/cashin/pay`,
           {
             ...params,
-            pin: process.env.ORANGE_PAYQAM_PIN
+            pin: (await this.getOrangeCredentials()).merchantPin
           },
           { headers }
         );
@@ -363,11 +393,11 @@ export class OrangePaymentService {
   ): Promise<{ transactionId: string; status: string }> {
     try {
       const axiosInstance = await this.createAxiosInstance();
-      const payqamMerchantPhone = process.env.ORANGE_PAYQAM_MERCHANT_PHONE;
-      const notifyUrl = process.env.ORANGE_NOTIFY_URL;
-      const pin = process.env.ORANGE_PAYQAM_PIN;
+      const credentials = await this.getOrangeCredentials();
+      const notifyUrl = credentials.notifyUrl;
+      const pin = credentials.merchantPin;
 
-      if (!payqamMerchantPhone || !notifyUrl || !pin) {
+      if (!notifyUrl || !pin) {
         throw new Error('Required environment variables are not set');
       }
 
@@ -386,7 +416,7 @@ export class OrangePaymentService {
 
       const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
         notifUrl: notifyUrl,
-        channelUserMsisdn: payqamMerchantPhone,
+        channelUserMsisdn: credentials.merchantPhone,
         amount,
         subscriberMsisdn: customerPhone,
         pin,

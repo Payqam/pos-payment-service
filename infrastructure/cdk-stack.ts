@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvConfig } from './index';
 import { PaymentServiceVPC } from './vpc';
@@ -142,8 +143,13 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
+        baseUrl: process.env.ORANGE_API_BASE_URL || '',
+        tokenUrl: process.env.ORANGE_API_TOKEN_URL || '',
         clientId: process.env.ORANGE_CLIENT_ID || '',
         xAuthToken: process.env.ORANGE_X_AUTH_TOKEN || '',
+        notifyUrl: process.env.ORANGE_NOTIFY_URL || '',
+        merchantPhone: process.env.ORANGE_PAYQAM_MERCHANT_PHONE || '',
+        merchantPin: process.env.ORANGE_PAYQAM_PIN || '',
       },
     };
 
@@ -260,6 +266,13 @@ export class CDKStack extends cdk.Stack {
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
     );
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      new PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [orangeSecret.secretArn],
+      })
+    );
     // Define configs for KMS
     key.grantDecrypt(transactionsProcessLambda.lambda);
     KMSHelper.grantDecryptPermission(
@@ -310,16 +323,17 @@ export class CDKStack extends cdk.Stack {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
         TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-        ORANGE_CLIENT_ID: process.env.ORANGE_CLIENT_ID as string,
-        ORANGE_X_AUTH_TOKEN: process.env.ORANGE_X_AUTH_TOKEN as string,
-        ORANGE_PAYQAM_MERCHANT_PHONE: process.env.ORANGE_PAYQAM_MERCHANT_PHONE as string,
-        ORANGE_PAYQAM_PIN: process.env.ORANGE_PAYQAM_PIN as string,
-        ORANGE_NOTIFY_URL: process.env.ORANGE_NOTIFY_URL as string,
+        ORANGE_API_SECRET: orangeSecret.secretName,
       },
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+    orangeSecret.grantRead(orangeWebhookLambda.lambda);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+
+    // Add secrets policy to transactions process Lambda
+    orangeSecret.grantRead(transactionsProcessLambda.lambda);
 
     // Create MTN payment webhook Lambda
     const mtnPaymentWebhookLambda = new PAYQAMLambda(
@@ -758,6 +772,7 @@ export class CDKStack extends cdk.Stack {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
+          ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           INSTANT_DISBURSEMENT_ENABLED:

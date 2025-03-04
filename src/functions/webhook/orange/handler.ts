@@ -8,6 +8,7 @@ import { OrangePaymentService } from '../../transaction-process/providers';
 import { DynamoDBService, TransactionRecord } from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
 import { PaymentResponse } from '../../transaction-process/interfaces/orange';
+import { SecretsManagerService } from '../../../services/secretsManagerService';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -50,12 +51,14 @@ export class OrangeWebhookService {
   private readonly dbService: DynamoDBService;
   private readonly snsService: SNSService;
   private readonly orangeService: OrangePaymentService;
+  private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
     this.orangeService = new OrangePaymentService();
+    this.secretsManagerService = new SecretsManagerService();
   }
 
   private async validateWebhook(event: APIGatewayProxyEvent): Promise<WebhookEvent> {
@@ -207,6 +210,12 @@ export class OrangeWebhookService {
     }
   }
 
+  private async getOrangeCredentials() {
+    return await this.secretsManagerService.getSecret(
+      process.env.ORANGE_API_SECRET as string
+    );
+  }
+
   private async processDisbursement(
     transaction: TransactionRecord,
     amount: string
@@ -220,6 +229,9 @@ export class OrangeWebhookService {
         throw new Error('Merchant mobile number not found');
       }
 
+      // Get Orange credentials from Secrets Manager
+      const credentials = await this.getOrangeCredentials();
+
       // Calculate disbursement amount (90% of payment amount)
       const disbursementAmount = Math.floor(parseFloat(amount) * 0.9).toString();
 
@@ -232,7 +244,7 @@ export class OrangeWebhookService {
 
       // Execute disbursement
       const disbursementResponse = await this.orangeService.executeDisbursement({
-        channelUserMsisdn: process.env.ORANGE_PAYQAM_MERCHANT_PHONE!,
+        channelUserMsisdn: credentials.merchantPhone,
         amount: disbursementAmount,
         subscriberMsisdn: transaction.merchantMobileNo,
         orderId: `${transaction.orderId}`,
