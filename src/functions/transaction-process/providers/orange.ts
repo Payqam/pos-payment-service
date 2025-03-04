@@ -286,16 +286,32 @@ export class OrangePaymentService {
   }
 
   /**
+   * Generates a formatted order ID with the given prefix
+   * Format: PREFIX + YYYYMMDD + RANDOM4DIGITS
+   * Example: OM-202502281234
+   */
+  private generateOrderId(prefix = 'OM'): string {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const uniqueNumber = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+
+    return `${prefix}${year}${month}${day}${uniqueNumber}`.slice(0, 20);
+  }
+
+  /**
    * Processes a payment request from a customer.
    * Creates a payment request via Orange's API and stores the transaction in DynamoDB.
    *
    * @param amount - The payment amount
-   * @param mobileNo - Customer's mobile number
+   * @param customerPhone - Customer's mobile number
    * @param merchantId - ID of the merchant receiving the payment
    * @param merchantMobileNo - Merchant's mobile number for disbursement
    * @param metaData - Optional metadata for the transaction
+   * @param transactionType - Type of transaction (CHARGE/REFUND)
    * @param currency - Payment currency (default: EUR)
-   * @returns The transaction ID for tracking
+   * @returns The transaction ID and status
    */
   public async processPayment(
     amount: number,
@@ -303,10 +319,48 @@ export class OrangePaymentService {
     merchantId: string,
     merchantMobileNo: string,
     metaData?: Record<string, never> | Record<string, string>,
+    transactionType: string = 'CHARGE',
     currency: string = 'EUR'
-  ): Promise<string> {
-    this.logger.info('Processing Orange Money payment', { amount, customerPhone });
+  ): Promise<{ transactionId: string; status: string }> {
+    this.logger.info('Processing Orange Money payment', { 
+      amount, 
+      customerPhone,
+      transactionType 
+    });
 
+    switch (transactionType) {
+      case 'CHARGE': {
+        return this.processCharge(
+          amount,
+          customerPhone,
+          merchantId,
+          merchantMobileNo,
+          metaData,
+          currency
+        );
+      }
+
+      case 'REFUND': {
+        throw new Error('Orange Money refund functionality is not implemented yet');
+      }
+
+      default: {
+        throw new Error(`Unsupported transaction type: ${transactionType}`);
+      }
+    }
+  }
+
+  /**
+   * Processes a charge payment
+   */
+  private async processCharge(
+    amount: number,
+    customerPhone: string,
+    merchantId: string,
+    merchantMobileNo: string,
+    metaData?: Record<string, never> | Record<string, string>,
+    currency: string = 'EUR'
+  ): Promise<{ transactionId: string; status: string }> {
     try {
       const axiosInstance = await this.createAxiosInstance();
       const payqamMerchantPhone = process.env.ORANGE_PAYQAM_MERCHANT_PHONE;
@@ -321,23 +375,37 @@ export class OrangePaymentService {
       const payToken = await this.initiateMerchantPayment();
 
       // Step 2: Process the payment
-      const transactionId = uuidv4().replace(/-/g, '').slice(0, 20);
+      const transactionId = uuidv4();
+      const orderId = this.generateOrderId();  // Using new order ID format
+      
+      this.logger.info('Generated payment identifiers', {
+        transactionId,
+        orderId,
+        payToken
+      });
+
       const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
         notifUrl: notifyUrl,
         channelUserMsisdn: payqamMerchantPhone,
         amount,
         subscriberMsisdn: customerPhone,
         pin,
-        orderId: transactionId,
+        orderId,  // Using the formatted order ID
         description: metaData?.description || 'PayQam payment',
         payToken
       });
 
       const paymentData = response.data.data;
 
+      // Calculate fee and settlement amount
+      const feePercentage = 0.02; // 2% fee
+      const feeAmount = Math.floor(amount * feePercentage);
+      const settlementAmount = Math.max(amount - feeAmount, 0);
+
       // Create payment record
       const record: CreatePaymentRecord = {
-        transactionId: transactionId,
+        transactionId,
+        orderId,
         merchantId,
         merchantMobileNo,
         amount,
@@ -347,11 +415,14 @@ export class OrangePaymentService {
         customerPhone,
         GSI1SK: Math.floor(Date.now() / 1000),
         GSI2SK: Math.floor(Date.now() / 1000),
-        exchangeRate: 'exchangeRate',
-        processingFee: 'processingFee',
-        netAmount: 'netAmount',
+        exchangeRate: 'N/A',
+        processingFee: feeAmount.toString(),
+        netAmount: settlementAmount.toString(),
         externalTransactionId: paymentData.txnid,
         uniqueId: payToken,
+        fee: feeAmount,
+        settlementAmount,
+        transactionType: 'CHARGE',
         metaData: {
           ...metaData,
           payToken,
@@ -361,14 +432,29 @@ export class OrangePaymentService {
 
       await this.dbService.createPaymentRecord(record);
 
-      return transactionId;
+      return {
+        transactionId,
+        status: paymentData.status
+      };
     } catch (error) {
-      this.logger.error('Error processing Orange Money payment', {
+      this.logger.error('Error processing Orange Money charge', {
         error: error instanceof Error ? error.message : 'Unknown error',
         amount,
         customerPhone
       });
       throw error;
     }
+  }
+
+  /**
+   * Processes a refund payment (Not implemented yet)
+   */
+  private async processRefund(
+    amount: number,
+    payToken: string,
+    reason?: string
+  ): Promise<{ transactionId: string; status: string }> {
+    // This is a placeholder for future implementation
+    throw new Error('Orange Money refund functionality is not implemented yet');
   }
 }

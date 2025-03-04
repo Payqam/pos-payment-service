@@ -106,13 +106,21 @@ export class PaymentService {
             'Missing merchant mobile number for Orange Money payment'
           );
         }
-        this.logger.info('Processing Orange Money payment');
+        this.logger.info('Processing Orange Money payment', {
+          amount,
+          customerPhone,
+          merchantId,
+          merchantMobileNo,
+          transactionType
+        });
         return this.orangePaymentService.processPayment(
           amount,
           customerPhone,
           merchantId,
           merchantMobileNo,
-          metaData
+          metaData,
+          transactionType || 'CHARGE',  
+          cardData?.currency || 'EUR'  
         );
 
       default:
