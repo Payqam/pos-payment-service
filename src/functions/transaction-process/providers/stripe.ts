@@ -1,4 +1,4 @@
-import stripe, { Stripe } from 'stripe';
+import stripe from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
