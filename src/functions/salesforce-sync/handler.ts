@@ -261,6 +261,23 @@ export class SalesforceSyncService {
         this.logger.info('Successfully retrieved Salesforce record', {
           recordId,
         });
+        const recordPayload = {
+          transactionId__c: message.transactionId,
+          status__c: message.status,
+          amount__c: message.amount,
+          merchantId__c: message.merchantId,
+        };
+
+        await axios.patch(
+          `${urlHost}/services/data/v60.0/sobjects/Transaction__c/${recordId}`,
+          recordPayload,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
       } catch (error) {
         this.logger.error('Failed to fetch Salesforce record', { error });
         throw new Error('Salesforce record lookup failed');
@@ -318,12 +335,15 @@ export class SalesforceSyncService {
 
           switch (message.type) {
             case 'UPDATE':
+              this.logger.info('Update case', { message });
               await this.handlePaymentStatusUpdate(message, credentials);
               break;
             case 'CREATE':
+              this.logger.info('Create case', { message });
               await this.handlePaymentCreated(message, credentials);
               break;
             case 'FAILED':
+              this.logger.info('Failed case', { message });
               await this.handlePaymentError(message, credentials);
               break;
             default:
