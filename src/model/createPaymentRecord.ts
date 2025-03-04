@@ -2,6 +2,7 @@ import stripe from 'stripe';
 
 export interface CreatePaymentRecord {
   transactionId: string;
+  orderId?: string;
   amount: number;
   currency?: string;
   paymentMethod: string;

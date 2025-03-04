@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvConfig } from './index';
 import { PaymentServiceVPC } from './vpc';
@@ -142,8 +143,13 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
-        endpoint: process.env.ORANGE_API_ENDPOINT || 'https://api.orange.com',
-        apiKey: process.env.ORANGE_API_KEY || 'orange_test_your_key_here',
+        baseUrl: process.env.ORANGE_API_BASE_URL || '',
+        tokenUrl: process.env.ORANGE_API_TOKEN_URL || '',
+        clientId: process.env.ORANGE_CLIENT_ID || '',
+        xAuthToken: process.env.ORANGE_X_AUTH_TOKEN || '',
+        notifyUrl: process.env.ORANGE_NOTIFY_URL || '',
+        merchantPhone: process.env.ORANGE_PAYQAM_MERCHANT_PHONE || '',
+        merchantPin: process.env.ORANGE_PAYQAM_PIN || '',
       },
     };
 
@@ -300,6 +306,7 @@ export class CDKStack extends cdk.Stack {
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
+    
     // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,
@@ -307,10 +314,19 @@ export class CDKStack extends cdk.Stack {
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        ORANGE_API_SECRET: orangeSecret.secretName,
       },
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+    orangeSecret.grantRead(orangeWebhookLambda.lambda);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+
+    // Add secrets policy to transactions process Lambda
+    orangeSecret.grantRead(transactionsProcessLambda.lambda);
 
     // Create MTN payment webhook Lambda
     const mtnPaymentWebhookLambda = new PAYQAMLambda(
@@ -542,12 +558,6 @@ export class CDKStack extends cdk.Stack {
         },
       },
       {
-        path: 'webhook-orange',
-        method: 'POST',
-        lambda: orangeWebhookLambda.lambda,
-        apiKeyRequired: true,
-      },
-      {
         path: 'transaction/status',
         method: 'GET',
         lambda: transactionsProcessLambda.lambda,
@@ -597,6 +607,40 @@ export class CDKStack extends cdk.Stack {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
               received: { type: apigateway.JsonSchemaType.BOOLEAN },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/orange',
+        method: 'POST',
+        lambda: orangeWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'OrangeWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  payToken: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'OrangeWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
             },
           },
         },
@@ -721,6 +765,7 @@ export class CDKStack extends cdk.Stack {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
           MTN_API_SECRET: mtnSecret.secretName,
+          ORANGE_API_SECRET: orangeSecret.secretName,
           TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           INSTANT_DISBURSEMENT_ENABLED:
