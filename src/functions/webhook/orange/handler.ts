@@ -3,10 +3,12 @@ import {
   APIGatewayProxyHandler,
   APIGatewayProxyResult,
 } from 'aws-lambda';
-import { API } from '../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { OrangePaymentService } from '../../transaction-process/providers';
-import { DynamoDBService, TransactionRecord } from '../../../services/dynamodbService';
+import {
+  DynamoDBService,
+  TransactionRecord,
+} from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
 import { PaymentResponse } from '../../transaction-process/interfaces/orange';
 
@@ -27,15 +29,14 @@ interface PaymentRecordUpdate {
     inittxnstatus?: string;
     confirmtxnstatus?: string;
   };
-  disbursementStatus?: string;
-  disbursementAmount?: number;
-  disbursementPayToken?: string;
-  disbursementResponse?: {
+  settlementStatus?: string;
+  settlementAmount?: number;
+  settlementPayToken?: string;
+  settlementResponse?: {
     status: string;
     orderId?: string;
   };
   fee?: number;
-  settlementAmount?: number;
 }
 
 class WebhookError extends Error {
@@ -62,14 +63,16 @@ export class OrangeWebhookService {
     this.orangeService = new OrangePaymentService();
   }
 
-  private async validateWebhook(event: APIGatewayProxyEvent): Promise<WebhookEvent> {
+  private async validateWebhook(
+    event: APIGatewayProxyEvent
+  ): Promise<WebhookEvent> {
     if (!event.body) {
       throw new WebhookError('No body found in the webhook', 400);
     }
 
     try {
       const webhookEvent = JSON.parse(event.body) as WebhookEvent;
-      
+
       if (
         webhookEvent.type !== 'payment_notification' ||
         !webhookEvent.data?.payToken ||
@@ -86,7 +89,9 @@ export class OrangeWebhookService {
     }
   }
 
-  private async getTransactionByPayToken(payToken: string): Promise<TransactionRecord | null> {
+  private async getTransactionByPayToken(
+    payToken: string
+  ): Promise<TransactionRecord | null> {
     try {
       const result = await this.dbService.queryByGSI(
         { uniqueId: payToken },
@@ -100,7 +105,10 @@ export class OrangeWebhookService {
       // Since GSI3 projects all attributes, we can directly use the item
       return result.Items[0] as TransactionRecord;
     } catch (error) {
-      this.logger.error('Failed to get transaction by payToken', { payToken, error });
+      this.logger.error('Failed to get transaction by payToken', {
+        payToken,
+        error,
+      });
       throw new WebhookError('Failed to get transaction', 500, error);
     }
   }
@@ -113,7 +121,7 @@ export class OrangeWebhookService {
     this.logger.info('Determining payment status', {
       status,
       initStatus,
-      confirmStatus
+      confirmStatus,
     });
 
     // If the payment is still pending, keep it as pending
@@ -143,7 +151,9 @@ export class OrangeWebhookService {
     }
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.removeUndefined(item)).filter(item => item !== undefined);
+      return obj
+        .map((item) => this.removeUndefined(item))
+        .filter((item) => item !== undefined);
     }
 
     if (typeof obj === 'object') {
@@ -167,9 +177,11 @@ export class OrangeWebhookService {
     try {
       // Clean the update payload by removing undefined values
       const cleanedUpdate = this.removeUndefined(update);
-      
+
       if (!cleanedUpdate) {
-        throw new Error('Update payload is empty after cleaning undefined values');
+        throw new Error(
+          'Update payload is empty after cleaning undefined values'
+        );
       }
 
       // Create the key object with the correct structure
@@ -180,7 +192,7 @@ export class OrangeWebhookService {
       this.logger.error('Error updating payment record', {
         error,
         transactionId,
-        update: JSON.stringify(update)
+        update: JSON.stringify(update),
       });
       throw new WebhookError('Failed to update payment record', 500, error);
     }
@@ -220,51 +232,62 @@ export class OrangeWebhookService {
       }
 
       // Calculate disbursement amount (90% of payment amount)
-      const disbursementAmount = Math.floor(parseFloat(amount) * 0.9).toString();
-      
+      const disbursementAmount = Math.floor(
+        parseFloat(amount) * 0.9
+      ).toString();
+
       // Initialize disbursement
       const initResponse = await this.orangeService.initDisbursement();
-      
+
       if (!initResponse.data?.payToken) {
         throw new Error('Failed to get payToken for disbursement');
       }
 
       // Execute disbursement
-      const disbursementResponse = await this.orangeService.executeDisbursement({
-        channelUserMsisdn: process.env.ORANGE_PAYQAM_MERCHANT_PHONE!,
-        amount: disbursementAmount,
-        subscriberMsisdn: transaction.merchantMobileNo, 
-        orderId: `${transaction.transactionId}`,
-        description: `Disbursement for transaction ${transaction.transactionId}`,
-        payToken: initResponse.data.payToken
-      });
+      const disbursementResponse = await this.orangeService.executeDisbursement(
+        {
+          channelUserMsisdn: process.env.ORANGE_PAYQAM_MERCHANT_PHONE!,
+          amount: disbursementAmount,
+          subscriberMsisdn: transaction.merchantMobileNo,
+          orderId: `${transaction.transactionId}`,
+          description: `Disbursement for transaction ${transaction.transactionId}`,
+          payToken: initResponse.data.payToken,
+        }
+      );
 
       const result = {
         status: disbursementResponse.data.status,
         payToken: initResponse.data.payToken,
-        orderId: `${transaction.transactionId}`
+        orderId: `${transaction.transactionId}`,
       };
 
       this.logger.info('Disbursement processed successfully', {
         transactionId: transaction.transactionId,
         disbursementAmount,
-        result
+        result,
       });
 
       return result;
     } catch (error) {
-      this.logger.error('Disbursement failed', { 
-        error: error instanceof Error ? error.message : 'Unknown error', 
-        transactionId: transaction.transactionId 
+      this.logger.error('Disbursement failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId: transaction.transactionId,
       });
       return { status: 'FAILED' };
     }
   }
 
-  public async handleWebhook(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  public async handleWebhook(
+    event: APIGatewayProxyEvent
+  ): Promise<APIGatewayProxyResult> {
     try {
       const webhookEvent = await this.validateWebhook(event);
-      const { payToken, status: webhookStatus, amount, currency } = webhookEvent.data;
+      const {
+        payToken,
+        status: webhookStatus,
+        amount,
+        currency,
+      } = webhookEvent.data;
 
       // Get transaction using payToken from GSI3
       const transaction = await this.getTransactionByPayToken(payToken);
@@ -273,8 +296,9 @@ export class OrangeWebhookService {
       }
 
       // Get the current payment status from Orange API
-      const paymentResponse = await this.orangeService.getPaymentStatus(payToken);
-      
+      const paymentResponse =
+        await this.orangeService.getPaymentStatus(payToken);
+
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
@@ -289,7 +313,7 @@ export class OrangeWebhookService {
       //   };
 
       //   await this.updatePaymentRecord(transaction.transactionId, updatePayload);
-        
+
       //   return {
       //     statusCode: 200,
       //     body: JSON.stringify({ message: 'Payment is still pending' })
@@ -301,31 +325,36 @@ export class OrangeWebhookService {
         paymentProviderResponse: {
           status,
           inittxnstatus: paymentResponse.data.inittxnstatus || undefined,
-          confirmtxnstatus: paymentResponse.data.confirmtxnstatus || undefined
-        }
+          confirmtxnstatus: paymentResponse.data.confirmtxnstatus || undefined,
+        },
       };
 
       // TEMPORARY: Process disbursement for failed payments (testing only)
-      this.logger.info('SANDBOX: Processing disbursement for testing', { status });
-      if (status === 'PENDING') {  
-        const disbursementResult = await this.processDisbursement(transaction, amount);
-        
+      this.logger.info('SANDBOX: Processing disbursement for testing', {
+        status,
+      });
+      if (status === 'PENDING') {
+        const disbursementResult = await this.processDisbursement(
+          transaction,
+          amount
+        );
+
         // Only add disbursement data if we have valid results
         // if (disbursementResult.status !== 'FAILED') {
-          const paymentAmount = parseFloat(amount);
-          const fee = Math.floor(paymentAmount * 0.1);
-          const settlementAmount = paymentAmount - fee;
+        const paymentAmount = parseFloat(amount);
+        const fee = Math.floor(paymentAmount * 0.1);
+        const settlementAmount = paymentAmount - fee;
 
-          Object.assign(updatePayload, {
-            disbursementStatus: disbursementResult.status,
-            disbursementPayToken: disbursementResult.payToken,
-            disbursementResponse: {
-              status: disbursementResult.status,
-              orderId: disbursementResult.orderId
-            },
-            fee,
-            settlementAmount
-          });
+        Object.assign(updatePayload, {
+          settlementStatus: disbursementResult.status,
+          settlementPayToken: disbursementResult.payToken,
+          settlementResponse: {
+            status: disbursementResult.status,
+            orderId: disbursementResult.orderId,
+          },
+          fee,
+          settlementAmount,
+        });
         // } else {
         //   updatePayload.disbursementStatus = 'FAILED';
         // }
@@ -335,15 +364,20 @@ export class OrangeWebhookService {
       await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
       // Publish the status update
-      await this.publishStatusUpdate(transaction.transactionId, status, amount, currency);
+      await this.publishStatusUpdate(
+        transaction.transactionId,
+        status,
+        amount,
+        currency
+      );
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message: 'Webhook processed successfully',
           status,
-          transactionId: transaction.transactionId
-        })
+          transactionId: transaction.transactionId,
+        }),
       };
     } catch (error) {
       if (error instanceof WebhookError) {
