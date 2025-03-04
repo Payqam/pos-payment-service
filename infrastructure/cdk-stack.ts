@@ -266,13 +266,6 @@ export class CDKStack extends cdk.Stack {
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
     );
-    transactionsProcessLambda.lambda.addToRolePolicy(
-      new PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['secretsmanager:GetSecretValue'],
-        resources: [orangeSecret.secretArn],
-      })
-    );
     // Define configs for KMS
     key.grantDecrypt(transactionsProcessLambda.lambda);
     KMSHelper.grantDecryptPermission(
