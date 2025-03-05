@@ -56,25 +56,23 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     label: 'PayerRejected',
     message: 'The payer explicitly rejected the payment request.',
     statusCode: 400,
-    retryable: true,
-    suggestedAction:
-      'Inform the payer about rejection and allow them to retry if necessary.',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'Inform the payer about rejection.',
   },
   [MTNRequestToPayErrorReason.EXPIRED]: {
     label: 'PayerExpired',
     message:
       'The payer did not respond within the allowed time frame (e.g., OTP expired).',
     statusCode: 408,
-    retryable: true,
-    suggestedAction:
-      'Notify the payer about expiration and initiate a new payment request if required.',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'Notify the payer about the expiration',
   },
   [MTNRequestToPayErrorReason.ONGOING]: {
     label: 'PayerOngoing',
     message:
       "The payment request is still being processed by MTN's system or awaiting user action.",
     statusCode: 202,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction:
       'Wait and poll for updates using the status-check endpoint after a short delay.',
   },
@@ -83,7 +81,7 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     message:
       'The transaction is delayed due to network congestion or processing delays.',
     statusCode: 503,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction:
       'Notify the payer about the delay and retry status checks periodically until resolved.',
   },
@@ -122,14 +120,14 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
   },
   [MTNRequestToPayErrorReason.INVALID_CALLBACK_URL_HOST]: {
     label: 'RequestToPayPayerInvalidCallbackUrlHost',
-    message: 'Invalid callback url is provided or configured',
+    message: 'Invalid callback url is provided or configured.',
     statusCode: 403,
     retryable: false,
     suggestedAction: 'Contact MTN developer support for clarification.',
   },
   [MTNRequestToPayErrorReason.INVALID_CURRENCY]: {
     label: 'RequestToPayPayerInvalidCurrency',
-    message: 'Invalid currency is configured',
+    message: 'Invalid currency is configured.',
     statusCode: 403,
     retryable: false,
     suggestedAction: 'Contact MTN developer support for clarification.',
@@ -138,26 +136,24 @@ export const MTN_REQUEST_TO_PAY_ERROR_MAPPINGS: Record<
     label: 'RequestToPayPayerServiceUnavailable',
     message: "MTN's service is temporarily unavailable.",
     statusCode: 503,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction:
-      'Retry after a delay; notify payer of potential downtime if retries fail consistently.',
+      'Notify payer of potential downtime if retries fail consistently.',
   },
   [MTNRequestToPayErrorReason.INTERNAL_PROCESSING_ERROR]: {
     label: 'RequestToPayPayerInternalProcessingError',
     message:
       "A generic error occurred due to internal issues on MTN's platform.",
     statusCode: 500,
-    retryable: true,
-    suggestedAction:
-      'Retry with exponential backoff; if persistent, contact MTN support for investigation.',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'If persistent, contact MTN support for investigation.',
   },
   [MTNRequestToPayErrorReason.COULD_NOT_PERFORM_TRANSACTION]: {
     label: 'RequestToPayPayerCouldNotPerformTransaction',
     message: 'Could not perform the transaction.',
     statusCode: 500,
-    retryable: true,
-    suggestedAction:
-      'Retry after a delay; if persistent, contact MTN support for investigation.',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'If persistent, contact MTN support for investigation.',
   },
 };
 export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
@@ -173,23 +169,22 @@ export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
     label: 'TransferPayeeRejected',
     message: 'The payee explicitly rejected the transfer request.',
     statusCode: 400,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction: 'Inform the payee about the rejection.',
   },
   [MTNTransferErrorReason.EXPIRED]: {
     label: 'TransferPayeeExpired',
     message: 'The payee did not respond within the allowed time frame.',
     statusCode: 408,
-    retryable: true,
-    suggestedAction:
-      'Notify the payee about expiration and initiate a new transfer request if required.',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'Notify the payee about expiration.',
   },
   [MTNTransferErrorReason.ONGOING]: {
     label: 'TransferPayeeOngoing',
     message:
       "The transfer request is still being processed by MTN's system or awaiting user action.",
     statusCode: 202,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction:
       'Wait and poll for updates using the status-check endpoint after a short delay.',
   },
@@ -198,23 +193,23 @@ export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
     message:
       'The transaction is delayed due to network congestion or processing delays.',
     statusCode: 503,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction:
       'Notify the payee about the delay and retry status checks periodically until resolved.',
   },
   [MTNTransferErrorReason.NOT_ENOUGH_FUNDS]: {
     label: 'TransferPayeeNotEnoughFunds',
-    message: 'No enough founds in the payer account',
+    message: 'No enough founds in the payer account.',
     statusCode: 503,
-    retryable: true,
-    suggestedAction: 'Top up the account balance and retry',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'Top up the account balance and retry.',
   },
   [MTNTransferErrorReason.LIMIT_REACHED]: {
     label: 'TransferPayeePayerLimitReached',
-    message: 'Daily limit is reached in the payer account',
+    message: 'Daily limit is reached in the payer account.',
     statusCode: 503,
-    retryable: true,
-    suggestedAction: 'Try again next day',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'You can try again next day.',
   },
   [MTNTransferErrorReason.NOT_FOUND]: {
     label: 'TransferPayeeNotFound',
@@ -226,7 +221,7 @@ export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
   },
   [MTNTransferErrorReason.NOT_ALLOWED]: {
     label: 'TransferPayeeNotAllowed',
-    message: 'Not allowed to transfer to the payee account',
+    message: 'Not allowed to transfer to the payee account.',
     statusCode: 404,
     retryable: false,
     suggestedAction: 'Notify the payee about the error',
@@ -248,7 +243,7 @@ export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
   },
   [MTNTransferErrorReason.INVALID_CURRENCY]: {
     label: 'TransferPayeeInvalidCurrency',
-    message: 'Invalid currency is configured for the payee',
+    message: 'Invalid currency is configured for the payee.',
     statusCode: 403,
     retryable: false,
     suggestedAction: 'Contact MTN developer support for clarification.',
@@ -258,17 +253,16 @@ export const MTN_TRANSFER_ERROR_MAPPINGS: Record<string, MTNErrorMapping> = {
     message:
       "A generic error occurred due to internal issues on MTN's platform.",
     statusCode: 500,
-    retryable: true,
-    suggestedAction:
-      'Retry again; if persistent, contact MTN support for investigation.',
+    retryable: false, // Set  to false for now
+    suggestedAction: 'If persistent, contact MTN support for investigation.',
   },
   [MTNTransferErrorReason.SERVICE_UNAVAILABLE]: {
     label: 'TransferPayeeServiceUnavailable',
     message: "MTN's service is temporarily unavailable.",
     statusCode: 503,
-    retryable: true,
+    retryable: false, // Set  to false for now
     suggestedAction:
-      'Retry after a delay; notify payee of potential downtime if retries fail consistently.',
+      'Notify payee of potential downtime if retries fail consistently.',
   },
 };
 
