@@ -194,15 +194,32 @@ export class OrangeWebhookService {
     transactionId: string,
     status: string,
     amount: string,
-    currency: string
+    paymentResponse: PaymentResponse['data']
   ): Promise<void> {
     try {
+      const isFailedStatus = status === 'FAILED';
+      let transactionError;
+      
+      if (isFailedStatus) {
+        transactionError = {
+          ErrorCode: paymentResponse.inittxnstatus || paymentResponse.confirmtxnstatus || 'UNKNOWN',
+          ErrorMessage: paymentResponse.inittxnmessage || 'Transaction failed',
+          ErrorType: 'payment_failed',
+          ErrorSource: 'ORANGE'
+        };
+      }
+
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
         transactionId,
         status,
-        type: 'UPDATE',
+        type: isFailedStatus ? 'FAILED' : 'UPDATE',
         amount,
-        currency,
+        TransactionError: transactionError,
+        paymentMethod: 'ORANGE',
+        metadata: {
+          payToken: paymentResponse.payToken,
+          txnid: paymentResponse.txnid
+        }
       });
     } catch (error) {
       this.logger.error('Failed to publish status update', { error });
@@ -351,7 +368,7 @@ export class OrangeWebhookService {
         transaction.transactionId,
         status,
         transaction.amount.toString(),
-        transaction.currency || 'EUR'
+        paymentResponse.data
       );
 
       return {
