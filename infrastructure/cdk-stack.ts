@@ -522,7 +522,7 @@ export class CDKStack extends cdk.Stack {
             },
             required: [
               'merchantId',
-              'amount',
+              // 'amount',
               'customerPhone',
               'transactionType',
               'paymentMethod',
