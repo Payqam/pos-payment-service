@@ -79,6 +79,7 @@ describe('Stripe Payment Processing Tests', () => {
     });
 
     it(`Should retrieve transaction status`, () => {
+      cy.wait(3500);
       cy.request({
         method: 'GET',
         url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -92,6 +93,10 @@ describe('Stripe Payment Processing Tests', () => {
         expect(response.body).to.have.property(
           'message',
           'Transaction retrieved successfully'
+        );
+        expect(response.body.transaction.Item).to.have.property(
+          'status',
+          'CHARGE_UPDATED'
         );
         uniqueId = response.body.transaction.Item.uniqueId;
         cy.task('log', ` ${uniqueId}`);
@@ -237,5 +242,3 @@ describe('Stripe Payment Processing Tests', () => {
     });
   });
 });
-
-
