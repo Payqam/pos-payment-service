@@ -83,7 +83,7 @@ export class TransactionProcessService {
       merchantId,
     } = body;
 
-    if (!amount || !paymentMethod) {
+    if (!paymentMethod) {
       return ErrorHandler.createErrorResponse(
         'MISSING_FIELDS',
         ErrorCategory.VALIDATION_ERROR,
