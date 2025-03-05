@@ -5,22 +5,27 @@ import stripe from 'stripe';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
+import { Readable } from 'stream';
 
 export class StripeWebhookService {
-  private readonly logger: Logger = LoggerService.named(this.constructor.name);
+  private readonly logger: Logger;
 
-  private readonly secretsManagerService = new SecretsManagerService();
+  private readonly secretsManagerService: SecretsManagerService;
 
-  private readonly dbService = new DynamoDBService();
+  private readonly dbService: DynamoDBService;
 
-  private readonly snsService = SNSService.getInstance();
+  private readonly snsService: SNSService;
 
   private stripeClient!: stripe;
 
   private signingSecret!: string;
 
   constructor() {
-    this.logger.info('StripeWebhookService initialized');
+    this.logger = LoggerService.named(this.constructor.name);
+    this.secretsManagerService = new SecretsManagerService();
+    this.dbService = new DynamoDBService();
+    this.snsService = SNSService.getInstance();
+    this.logger.info('init()');
   }
 
   public async initialize(): Promise<void> {
@@ -29,6 +34,17 @@ export class StripeWebhookService {
     );
     this.stripeClient = new stripe(stripeSecret.apiKey);
     this.signingSecret = stripeSecret.signingSecret;
+  }
+
+  private async getEventStream(eventBody: string): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const stream = Readable.from(eventBody);
+      const chunks: Buffer[] = [];
+
+      stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      stream.on('error', (err) => reject(err));
+    });
   }
 
   private async publishStatusUpdate(
@@ -93,73 +109,122 @@ export class StripeWebhookService {
   private getStatusPriority(status: string): number {
     const priorities: Record<string, number> = {
       INTENT_CREATED: 1,
-      INTENT_REQUIRES_ACTION: 2,
-      INTENT_PROCESSING: 3,
-      INTENT_SUCCEEDED: 4,
-      CHARGE_SUCCEEDED: 5,
-      CHARGE_UPDATED: 6,
-      CHARGE_FAILED: 7,
+      INTENT_REQUIRES_PAYMENT_METHOD: 2,
+      INTENT_REQUIRES_CONFIRMATION: 3,
+      INTENT_REQUIRES_ACTION: 4,
+      INTENT_PROCESSING: 5,
+      INTENT_REQUIRES_CAPTURE: 6,
+      INTENT_SUCCEEDED: 7,
       INTENT_FAILED: 8,
       INTENT_CANCELLED: 9,
-      REFUND_CREATED: 10,
-      REFUND_UPDATED: 11,
-      REFUND_FAILED: 12,
+      CHARGE_SUCCEEDED: 10,
+      CHARGE_UPDATED: 11,
+      CHARGE_FAILED: 12,
       CHARGE_REFUNDED: 13,
       CHARGE_REFUND_UPDATED: 14,
+      REFUND_CREATED: 15,
+      REFUND_UPDATED: 16,
+      REFUND_FAILED: 17,
     };
-    return priorities[status] || 0;
+    return priorities[status] || 0; // Default to 0 if status is unrecognized
   }
 
   private async updateRecordIfHigherStatus(
     key: { uniqueId: string },
     newStatus: string,
+    transactionId: string,
     updateData: Record<string, unknown>
   ): Promise<void> {
     try {
-      this.logger.info('Checking record status before update');
-      const queryResult = await this.dbService.queryByGSI(key, 'GSI3');
-      const currentRecord = queryResult.Items?.[0];
-      const transactionId = currentRecord?.transactionId;
+      this.logger.info('Fetching latest status from Stripe');
 
-      if (currentRecord?.Item?.status) {
-        const currentPriority = this.getStatusPriority(
-          currentRecord.Item.status
+      let latestStatus: string | null = null;
+
+      if (newStatus.startsWith('INTENT')) {
+        const paymentIntent = await this.stripeClient.paymentIntents.retrieve(
+          key.uniqueId
         );
-        const newPriority = this.getStatusPriority(newStatus);
-        if (newPriority <= currentPriority) {
-          this.logger.info(
-            `Skipping update: current status (${currentRecord.Item.status}) has higher or equal priority.`
-          );
-          return;
-        }
+        latestStatus = `INTENT_${paymentIntent.status.toUpperCase()}`;
+        this.logger.info('Latest status:', { latestStatus });
+      } else if (
+        newStatus.startsWith('CHARGE') ||
+        newStatus.startsWith('REFUND')
+      ) {
+        const chargeOrRefund = await this.stripeClient.charges.retrieve(
+          key.uniqueId
+        );
+        latestStatus = `CHARGE_${chargeOrRefund.status.toUpperCase()}`;
+        this.logger.info('Latest status:', { latestStatus });
       }
+
+      if (!latestStatus) {
+        this.logger.warn(
+          'Could not fetch latest status from Stripe, skipping update.'
+        );
+        return;
+      }
+
+      const currentPriority = this.getStatusPriority(latestStatus);
+      const newPriority = this.getStatusPriority(newStatus);
+
+      this.logger.info('Current status:', { currentPriority, newPriority });
+
+      if (newPriority <= currentPriority) {
+        this.logger.info(
+          `Skipping update: latest status (${latestStatus}) has higher or equal priority.`
+        );
+        return;
+      }
+
       await this.publishStatusUpdate(
         transactionId,
         updateData.status as string,
         updateData.amount as string,
         updateData
       );
-      await this.dbService.updatePaymentRecord({ transactionId }, updateData);
-      this.logger.info('Record updated successfully');
+
+      await this.dbService.updatePaymentRecord(
+        { transactionId: transactionId },
+        updateData
+      );
+      this.logger.info('Record updated successfully', { updateData });
     } catch (error) {
       this.logger.error('Failed to update record:', { error });
     }
   }
 
   private async handlePaymentEvent(
-    paymentIntent: stripe.PaymentIntent | stripe.Charge | stripe.Refund,
+    eventObject: stripe.PaymentIntent | stripe.Charge | stripe.Refund,
     status: string
   ): Promise<void> {
-    this.logger.info(`Processing event with status: ${status}`, paymentIntent);
-    const uniqueId =
-      'payment_intent' in paymentIntent
-        ? (paymentIntent.payment_intent as string)
-        : paymentIntent.id;
-    await this.updateRecordIfHigherStatus({ uniqueId }, status, {
+    this.logger.info(`Processing event with status: ${status}`, eventObject);
+
+    let uniqueId: string;
+
+    if (eventObject.object === 'payment_intent') {
+      // If it's a Charge or Refund, get the associated PaymentIntent ID
+      uniqueId = eventObject.id as string;
+      this.logger.info('PaymentIntent ID:', uniqueId);
+    } else if (eventObject.object === 'charge') {
+      // Otherwise, use the Charge or Refund ID
+      this.logger.info('Charge', eventObject.id); // Charge or Refund Id
+      uniqueId = eventObject.id;
+    } else {
+      // If it's a Refund, get the associated PaymentIntent ID
+      uniqueId = eventObject.object as string;
+      this.logger.info('Refund ID:');
+    }
+    const transactionId = eventObject?.metadata?.transactionId;
+    await this.updateRecordIfHigherStatus(
+      { uniqueId },
       status,
-      refundId: 'refund' in paymentIntent ? paymentIntent.id : undefined,
-      paymentProviderResponse: paymentIntent,
-    });
+      transactionId as string,
+      {
+        status,
+        refundId: 'refund' in eventObject ? eventObject.id : undefined,
+        paymentProviderResponse: eventObject,
+      }
+    );
   }
 
   public async processWebhook(
@@ -170,9 +235,10 @@ export class StripeWebhookService {
       await this.initialize();
       if (!event.headers['Stripe-Signature'] || !event.body)
         throw new Error('Invalid webhook request');
+      const bodyBuffer = await this.getEventStream(event.body);
 
       const stripeEvent = this.stripeClient.webhooks.constructEvent(
-        event.body,
+        bodyBuffer,
         event.headers['Stripe-Signature'],
         this.signingSecret
       );
@@ -188,6 +254,10 @@ export class StripeWebhookService {
         'payment_intent.created': 'INTENT_CREATED',
         'payment_intent.payment_failed': 'INTENT_FAILED',
         'payment_intent.requires_action': 'INTENT_REQUIRES_ACTION',
+        'payment_intent.requires_confirmation': 'INTENT_REQUIRES_CONFIRMATION',
+        'payment_intent.requires_capture': 'INTENT_REQUIRES_CAPTURE',
+        'payment_intent.requires_payment_method':
+          'INTENT_REQUIRES_PAYMENT_METHOD',
         'payment_intent.canceled': 'INTENT_CANCELLED',
         'payment_intent.processing': 'INTENT_PROCESSING',
         'refund.created': 'REFUND_CREATED',
