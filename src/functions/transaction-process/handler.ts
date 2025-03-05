@@ -83,7 +83,7 @@ export class TransactionProcessService {
       merchantId,
     } = body;
 
-    if (!amount || !paymentMethod) {
+    if (!paymentMethod) {
       return ErrorHandler.createErrorResponse(
         'MISSING_FIELDS',
         ErrorCategory.VALIDATION_ERROR,
@@ -91,11 +91,11 @@ export class TransactionProcessService {
       );
     }
 
-    if (paymentMethod === 'MTN' && (!merchantId || !merchantMobileNo)) {
+    if ((paymentMethod === 'MTN' || paymentMethod === 'ORANGE') && (!merchantId || !merchantMobileNo)) {
       return ErrorHandler.createErrorResponse(
         'MISSING_MERCHANT_INFO',
         ErrorCategory.VALIDATION_ERROR,
-        'Missing required fields: merchantId or merchantMobileNo for MTN payment'
+        `Missing required fields: merchantId or merchantMobileNo for ${paymentMethod} payment`
       );
     }
 

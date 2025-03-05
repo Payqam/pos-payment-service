@@ -1,20 +1,24 @@
-import stripe from 'stripe';
+import { PaymentResponse as OrangePaymentResponse } from '../functions/transaction-process/interfaces/orange';
+import Stripe from 'stripe';
 
 export interface CreatePaymentRecord {
   transactionId: string;
+  orderId?: string;
   amount: number;
   currency?: string;
   paymentMethod: string;
   customerPhone?: string;
   destinationId?: string;
   status: string;
-  paymentProviderResponse?: stripe.Response<
-    stripe.PaymentIntent | stripe.Refund
-  >;
+  paymentProviderResponse?: 
+    | Stripe.PaymentIntent 
+    | Stripe.Refund
+    | OrangePaymentResponse['data']
+    | Record<string, any>;  // For other providers or error responses
   metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
-  merchantMobileNo?: string; // Added merchant's mobile number
+  merchantMobileNo?: string;
   fee?: number;
   settlementAmount?: number;
   settlementStatus?: string;
