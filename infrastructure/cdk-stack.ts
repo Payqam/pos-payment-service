@@ -306,7 +306,7 @@ export class CDKStack extends cdk.Stack {
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
-    
+
     // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,
@@ -321,7 +321,9 @@ export class CDKStack extends cdk.Stack {
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+    orangeWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
     orangeSecret.grantRead(orangeWebhookLambda.lambda);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
@@ -345,10 +347,8 @@ export class CDKStack extends cdk.Stack {
           INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
           PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
           MTN_PAYMENT_WEBHOOK_URL:
-            process.env.MTN_PAYMENT_WEBHOOK_URL ||
             'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/payment',
           MTN_DISBURSEMENT_WEBHOOK_URL:
-            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
             'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com/DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }

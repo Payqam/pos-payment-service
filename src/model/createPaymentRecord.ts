@@ -10,11 +10,11 @@ export interface CreatePaymentRecord {
   customerPhone?: string;
   destinationId?: string;
   status: string;
-  paymentProviderResponse?: 
-    | Stripe.PaymentIntent 
+  paymentProviderResponse?:
+    | Stripe.PaymentIntent
     | Stripe.Refund
     | OrangePaymentResponse['data']
-    | Record<string, any>;  // For other providers or error responses
+    | Record<string, any>; // For other providers or error responses
   metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
