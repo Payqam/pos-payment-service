@@ -83,6 +83,7 @@ describe('Dispute', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -97,11 +98,15 @@ describe('Dispute', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
-        cy.wait(500);
+        cy.wait(2000);
       });
 
       it(`Verify Payment on Stripe for ${dispute.type}`, () => {
@@ -120,7 +125,7 @@ describe('Dispute', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
           cy.wait(5000);
         });
@@ -129,7 +134,7 @@ describe('Dispute', () => {
       it(`Retrieve dispute details for ${dispute.type} `, () => {
         cy.request({
           method: 'GET',
-          url: `https://api.stripe.com/v1/disputes?payment_intent=${Cypress.env('transactionId')}`,
+          url: `https://api.stripe.com/v1/disputes?payment_intent=${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -139,10 +144,27 @@ describe('Dispute', () => {
           expect(response.body.data[0]).to.have.property(
             'status',
             'needs_response'
-          ); // Check dispute status
+          );
           expect(response.body.data[0]).to.have.property(
             'reason',
             'fraudulent'
+          );
+        });
+      });
+
+      it(`Accept dispute for ${dispute.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `https://api.stripe.com/v1/disputes/${Cypress.env('uniqueId')}/close`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property('status', 'lost'); // Stripe marks it as lost when accepted
+          cy.task(
+            'log',
+            `Dispute accepted for transaction ${Cypress.env('transactionId')}`
           );
         });
       });
@@ -232,6 +254,7 @@ describe('Dispute - Not Received', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -245,6 +268,10 @@ describe('Dispute - Not Received', () => {
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -381,6 +408,7 @@ describe('Dispute - Inquiry', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -394,6 +422,10 @@ describe('Dispute - Inquiry', () => {
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -530,6 +562,7 @@ describe('Dispute - Warning', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -543,6 +576,10 @@ describe('Dispute - Warning', () => {
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);

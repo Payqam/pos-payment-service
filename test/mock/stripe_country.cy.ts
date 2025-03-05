@@ -80,6 +80,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -93,6 +94,10 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -202,6 +207,7 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -215,6 +221,10 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -326,6 +336,7 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -339,6 +350,10 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
