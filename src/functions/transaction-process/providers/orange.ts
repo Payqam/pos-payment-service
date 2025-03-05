@@ -1,7 +1,7 @@
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-// import { SNSService } from '../../../services/snsService';
+import { SNSService } from '../../../services/snsService';
 import { CreatePaymentRecord } from '../../../model';
 import { v4 as uuidv4 } from 'uuid';
 import axios, { AxiosInstance } from 'axios';
@@ -33,7 +33,7 @@ export class OrangePaymentService {
   private readonly logger: Logger;
   private readonly secretsManagerService: SecretsManagerService;
   private readonly dbService: DynamoDBService;
-  // private readonly snsService: SNSService;
+  private readonly snsService: SNSService;
   private currentToken: OrangeToken | null;
   private tokenExpiryTime: number;
   private readonly TOKEN_EXPIRY_BUFFER = 300; // 5 minutes buffer
@@ -45,7 +45,7 @@ export class OrangePaymentService {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    // this.snsService = new SNSService();
+    this.snsService = SNSService.getInstance();
     this.currentToken = null;
     this.tokenExpiryTime = 0;
     this.credentials = null;
@@ -331,6 +331,45 @@ export class OrangePaymentService {
   }
 
   /**
+   * Publishes a transaction status update to SNS
+   */
+  private async publishTransactionStatus(params: {
+    transactionId: string;
+    status: string;
+    type: string;
+    amount: number;
+    merchantId: string;
+    transactionType: string;
+    metaData?: Record<string, string>;
+    fee: number;
+    customerPhone?: string;
+    currency?: string;
+  }) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    await this.snsService.publish(
+      process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+      {
+        transactionId: params.transactionId,
+        paymentMethod: 'Orange',
+        status: params.status,
+        type: params.type,
+        amount: params.amount,
+        merchantId: params.merchantId,
+        transactionType: params.transactionType,
+        metaData: params.metaData,
+        fee: params.fee,
+        createdOn: timestamp,
+        customerPhone: params.customerPhone,
+        currency: params.currency || 'EUR',
+        exchangeRate: 'N/A',
+        processingFee: 'N/A',
+        netAmount: 'N/A',
+        externalTransactionId: 'N/A'
+      }
+    );
+  }
+
+  /**
    * Processes a payment request from a customer.
    * Creates a payment request via Orange's API and stores the transaction in DynamoDB.
    *
@@ -391,80 +430,94 @@ export class OrangePaymentService {
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
   ): Promise<{ transactionId: string; status: string }> {
+    const transactionId = uuidv4();
+    const feePercentage = 0.02;
+    const feeAmount = Math.floor(amount * feePercentage);
+
     try {
-      const axiosInstance = await this.createAxiosInstance();
-      const credentials = await this.getOrangeCredentials();
-      const notifyUrl = credentials.notifyUrl;
-      const pin = credentials.merchantPin;
-
-      if (!notifyUrl || !pin) {
-        throw new Error('Required environment variables are not set');
-      }
-
-      // Step 1: Initialize payment and get payToken
+      // Initialize payment
       const payToken = await this.initiateMerchantPayment();
-
-      // Step 2: Process the payment
-      const transactionId = uuidv4();
-      const orderId = this.generateOrderId();  // Using new order ID format
       
-      this.logger.info('Generated payment identifiers', {
-        transactionId,
-        orderId,
-        payToken
+      // Execute payment
+      const paymentResponse = await this.executeWithRetry(async () => {
+        const axiosInstance = await this.createAxiosInstance();
+        const credentials = await this.getOrangeCredentials();
+        const notifyUrl = credentials.notifyUrl;
+        const pin = credentials.merchantPin;
+
+        if (!notifyUrl || !pin) {
+          throw new Error('Required environment variables are not set');
+        }
+
+        const orderId = this.generateOrderId();  // Using new order ID format
+        
+        this.logger.info('Generated payment identifiers', {
+          transactionId,
+          orderId,
+          payToken
+        });
+
+        const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
+          notifUrl: notifyUrl,
+          channelUserMsisdn: credentials.merchantPhone,
+          amount,
+          subscriberMsisdn: customerPhone,
+          pin,
+          orderId,  // Using the formatted order ID
+          description: metaData?.description || 'PayQam payment',
+          payToken
+        });
+
+        return response.data;
       });
-
-      const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
-        notifUrl: notifyUrl,
-        channelUserMsisdn: credentials.merchantPhone,
-        amount,
-        subscriberMsisdn: customerPhone,
-        pin,
-        orderId,  // Using the formatted order ID
-        description: metaData?.description || 'PayQam payment',
-        payToken
-      });
-
-      const paymentData = response.data.data;
-
-      // Calculate fee and settlement amount
-      const feePercentage = 0.02; // 2% fee
-      const feeAmount = Math.floor(amount * feePercentage);
-      const settlementAmount = Math.max(amount - feeAmount, 0);
 
       // Create payment record
       const record: CreatePaymentRecord = {
         transactionId,
-        orderId,
+        orderId: paymentResponse.data.txnmode,
         merchantId,
         merchantMobileNo,
         amount,
         paymentMethod: 'ORANGE',
-        status: paymentData.status,
+        status: paymentResponse.data.status,
         currency,
         customerPhone,
         GSI1SK: Math.floor(Date.now() / 1000),
         GSI2SK: Math.floor(Date.now() / 1000),
         exchangeRate: 'N/A',
         processingFee: feeAmount.toString(),
-        netAmount: settlementAmount.toString(),
-        externalTransactionId: paymentData.txnid,
+        netAmount: (amount - feeAmount).toString(),
+        externalTransactionId: paymentResponse.data.txnmode,
         uniqueId: payToken,
         fee: feeAmount,
-        settlementAmount,
+        settlementAmount: amount - feeAmount,
         transactionType: 'CHARGE',
         metaData: {
           ...metaData,
           payToken,
-          txnid: paymentData.txnid
+          txnid: paymentResponse.data.txnid
         }
       };
 
       await this.dbService.createPaymentRecord(record);
+      
+      // Publish status to SNS
+      await this.publishTransactionStatus({
+        transactionId,
+        status: paymentResponse.data.status,
+        type: 'CREATE',
+        amount,
+        merchantId,
+        transactionType: 'CHARGE',
+        metaData,
+        fee: feeAmount,
+        customerPhone,
+        currency
+      });
 
       return {
         transactionId,
-        status: paymentData.status
+        status: paymentResponse.data.status
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money charge', {
@@ -472,6 +525,47 @@ export class OrangePaymentService {
         amount,
         customerPhone
       });
+
+      // Create failed payment record
+      const failedRecord: CreatePaymentRecord = {
+        transactionId,
+        merchantId,
+        amount,
+        paymentMethod: 'ORANGE',
+        status: 'FAILED',
+        paymentProviderResponse: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          status: 'FAILED',
+          timestamp: Math.floor(Date.now() / 1000)
+        },
+        transactionType: 'CHARGE',
+        metaData,
+        fee: feeAmount,
+        uniqueId: transactionId,
+        GSI1SK: Math.floor(Date.now() / 1000),
+        GSI2SK: Math.floor(Date.now() / 1000),
+        exchangeRate: 'N/A',
+        processingFee: 'N/A',
+        netAmount: 'N/A',
+        externalTransactionId: 'N/A'
+      };
+
+      await this.dbService.createPaymentRecord(failedRecord);
+
+      // Publish failed status to SNS
+      await this.publishTransactionStatus({
+        transactionId,
+        status: 'FAILED',
+        type: 'CREATE',
+        amount,
+        merchantId,
+        transactionType: 'CHARGE',
+        metaData,
+        fee: feeAmount,
+        customerPhone,
+        currency
+      });
+
       throw error;
     }
   }
@@ -486,5 +580,129 @@ export class OrangePaymentService {
   ): Promise<{ transactionId: string; status: string }> {
     // This is a placeholder for future implementation
     throw new Error('Orange Money refund functionality is not implemented yet');
+  }
+
+  /**
+   * Processes a disbursement request from a merchant.
+   * Creates a disbursement request via Orange's API and stores the transaction in DynamoDB.
+   *
+   * @param amount - The disbursement amount
+   * @param merchantMobileNo - Merchant's mobile number
+   * @param merchantId - ID of the merchant receiving the disbursement
+   * @param transactionId - ID of the transaction
+   * @param metaData - Optional metadata for the transaction
+   * @param currency - Disbursement currency (default: EUR)
+   * @returns The transaction ID and status
+   */
+  public async processDisbursement(
+    amount: number,
+    merchantMobileNo: string,
+    merchantId: string,
+    transactionId: string,
+    metaData?: Record<string, string>,
+    currency: string = 'EUR'
+  ): Promise<{ transactionId: string; status: string }> {
+    const feePercentage = 0.02;
+    const feeAmount = Math.floor(amount * feePercentage);
+
+    try {
+      // Initialize disbursement
+      const payToken = await this.initiateMerchantPayment();
+
+      // Execute disbursement
+      const disbursementResponse = await this.executeDisbursement({
+        channelUserMsisdn: this.credentials?.merchantPhone || '',
+        amount: amount.toString(),
+        subscriberMsisdn: merchantMobileNo,
+        orderId: transactionId,
+        description: `Disbursement for transaction ${transactionId}`,
+        payToken
+      });
+
+      // Create disbursement record
+      const record: CreatePaymentRecord = {
+        transactionId,
+        merchantId,
+        amount,
+        paymentMethod: 'ORANGE',
+        status: disbursementResponse.data.status,
+        paymentProviderResponse: disbursementResponse,
+        transactionType: 'DISBURSEMENT',
+        metaData,
+        fee: feeAmount,
+        uniqueId: payToken,
+        GSI1SK: Math.floor(Date.now() / 1000),
+        GSI2SK: Math.floor(Date.now() / 1000),
+        exchangeRate: 'N/A',
+        processingFee: 'N/A',
+        netAmount: 'N/A',
+        externalTransactionId: 'N/A'
+      };
+
+      await this.dbService.createPaymentRecord(record);
+
+      // Publish success status to SNS
+      await this.publishTransactionStatus({
+        transactionId,
+        status: disbursementResponse.data.status,
+        type: 'CREATE',
+        amount,
+        merchantId,
+        transactionType: 'DISBURSEMENT',
+        metaData,
+        fee: feeAmount,
+        customerPhone: merchantMobileNo,
+        currency
+      });
+
+      return {
+        transactionId,
+        status: disbursementResponse.data.status
+      };
+    } catch (error) {
+      this.logger.error('Error processing disbursement', error);
+
+      // Create failed disbursement record
+      const failedRecord: CreatePaymentRecord = {
+        transactionId,
+        merchantId,
+        amount,
+        paymentMethod: 'ORANGE',
+        status: 'FAILED',
+        paymentProviderResponse: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          status: 'FAILED',
+          timestamp: Math.floor(Date.now() / 1000)
+        },
+        transactionType: 'DISBURSEMENT',
+        metaData,
+        fee: feeAmount,
+        uniqueId: transactionId,
+        GSI1SK: Math.floor(Date.now() / 1000),
+        GSI2SK: Math.floor(Date.now() / 1000),
+        exchangeRate: 'N/A',
+        processingFee: 'N/A',
+        netAmount: 'N/A',
+        externalTransactionId: 'N/A'
+      };
+
+      await this.dbService.createPaymentRecord(failedRecord);
+
+      // Publish failed status to SNS
+      await this.publishTransactionStatus({
+        transactionId,
+        status: 'FAILED',
+        type: 'CREATE',
+        amount,
+        merchantId,
+        transactionType: 'DISBURSEMENT',
+        metaData,
+        fee: feeAmount,
+        customerPhone: merchantMobileNo,
+        currency
+      });
+
+      throw error;
+    }
   }
 }
