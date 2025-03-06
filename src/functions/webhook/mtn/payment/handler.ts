@@ -310,7 +310,7 @@ export class MTNPaymentWebhookService {
             externalId: updateData.uniqueId as string,
             amount: webhookEvent.amount,
             currency: webhookEvent.currency,
-            payer: {
+            payee: {
               partyIdType: 'MSISDN',
               partyId: result.Item?.merchantMobileNo,
             },
