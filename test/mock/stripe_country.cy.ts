@@ -1,8 +1,8 @@
+import testData from 'cypress/fixtures/test_data.json';
+let paymentMethodId, transactionId, uniqueId;
+
 describe('Successful Payment -  Cards by Country-Americas', () => {
-  (
-    Cypress.env('testCardsbyAmericas') as { type: string; number: string }[]
-  ).forEach((card) => {
-    let paymentMethodId, transactionId;
+  testData.testCardsbyAmericas.forEach((card) => {
     describe(`Verify Successful Payment -  ${card.type}`, () => {
       it(`Create a Payment Method with ${card.type}`, () => {
         cy.request({
@@ -80,6 +80,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -94,6 +95,13 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -101,15 +109,13 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
       it(`Verify Payment on Stripe for ${card.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
           cy.task('log', response.body);
-
-          // Validate the payment status and details
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
           expect(response.body).to.have.property('currency', 'eur');
@@ -124,14 +130,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
 });
 
 describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
-  (
-    Cypress.env('testCardsbyEurope&MiddleEast') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((card) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsbyEurope_MiddleEast.forEach((card) => {
     describe(`Verify Successful Payment -  ${card.type}`, () => {
       it(`Create a Payment Method with ${card.type}`, () => {
         cy.request({
@@ -200,7 +199,6 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
             'status',
             'succeeded'
           );
-
           transactionId = response.body.transactionDetails.transactionId;
           cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
           Cypress.env('transactionId', transactionId);
@@ -209,6 +207,7 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -223,6 +222,13 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -230,7 +236,7 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
       it(`Verify Payment on Stripe for ${card.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -238,7 +244,6 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
           expect(response.status).to.eq(200);
           cy.task('log', response.body);
 
-          // Validate the payment status and details
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
           expect(response.body).to.have.property('currency', 'eur');
@@ -253,11 +258,7 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
 });
 
 describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
-  (
-    Cypress.env('testCardsbyAsiaPacific') as { type: string; number: string }[]
-  ).forEach((card) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsbyAsiaPacific.forEach((card) => {
     describe(`Verify Successful Payment -  ${card.type}`, () => {
       it(`Create a Payment Method with ${card.type}`, () => {
         cy.request({
@@ -335,6 +336,7 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -349,6 +351,13 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -356,7 +365,7 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
       it(`Verify Payment on Stripe for ${card.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -364,7 +373,6 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
           expect(response.status).to.eq(200);
           cy.task('log', response.body);
 
-          // Validate the payment status and details
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
           expect(response.body).to.have.property('currency', 'eur');
@@ -379,14 +387,7 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
 });
 
 describe('Successful Payment -  Cards by Brand', () => {
-  (
-    Cypress.env('testCardsRequiresActions') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((card) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsRequiresActions.forEach((card) => {
     describe(`Verify Successful Payment -  ${card.type}`, () => {
       it(`Create a Payment Method with ${card.type}`, () => {
         cy.request({
@@ -454,33 +455,9 @@ describe('Successful Payment -  Cards by Brand', () => {
             'status',
             'requires_action'
           );
-
-          transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
-          Cypress.env('transactionId', transactionId);
-          cy.wait(500);
-        });
-      });
-
-      it(`Verify Payment on Stripe for ${card.type}`, () => {
-        cy.request({
-          method: 'GET',
-          url: `${Cypress.env('paymentApiUrl')}payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
-          headers: {
-            Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
-          },
-        }).then((response) => {
-          expect(response.status).to.eq(200);
           cy.task('log', response.body);
-
-          // Validate the payment status and details
-          expect(response.body).to.have.property('status', 'succeeded');
-          expect(response.body).to.have.property('amount', 120000);
-          expect(response.body).to.have.property('currency', 'eur');
-          expect(response.body.transfer_data).to.have.property(
-            'amount',
-            117600
-          );
+          expect(response.body).not.to.have.property('uniqueId');
+          cy.wait(500);
         });
       });
     });
