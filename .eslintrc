@@ -19,6 +19,9 @@
       {
       "endOfLine": "auto"
     }
-    ]
+    ],
+    "@typescript-eslint/no-explicit-any": "off",
+    "no-loop-func": "off",
+    "@typescript-eslint/no-loop-func": "off"
   }
 }

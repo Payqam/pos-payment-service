@@ -9,7 +9,7 @@ import querystring from 'querystring';
 import {
   OrangeToken,
   PaymentInitResponse,
-  PaymentResponse
+  PaymentResponse,
 } from '../interfaces/orange';
 
 /**
@@ -31,14 +31,23 @@ interface OrangeCredentials {
  */
 export class OrangePaymentService {
   private readonly logger: Logger;
+
   private readonly secretsManagerService: SecretsManagerService;
+
   private readonly dbService: DynamoDBService;
+
   private readonly snsService: SNSService;
+
   private currentToken: OrangeToken | null;
+
   private tokenExpiryTime: number;
+
   private readonly TOKEN_EXPIRY_BUFFER = 300; // 5 minutes buffer
+
   private readonly MAX_RETRIES = 3;
+
   private readonly RETRY_DELAY = 1000; // 1 second
+
   private credentials: OrangeCredentials | null;
 
   constructor() {
@@ -80,14 +89,17 @@ export class OrangePaymentService {
   /**
    * Generates an access token for Orange API operations.
    * Handles token caching and renewal based on expiry.
-   * 
+   *
    * @returns A token object containing the access token and expiry
    */
   private async generateToken(): Promise<OrangeToken> {
     try {
       // Check if we have a valid cached token
       const currentTime = Math.floor(Date.now() / 1000);
-      if (this.currentToken && currentTime < this.tokenExpiryTime - this.TOKEN_EXPIRY_BUFFER) {
+      if (
+        this.currentToken &&
+        currentTime < this.tokenExpiryTime - this.TOKEN_EXPIRY_BUFFER
+      ) {
         this.logger.info('Using cached token');
         return this.currentToken;
       }
@@ -97,13 +109,13 @@ export class OrangePaymentService {
       const response = await axios.post(
         credentials.tokenUrl,
         querystring.stringify({
-          grant_type: 'client_credentials'
+          grant_type: 'client_credentials',
         }),
         {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': `Basic ${credentials.clientId}`
-          }
+            Authorization: `Basic ${credentials.clientId}`,
+          },
         }
       );
 
@@ -116,14 +128,14 @@ export class OrangePaymentService {
       this.logger.info('Generated new Orange token', {
         expiresIn: token.expires_in,
         tokenType: token.token_type,
-        expiryTime: this.tokenExpiryTime
+        expiryTime: this.tokenExpiryTime,
       });
 
       return token;
     } catch (error) {
       this.logger.error('Error generating Orange token', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        tokenUrl: (await this.getOrangeCredentials()).tokenUrl
+        tokenUrl: (await this.getOrangeCredentials()).tokenUrl,
       });
       throw new Error('Failed to generate Orange token');
     }
@@ -136,36 +148,42 @@ export class OrangePaymentService {
    */
   private async executeWithRetry<T>(requestFn: () => Promise<T>): Promise<T> {
     let lastError: Error | null = null;
-    
+
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         return await requestFn();
       } catch (error) {
         lastError = error as Error;
-        
+
         // If it's a 401 error and we haven't reached max retries
-        if (axios.isAxiosError(error) && error.response?.status === 401 && attempt < this.MAX_RETRIES) {
-          this.logger.warn(`Token expired, attempt ${attempt}/${this.MAX_RETRIES}. Refreshing token...`);
-          
+        if (
+          axios.isAxiosError(error) &&
+          error.response?.status === 401 &&
+          attempt < this.MAX_RETRIES
+        ) {
+          this.logger.warn(
+            `Token expired, attempt ${attempt}/${this.MAX_RETRIES}. Refreshing token...`
+          );
+
           // Force token refresh
           this.currentToken = null;
           this.tokenExpiryTime = 0;
-          
+
           // Wait before retry
-          await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+          await new Promise((resolve) => setTimeout(resolve, this.RETRY_DELAY));
           continue;
         }
-        
+
         throw error;
       }
     }
-    
+
     throw lastError || new Error('Max retries exceeded');
   }
 
   /**
    * Creates headers for Orange API requests with the current token.
-   * 
+   *
    * @returns Headers object for the API request
    */
   private async createHeaders(): Promise<Record<string, string>> {
@@ -176,7 +194,7 @@ export class OrangePaymentService {
       'WSO2-Authorization': `Bearer ${token.access_token}`,
       'X-AUTH-TOKEN': credentials.xAuthToken,
       'Content-Type': 'application/json',
-      'accept': 'application/json'
+      accept: 'application/json',
     };
   }
 
@@ -211,14 +229,14 @@ export class OrangePaymentService {
           payToken,
           status: response.data.data.status,
           inittxnstatus: response.data.data.inittxnstatus,
-          confirmtxnstatus: response.data.data.confirmtxnstatus
+          confirmtxnstatus: response.data.data.confirmtxnstatus,
         });
 
         return response.data;
       } catch (error) {
         this.logger.error('Error checking payment status', {
           error: error instanceof Error ? error.message : 'Unknown error',
-          payToken
+          payToken,
         });
         throw error;
       }
@@ -227,7 +245,7 @@ export class OrangePaymentService {
 
   /**
    * Initiates a merchant payment transaction
-   * 
+   *
    * @returns PayToken for the payment
    */
   private async initiateMerchantPayment(): Promise<string> {
@@ -241,13 +259,13 @@ export class OrangePaymentService {
 
         this.logger.info('Payment initialization successful', {
           message: response.data.message,
-          payToken: response.data.data.payToken
+          payToken: response.data.data.payToken,
         });
 
         return response.data.data.payToken;
       } catch (error) {
         this.logger.error('Error initiating merchant payment', {
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
         throw new Error('Failed to initiate merchant payment');
       }
@@ -263,7 +281,6 @@ export class OrangePaymentService {
   public async initDisbursement(): Promise<PaymentInitResponse> {
     return this.executeWithRetry(async () => {
       try {
-        const token = await this.generateToken();
         const headers = await this.createHeaders();
 
         const response = await axios.post(
@@ -295,14 +312,13 @@ export class OrangePaymentService {
   }): Promise<PaymentResponse> {
     return this.executeWithRetry(async () => {
       try {
-        const token = await this.generateToken();
         const headers = await this.createHeaders();
 
         const response = await axios.post(
           `${(await this.getOrangeCredentials()).baseUrl}/omapi/1.0.2/cashin/pay`,
           {
             ...params,
-            pin: (await this.getOrangeCredentials()).merchantPin
+            pin: (await this.getOrangeCredentials()).merchantPin,
           },
           { headers }
         );
@@ -325,7 +341,10 @@ export class OrangePaymentService {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    const uniqueNumber = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    const uniqueNumber = String(Math.floor(Math.random() * 10000)).padStart(
+      4,
+      '0'
+    );
 
     return `${prefix}${year}${month}${day}${uniqueNumber}`.slice(0, 20);
   }
@@ -346,27 +365,24 @@ export class OrangePaymentService {
     currency?: string;
   }) {
     const timestamp = Math.floor(Date.now() / 1000);
-    await this.snsService.publish(
-      process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-      {
-        transactionId: params.transactionId,
-        paymentMethod: 'Orange',
-        status: params.status,
-        type: params.type,
-        amount: params.amount,
-        merchantId: params.merchantId,
-        transactionType: params.transactionType,
-        metaData: params.metaData,
-        fee: params.fee,
-        createdOn: timestamp,
-        customerPhone: params.customerPhone,
-        currency: params.currency || 'EUR',
-        exchangeRate: 'N/A',
-        processingFee: 'N/A',
-        netAmount: 'N/A',
-        externalTransactionId: 'N/A'
-      }
-    );
+    await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      transactionId: params.transactionId,
+      paymentMethod: 'Orange',
+      status: params.status,
+      type: params.type,
+      amount: params.amount,
+      merchantId: params.merchantId,
+      transactionType: params.transactionType,
+      metaData: params.metaData,
+      fee: params.fee,
+      createdOn: timestamp,
+      customerPhone: params.customerPhone,
+      currency: params.currency || 'EUR',
+      exchangeRate: 'N/A',
+      processingFee: 'N/A',
+      netAmount: 'N/A',
+      externalTransactionId: 'N/A',
+    });
   }
 
   /**
@@ -391,10 +407,10 @@ export class OrangePaymentService {
     transactionType: string = 'CHARGE',
     currency: string = 'EUR'
   ): Promise<{ transactionId: string; status: string }> {
-    this.logger.info('Processing Orange Money payment', { 
-      amount, 
+    this.logger.info('Processing Orange Money payment', {
+      amount,
       customerPhone,
-      transactionType 
+      transactionType,
     });
 
     switch (transactionType) {
@@ -410,7 +426,9 @@ export class OrangePaymentService {
       }
 
       case 'REFUND': {
-        throw new Error('Orange Money refund functionality is not implemented yet');
+        throw new Error(
+          'Orange Money refund functionality is not implemented yet'
+        );
       }
 
       default: {
@@ -437,7 +455,7 @@ export class OrangePaymentService {
     try {
       // Initialize payment
       const payToken = await this.initiateMerchantPayment();
-      
+
       // Execute payment
       const paymentResponse = await this.executeWithRetry(async () => {
         const axiosInstance = await this.createAxiosInstance();
@@ -449,24 +467,27 @@ export class OrangePaymentService {
           throw new Error('Required environment variables are not set');
         }
 
-        const orderId = this.generateOrderId();  // Using new order ID format
-        
+        const orderId = this.generateOrderId(); // Using new order ID format
+
         this.logger.info('Generated payment identifiers', {
           transactionId,
           orderId,
-          payToken
+          payToken,
         });
 
-        const response = await axiosInstance.post<PaymentResponse>('/omapi/1.0.2/mp/pay', {
-          notifUrl: notifyUrl,
-          channelUserMsisdn: credentials.merchantPhone,
-          amount,
-          subscriberMsisdn: customerPhone,
-          pin,
-          orderId,  // Using the formatted order ID
-          description: metaData?.description || 'PayQam payment',
-          payToken
-        });
+        const response = await axiosInstance.post<PaymentResponse>(
+          '/omapi/1.0.2/mp/pay',
+          {
+            notifUrl: notifyUrl,
+            channelUserMsisdn: credentials.merchantPhone,
+            amount,
+            subscriberMsisdn: customerPhone,
+            pin,
+            orderId, // Using the formatted order ID
+            description: metaData?.description || 'PayQam payment',
+            payToken,
+          }
+        );
 
         return response.data;
       });
@@ -495,12 +516,12 @@ export class OrangePaymentService {
         metaData: {
           ...metaData,
           payToken,
-          txnid: paymentResponse.data.txnid
-        }
+          txnid: paymentResponse.data.txnid,
+        },
       };
 
       await this.dbService.createPaymentRecord(record);
-      
+
       // Publish status to SNS
       await this.publishTransactionStatus({
         transactionId,
@@ -512,18 +533,18 @@ export class OrangePaymentService {
         metaData,
         fee: feeAmount,
         customerPhone,
-        currency
+        currency,
       });
 
       return {
         transactionId,
-        status: paymentResponse.data.status
+        status: paymentResponse.data.status,
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money charge', {
         error: error instanceof Error ? error.message : 'Unknown error',
         amount,
-        customerPhone
+        customerPhone,
       });
 
       // Create failed payment record
@@ -536,7 +557,7 @@ export class OrangePaymentService {
         paymentProviderResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
-          timestamp: Math.floor(Date.now() / 1000)
+          timestamp: Math.floor(Date.now() / 1000),
         },
         transactionType: 'CHARGE',
         metaData,
@@ -547,7 +568,7 @@ export class OrangePaymentService {
         exchangeRate: 'N/A',
         processingFee: 'N/A',
         netAmount: 'N/A',
-        externalTransactionId: 'N/A'
+        externalTransactionId: 'N/A',
       };
 
       await this.dbService.createPaymentRecord(failedRecord);
@@ -563,7 +584,7 @@ export class OrangePaymentService {
         metaData,
         fee: feeAmount,
         customerPhone,
-        currency
+        currency,
       });
 
       throw error;
@@ -578,6 +599,11 @@ export class OrangePaymentService {
     payToken: string,
     reason?: string
   ): Promise<{ transactionId: string; status: string }> {
+    this.logger.info('Processing Orange Money refund', {
+      amount,
+      payToken,
+      reason,
+    });
     // This is a placeholder for future implementation
     throw new Error('Orange Money refund functionality is not implemented yet');
   }
@@ -616,7 +642,7 @@ export class OrangePaymentService {
         subscriberMsisdn: merchantMobileNo,
         orderId: transactionId,
         description: `Disbursement for transaction ${transactionId}`,
-        payToken
+        payToken,
       });
 
       // Create disbursement record
@@ -636,7 +662,7 @@ export class OrangePaymentService {
         exchangeRate: 'N/A',
         processingFee: 'N/A',
         netAmount: 'N/A',
-        externalTransactionId: 'N/A'
+        externalTransactionId: 'N/A',
       };
 
       await this.dbService.createPaymentRecord(record);
@@ -652,12 +678,12 @@ export class OrangePaymentService {
         metaData,
         fee: feeAmount,
         customerPhone: merchantMobileNo,
-        currency
+        currency,
       });
 
       return {
         transactionId,
-        status: disbursementResponse.data.status
+        status: disbursementResponse.data.status,
       };
     } catch (error) {
       this.logger.error('Error processing disbursement', error);
@@ -672,7 +698,7 @@ export class OrangePaymentService {
         paymentProviderResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
-          timestamp: Math.floor(Date.now() / 1000)
+          timestamp: Math.floor(Date.now() / 1000),
         },
         transactionType: 'DISBURSEMENT',
         metaData,
@@ -683,7 +709,7 @@ export class OrangePaymentService {
         exchangeRate: 'N/A',
         processingFee: 'N/A',
         netAmount: 'N/A',
-        externalTransactionId: 'N/A'
+        externalTransactionId: 'N/A',
       };
 
       await this.dbService.createPaymentRecord(failedRecord);
@@ -699,7 +725,7 @@ export class OrangePaymentService {
         metaData,
         fee: feeAmount,
         customerPhone: merchantMobileNo,
-        currency
+        currency,
       });
 
       throw error;

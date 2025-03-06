@@ -346,10 +346,8 @@ export class CDKStack extends cdk.Stack {
           INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
           PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
           MTN_PAYMENT_WEBHOOK_URL:
-            process.env.MTN_PAYMENT_WEBHOOK_URL ||
             'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/payment',
           MTN_DISBURSEMENT_WEBHOOK_URL:
-            process.env.MTN_DISBURSEMENT_WEBHOOK_URL ||
             'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com/DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }

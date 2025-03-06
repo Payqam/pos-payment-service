@@ -91,7 +91,10 @@ export class TransactionProcessService {
       );
     }
 
-    if ((paymentMethod === 'MTN' || paymentMethod === 'ORANGE') && (!merchantId || !merchantMobileNo)) {
+    if (
+      (paymentMethod === 'MTN' || paymentMethod === 'ORANGE') &&
+      (!merchantId || !merchantMobileNo)
+    ) {
       return ErrorHandler.createErrorResponse(
         'MISSING_MERCHANT_INFO',
         ErrorCategory.VALIDATION_ERROR,
