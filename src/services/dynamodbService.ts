@@ -14,7 +14,6 @@ import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
 import { Logger, LoggerService } from '@mu-ts/logger';
 
-// Additional fields that might be present in a transaction record
 interface AdditionalTransactionFields {
   paymentMethod?: string;
   paymentProviderResponse?: Record<string, unknown>;
@@ -55,10 +54,16 @@ export class DynamoDBService {
 
   private dbClient: DynamoDBDocClient;
 
+  private readonly maxRetries: number;
+
+  private readonly baseDelayMS: number;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.tableName = process.env.TRANSACTIONS_TABLE as string;
     this.dbClient = DynamoDBDocClient.getInstance();
+    this.maxRetries = 5;
+    this.baseDelayMS = 100;
     this.logger.info('init()');
   }
 
@@ -101,11 +106,28 @@ export class DynamoDBService {
       Item: record,
     };
 
-    try {
-      await this.dbClient.sendCommand(new PutCommand(params));
-    } catch (error) {
-      this.logger.error('Error inserting record to DynamoDB', error);
-      throw error;
+    let attempt = 0;
+
+    while (attempt < this.maxRetries) {
+      try {
+        await this.dbClient.sendCommand(new PutCommand(params));
+        return;
+      } catch (error: unknown) {
+        if (
+          !this.isRetryableError((error as Error).name) ||
+          attempt === this.maxRetries - 1
+        ) {
+          this.logger.error('Error inserting record to DynamoDB', error);
+          throw error;
+        }
+
+        const delay = this.calculateBackoffDelay(attempt);
+        this.logger.warn(
+          `Retrying insert (attempt ${attempt + 1}/${this.maxRetries}) after ${delay}ms due to ${(error as Error).name}`
+        );
+        await this.sleep(delay);
+        attempt++;
+      }
     }
   }
 
@@ -124,9 +146,11 @@ export class DynamoDBService {
       ...updateFields,
       updatedOn: Math.floor(Date.now() / 1000),
     });
+
     const expressionAttributeValues = {};
     const { updateExpression, expressionAttributeNames } =
       buildUpdateExpression(cleanedFields, expressionAttributeValues);
+
     const params = {
       TableName: this.tableName,
       Key: key as Record<string, NativeAttributeValue>,
@@ -136,11 +160,28 @@ export class DynamoDBService {
       ReturnValues: ReturnValue.ALL_NEW,
     };
 
-    try {
-      await this.dbClient.updateCommandAsync(new UpdateCommand(params));
-    } catch (error) {
-      this.logger.error('Error updating record in DynamoDB', error);
-      throw error;
+    let attempt = 0;
+
+    while (attempt < this.maxRetries) {
+      try {
+        await this.dbClient.updateCommandAsync(new UpdateCommand(params));
+        return;
+      } catch (error: unknown) {
+        if (
+          !this.isRetryableError((error as Error).name) ||
+          attempt === this.maxRetries - 1
+        ) {
+          this.logger.error('Error updating record in DynamoDB', error);
+          throw error;
+        }
+
+        const delay = this.calculateBackoffDelay(attempt);
+        this.logger.warn(
+          `Retrying update (attempt ${attempt + 1}/${this.maxRetries}) after ${delay}ms due to ${(error as Error).name}`
+        );
+        await this.sleep(delay);
+        attempt++;
+      }
     }
   }
 
@@ -211,5 +252,42 @@ export class DynamoDBService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Checks if an error is retryable or not.
+   * @param error
+   * @private
+   */
+  private isRetryableError(error: unknown): boolean {
+    const retryableErrors = [
+      'ItemCollectionSizeLimitExceededException',
+      'ThrottlingException',
+      'LimitExceededException',
+      'ProvisionedThroughputExceededException',
+      'RequestLimitExceeded',
+      'UnrecognizedClientException',
+    ];
+    return retryableErrors.includes(error as string);
+  }
+
+  /**
+   * Calculates the backoff delay for a retry attempt.
+   * @param attempt
+   * @private
+   */
+  private calculateBackoffDelay(attempt: number): number {
+    const baseDelay = this.baseDelayMS * Math.pow(2, attempt);
+    const jitter = Math.random() * baseDelay;
+    return baseDelay + jitter;
+  }
+
+  /**
+   * Sleeps for a given number of milliseconds.
+   * @param ms
+   * @private
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
