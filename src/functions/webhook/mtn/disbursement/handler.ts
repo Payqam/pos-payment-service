@@ -58,10 +58,66 @@ export class MTNDisbursementWebhookService {
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
+      this.logger.info('Processing failed transfer', { transactionStatus });
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+      if (
+        errorReason === 'INTERNAL_PROCESSING_ERROR' ||
+        errorReason === 'SERVICE_UNAVAILABLE'
+      ) {
+        const transactionDetails = await this.dbService.getItem<{
+          transactionId: string;
+        }>({
+          transactionId,
+        });
+        const settlementResponse = transactionDetails?.Item;
+        this.logger.info('Transaction details', { transactionDetails });
+        if (
+          !settlementResponse?.settlementRetryResponse ||
+          (settlementResponse?.settlementRetryResponse &&
+            settlementResponse.settlementRetryResponse.retryCount <= 3)
+        ) {
+          const maxRetries = 3;
+          let retryCount = 0;
 
+          while (retryCount < maxRetries) {
+            try {
+              this.logger.info(
+                `Retry attempt ${retryCount + 1} for transaction`,
+                {
+                  transactionId,
+                }
+              );
+
+              const newTransactionId = await this.mtnService.initiateTransfer(
+                parseFloat(transactionStatus.amount),
+                transactionStatus.payee.partyId,
+                transactionStatus.currency
+              );
+
+              this.logger.info(`Retry successful with new transactionId`, {
+                newTransactionId,
+              });
+
+              return {
+                settlementStatus: 'RETRYING',
+                uniqueId: newTransactionId,
+                settlementRetryResponse: {
+                  retryCount: retryCount + 1,
+                  newTransactionId,
+                  reason: errorReason,
+                },
+              };
+            } catch (retryError) {
+              this.logger.error(`Retry ${retryCount + 1} failed`, {
+                retryError,
+              });
+              retryCount++;
+            }
+          }
+        }
+      }
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
         errorMapping.statusCode as unknown as string,

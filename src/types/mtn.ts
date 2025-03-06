@@ -275,7 +275,7 @@ export interface WebhookEvent {
   externalId: string;
   amount: string;
   currency: string;
-  payer: Party;
+  payee: Party;
   payerMessage?: string;
   payeeNote?: string;
   status: 'PENDING' | 'SUCCESSFUL' | 'FAILED';
