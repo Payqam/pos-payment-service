@@ -1,5 +1,4 @@
 import * as cdk from 'aws-cdk-lib';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { EnvConfig } from './index';
 import { PaymentServiceVPC } from './vpc';
@@ -19,8 +18,8 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { DynamoDBConstruct } from './dynamodb';
 import { ElasticCacheConstruct } from './elasticache';
 import { PaymentServiceXRay } from './xray';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
+// import * as events from 'aws-cdk-lib/aws-events';
+// import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { UpdateLambdaEnv } from './custom-resources/update-lambda-env';
 import { KMSHelper } from './kms';
 import * as kms from 'aws-cdk-lib/aws-kms';
@@ -306,7 +305,7 @@ export class CDKStack extends cdk.Stack {
     );
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
-    
+
     // Create Orange webhook Lambda
     const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
       name: `OrangeWebhook-${props.envName}${props.namespace}`,
@@ -321,7 +320,9 @@ export class CDKStack extends cdk.Stack {
     });
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
     orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.secretsManagerPolicy);
+    orangeWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
     orangeSecret.grantRead(orangeWebhookLambda.lambda);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
@@ -386,22 +387,22 @@ export class CDKStack extends cdk.Stack {
     createLambdaLogGroup(this, mtnDisbursementWebhookLambda.lambda);
 
     // Create Daily Disbursement Lambda with configurable execution time
-    const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
-      name: `Disbursement-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.DISBURSEMENT}/handler.ts`,
-      vpc: vpcConstruct.vpc,
-      environment: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        MTN_API_SECRET: mtnSecret.secretName,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-      },
-    });
-    disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-    disbursementLambda.lambda.addToRolePolicy(
-      iamConstruct.secretsManagerPolicy
-    );
-    disbursementLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
-    createLambdaLogGroup(this, disbursementLambda.lambda);
+    // const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
+    //   name: `Disbursement-${props.envName}${props.namespace}`,
+    //   path: `${PATHS.FUNCTIONS.DISBURSEMENT}/handler.ts`,
+    //   vpc: vpcConstruct.vpc,
+    //   environment: {
+    //     LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+    //     MTN_API_SECRET: mtnSecret.secretName,
+    //     TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+    //   },
+    // });
+    // disbursementLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    // disbursementLambda.lambda.addToRolePolicy(
+    //   iamConstruct.secretsManagerPolicy
+    // );
+    // disbursementLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    // createLambdaLogGroup(this, disbursementLambda.lambda);
 
     // Create CloudWatch Event Rule to trigger disbursement lambda at configured time
     /**
@@ -411,19 +412,19 @@ export class CDKStack extends cdk.Stack {
      * - "14:30" for 2:30 PM
      * - "23:45" for 11:45 PM
      */
-    const disbursementTime = process.env.DISBURSEMENT_TIME;
-    new events.Rule(this, 'DisbursementSchedule', {
-      description:
-        'Triggers the daily disbursement process at the configured time',
-      schedule: events.Schedule.cron({
-        minute: disbursementTime?.split(':')[1] || '0',
-        hour: disbursementTime?.split(':')[0] || '2',
-        day: '*',
-        month: '*',
-        year: '*',
-      }),
-      targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
-    });
+    // const disbursementTime = process.env.DISBURSEMENT_TIME;
+    // new events.Rule(this, 'DisbursementSchedule', {
+    //   description:
+    //     'Triggers the daily disbursement process at the configured time',
+    //   schedule: events.Schedule.cron({
+    //     minute: disbursementTime?.split(':')[1] || '0',
+    //     hour: disbursementTime?.split(':')[0] || '2',
+    //     day: '*',
+    //     month: '*',
+    //     year: '*',
+    //   }),
+    //   targets: [new targets.LambdaFunction(disbursementLambda.lambda)],
+    // });
 
     // Grant DynamoDB permissions to Lambda functions
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
@@ -432,7 +433,7 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnPaymentWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnDisbursementWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
+    // dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
     // Grant SNS permissions to MTN webhook lambdas
     snsConstruct.eventTopic.grantPublish(mtnPaymentWebhookLambda.lambda);
     snsConstruct.eventTopic.grantPublish(mtnDisbursementWebhookLambda.lambda);
