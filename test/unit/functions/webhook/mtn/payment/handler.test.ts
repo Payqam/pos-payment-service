@@ -92,7 +92,7 @@ describe('MTNPaymentWebhookService', () => {
       currency: 'USD',
       status: 'SUCCESSFUL',
       payeeNote: 'Payment successful',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -190,7 +190,7 @@ describe('MTNPaymentWebhookService', () => {
       currency: 'USD',
       status: 'FAILED',
       reason: 'PAYER_NOT_FOUND',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -290,7 +290,7 @@ describe('MTNPaymentWebhookService', () => {
       amount: '1000',
       currency: 'USD',
       status: 'SUCCESSFUL',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -321,7 +321,7 @@ describe('MTNPaymentWebhookService', () => {
       currency: 'USD',
       status: 'SUCCESSFUL',
       payeeNote: 'Payment successful',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -401,7 +401,7 @@ describe('MTNPaymentWebhookService', () => {
       currency: 'USD',
       status: 'SUCCESSFUL',
       payeeNote: 'Payment successful',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },

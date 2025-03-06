@@ -89,7 +89,7 @@ describe('MTNDisbursementWebhookService', () => {
       status: 'SUCCESSFUL',
       payeeNote: 'Disbursement successful',
       payerMessage: 'Thank you for your service',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -155,7 +155,7 @@ describe('MTNDisbursementWebhookService', () => {
       currency: 'USD',
       status: 'FAILED',
       reason: 'PAYEE_NOT_FOUND',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -269,7 +269,7 @@ describe('MTNDisbursementWebhookService', () => {
       amount: '1000',
       currency: 'USD',
       status: 'SUCCESSFUL',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -302,7 +302,7 @@ describe('MTNDisbursementWebhookService', () => {
       currency: 'USD',
       status: 'SUCCESSFUL',
       payeeNote: 'Disbursement successful',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
@@ -347,7 +347,7 @@ describe('MTNDisbursementWebhookService', () => {
       amount: '1000',
       currency: 'USD',
       status: 'SUCCESSFUL',
-      payer: {
+      payee: {
         partyIdType: 'MSISDN',
         partyId: '123456789',
       },
