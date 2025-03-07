@@ -32,9 +32,19 @@ export class UpdateLambdaEnv extends Construct {
                     MTN_PAYMENT_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/${props.newEnvVars.MTN_PAYMENT_WEBHOOK_URL}`,
                   }
                 : {}),
-              ...(props.newEnvVars.MTN_PAYMENT_WEBHOOK_URL
+              ...(props.newEnvVars.MTN_DISBURSEMENT_WEBHOOK_URL
                 ? {
                     MTN_DISBURSEMENT_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/${props.newEnvVars.MTN_DISBURSEMENT_WEBHOOK_URL}`,
+                  }
+                : {}),
+              ...(props.newEnvVars.MTN_CUSTOMER_REFUND_WEBHOOK_URL
+                ? {
+                    MTN_CUSTOMER_REFUND_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/${props.newEnvVars.MTN_CUSTOMER_REFUND_WEBHOOK_URL}`,
+                  }
+                : {}),
+              ...(props.newEnvVars.MTN_MERCHANT_REFUND_WEBHOOK_URL
+                ? {
+                    MTN_MERCHANT_REFUND_WEBHOOK_URL: `https://${props.apiGateway.restApiId}.execute-api.${cdk.Stack.of(this).region}.amazonaws.com/${props.envName}/${props.newEnvVars.MTN_MERCHANT_REFUND_WEBHOOK_URL}`,
                   }
                 : {}),
             },

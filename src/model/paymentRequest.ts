@@ -11,6 +11,7 @@ interface CardData {
 }
 
 interface PaymentRequest {
+  transactionId?: string;
   amount: number;
   paymentMethod: string;
   cardData?: CardData;

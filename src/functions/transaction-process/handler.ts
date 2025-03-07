@@ -73,6 +73,7 @@ export class TransactionProcessService {
     this.logger.info('Parsed body:', body);
 
     const {
+      transactionId,
       amount,
       paymentMethod,
       cardData,
@@ -103,6 +104,7 @@ export class TransactionProcessService {
     }
 
     const transactionResult = await this.paymentService.processPayment({
+      transactionId,
       amount,
       paymentMethod,
       cardData,

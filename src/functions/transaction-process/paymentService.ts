@@ -27,6 +27,7 @@ export class PaymentService {
     transaction: PaymentRequest
   ): Promise<{ transactionId: string; status: string } | string> {
     const {
+      transactionId,
       amount,
       paymentMethod,
       cardData,
@@ -77,7 +78,9 @@ export class PaymentService {
           merchantMobileNo,
         });
         return this.mtnPaymentService.processPayment(
+          transactionId as string,
           amount,
+          transactionType as string,
           customerPhone,
           merchantId,
           merchantMobileNo,
