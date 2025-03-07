@@ -1,0 +1,205 @@
+{
+  "testData": [
+    {
+      "payer": "94713579028",
+      "merchant": "94760000000"
+    }
+    ],
+  "invalidData": [
+  {
+    "title": "Invalid phone number format for merchantMobile",
+    "body": { "mtn[merchantMobileNo]": "invalid_number"}
+  },
+    {
+      "title": "Invalid phone number format for customerPhone",
+      "body": { "mtn[customerPhone]": "invalid_number"},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+  {
+    "title": "Exceeding maximum transaction limit",
+    "body": {"mtn[amount]": 1000000000000000000000000000000.0 }
+  },
+    {
+      "title": "Empty phone number for customerPhone",
+      "body": { "mtn[customerPhone]": " "},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Empty phone number for merchantMobile",
+      "body": { "mtn[merchantMobileNo]": " "},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+  {
+    "title": "Missing merchant ID",
+    "body": { "mtn[merchantId]": " " }
+  },
+  {
+    "title": "Empty amount field",
+    "body": { "mtn[amount]": " " }
+  },
+  {
+    "title": "Invalid amount format",
+    "body": { "mtn[amount]": "ABC" }
+  },
+  {
+    "title": "Missing transaction type",
+    "body": { "mtn[transactionType]": " " }
+  }
+],
+  "requestToPayPayer": [
+      {
+        "title": "failed payment request",
+        "payer": "46733123450"
+      },
+      {
+        "title": "rejected payment request",
+        "payer": "46733123451"
+      },
+      {
+        "title": "expired payment request",
+        "payer": "46733123452"
+      },
+      {
+        "title": "non-existent payer",
+        "payer": "46733123455"
+      },
+      {
+        "title": "payee not allowed to receive",
+        "payer": "46733123456"
+      },
+      {
+        "title": "payer not allowed to initiate",
+        "payer": "46733123457"
+      },
+      {
+        "title": "invalid target environment",
+        "payer": "46733123458"
+      },
+      {
+        "title": "invalid callback URL host",
+        "payer": "46733123459"
+      },
+      {
+        "title": "invalid currency in payment request",
+        "payer": "46733123460"
+      },
+      {
+        "title": "internal processing error",
+        "payer": "46733123461"
+      },
+      {
+        "title": "service unavailable scenario",
+        "payer": "46733123462"
+      },
+      {
+        "title": "transaction failure",
+        "payer": "46733123463"
+      }
+    ],
+  "preApproval":[
+  { "title": "failed payment request", "payer": "46733123450" },
+  { "title": "rejected payment request", "payer": "46733123451" },
+  { "title": "expired payment request", "payer": "46733123452" },
+  { "title": "non-existent payer", "payer": "46733123455" },
+  { "title": "payee not allowed to receive", "payer": "46733123456" },
+  { "title": "payer not allowed to initiate", "payer": "46733123457" },
+  { "title": "invalid target environment", "payer": "46733123458" },
+  { "title": "invalid callback URL host", "payer": "46733123459" },
+  { "title": "invalid currency in payment request", "payer": "46733123460" },
+  { "title": "internal processing error", "payer": "46733123461" },
+  { "title": "service unavailable scenario", "payer": "46733123462" },
+  { "title": "transaction failure", "payer": "46733123463" },
+  { "title": "failed pre-approval request", "payer": "46733123450" },
+  { "title": "rejected pre-approval request", "payer": "46733123451" },
+  { "title": "expired pre-approval request", "payer": "46733123452" },
+  { "title": "non-existent payer pre-approval", "payer": "46733123455" },
+  { "title": "payer not allowed to initiate pre-approval", "payer": "46733123456" },
+  { "title": "invalid target environment pre-approval", "payer": "46733123457" },
+  { "title": "invalid callback URL host pre-approval", "payer": "46733123458" },
+  { "title": "invalid currency in pre-approval request", "payer": "46733123459" },
+  { "title": "internal processing error pre-approval", "payer": "46733123460" },
+  { "title": "service unavailable scenario pre-approval", "payer": "46733123461" }
+],
+  "transferPayee": [
+    {
+      "title": "failed payment request",
+      "merchant": "46733123450"
+    },
+    {
+      "title": "rejected payment request",
+      "merchant": "46733123451"
+    },
+    {
+      "title": "expired payment request",
+      "merchant": "46733123452"
+    },
+    {
+      "title": "not Enough Funds merchant",
+      "merchant": "46733123455"
+    },
+    {
+      "title": "merchant Limit Reached",
+      "merchant": "46733123456"
+    },
+    {
+      "title": "not Found",
+      "merchant": "46733123457"
+    },
+    {
+      "title": "merchant not allowed to initiate",
+      "merchant": "46733123458"
+    },
+    {
+      "title": "invalid callback URL host",
+      "merchant": "46733123459"
+    },
+    {
+      "title": "invalid Call back Url Host",
+      "merchant": "46733123460"
+    },
+    {
+      "title": "invalid Currency",
+      "merchant": "46733123461"
+    },
+    {
+      "title": "Internal Processing Error",
+      "merchant": "46733123462"
+    },
+    {
+      "title": "Service Unavailable",
+      "merchant": "46733123463"
+    }
+  ],
+
+  "AccountHolderActivePartyCode": [
+  {
+    "title": "AccountHolderActivePartyCodeNotFound",
+    "transactionId": "5cecb5a7-8bd0-4f49-87b1-8eb9ecc7b7bc"
+  },
+  {
+    "title": "AccountHolderActivePartyCodeNotActive",
+    "transactionId": "b0040b3c-b426-4a90-af6e-673e65861cd7"
+  },
+  {
+    "title": "AccountHolderActivePartyCodeNotAllowed",
+    "transactionId": "4d5f500f-c385-4901-9be5-25b6d36ad220"
+  },
+  {
+    "title": "AccountHolderActivePartyCodeNotAllowedTargetEnvironment",
+    "transactionId": "d2265f9b-0c22-496d-908f-79a65ad66266"
+  },
+  {
+    "title": "AccountHolderActivePartyCodeInternalProcessingError",
+    "transactionId": "8f548a78-ceb8-4d12-a243-5640b91e91a4"
+  },
+  {
+    "title": "AccountHolderActivePartyCodeServiceUnavailable",
+    "transactionId": "585c07a4-2c80-42f7-9e73-e586b36dee68"
+  }
+]
+
+
+}
