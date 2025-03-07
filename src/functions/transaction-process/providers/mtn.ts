@@ -8,6 +8,7 @@ import { WebhookEvent } from '../../../types/mtn';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
+import { SNSService } from '../../../services/snsService';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
   process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
@@ -64,10 +65,13 @@ export class MtnPaymentService {
 
   private readonly baseUrl: string;
 
+  private readonly snsService: SNSService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
+    this.snsService = SNSService.getInstance();
     this.baseUrl =
       process.env.MTN_API_BASE_URL || 'https://sandbox.momodeveloper.mtn.com';
     this.logger.info('init()');
@@ -331,25 +335,59 @@ export class MtnPaymentService {
 
       const { fee, settlementAmount } = this.calculateFeeAndSettlement(amount);
 
-      // Create payment request in MTN
-      await axiosInstance.post('/collection/v1_0/requesttopay', {
-        amount: amount.toString(),
-        currency,
-        externalId: transactionId,
-        payer: {
-          partyIdType: 'MSISDN',
-          partyId: mobileNo,
-        },
-        payerMessage: 'PayQAM payment request',
-        payeeNote: 'Thank you for your payment',
-      });
+      try {
+        // Create payment request in MTN
+        await axiosInstance.post('/collection/v1_0/requesttopay', {
+          amount: amount.toString(),
+          currency,
+          externalId: transactionId,
+          payer: {
+            partyIdType: 'MSISDN',
+            partyId: mobileNo,
+          },
+          payerMessage: 'PayQAM payment request',
+          payeeNote: 'Thank you for your payment',
+        });
+      } catch (axiosError: unknown) {
+        this.logger.error('Failed to create payment request in MTN', {
+          error:
+            axiosError instanceof Error ? axiosError.message : 'Unknown error',
+          transactionId,
+        });
+
+        // Publish to SNS about the failure
+        await this.snsService.publish(
+          process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+          {
+            transactionId,
+            paymentMethod: 'MTN MOMO',
+            status: 'FAILED',
+            type: 'CREATE',
+            amount,
+            merchantId,
+            transactionType: 'CHARGE',
+            metaData,
+            fee,
+            createdOn: Math.floor(Date.now() / 1000),
+            customerPhone: mobileNo,
+            currency: currency,
+            exchangeRate: 'exchangeRate',
+            processingFee: 'processingFee',
+            netAmount: 'netAmount',
+            externalTransactionId: 'externalTransactionId',
+          }
+        );
+
+        // Rethrow or handle the error accordingly
+        throw new Error('Failed to create payment request in MTN');
+      }
 
       // Store transaction record in DynamoDB
       const paymentRecord: CreatePaymentRecord = {
         transactionId,
         amount,
         currency,
-        paymentMethod: 'MTN',
+        paymentMethod: 'MTN MOMO',
         status: 'PENDING',
         mobileNo,
         merchantId,
@@ -362,6 +400,24 @@ export class MtnPaymentService {
       };
 
       await this.dbService.createPaymentRecord(paymentRecord);
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId,
+        paymentMethod: 'MTN MOMO',
+        status: 'PENDING',
+        type: 'CREATE',
+        amount,
+        merchantId,
+        transactionType: 'CHARGE',
+        metaData,
+        fee: fee,
+        createdOn: Math.floor(Date.now() / 1000),
+        customerPhone: mobileNo,
+        currency: currency,
+        exchangeRate: 'exchangeRate',
+        processingFee: 'processingFee',
+        netAmount: 'netAmount',
+        externalTransactionId: 'externalTransactionId',
+      });
 
       this.logger.info('Payment request created successfully', {
         transactionId,
@@ -439,7 +495,6 @@ export class MtnPaymentService {
    * @param amount - The amount to transfer
    * @param recipientMobileNo - Recipient's mobile number (MSISDN format)
    * @param currency - Transfer currency (default: EUR)
-   * @param tId
    * @returns The transfer ID for tracking
    */
   public async initiateTransfer(

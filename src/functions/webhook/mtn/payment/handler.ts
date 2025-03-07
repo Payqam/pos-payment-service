@@ -141,6 +141,13 @@ export class MTNPaymentWebhookService {
         fee: amountNumber - settlementAmount,
       };
 
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId: externalId,
+        status: 'TRANSFER_SUCCESSFUL',
+        type: 'UPDATE',
+        amount,
+      });
+
       if (this.instantDisbursementEnabled) {
         try {
           updateData.uniqueId = await this.processInstantDisbursement(
@@ -151,10 +158,32 @@ export class MTNPaymentWebhookService {
           updateData.settlementStatus = 'PENDING';
           updateData.settlementDate = Date.now();
           updateData.settlementAmount = settlementAmount;
-        } catch (error) {
+          await this.snsService.publish(
+            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+            {
+              transactionId: externalId,
+              status: 'SETTLEMENT_PENDING',
+              type: 'UPDATE',
+            }
+          );
+        } catch (error: unknown) {
           this.logger.error('Failed to process instant disbursement', {
             error,
           });
+          await this.snsService.publish(
+            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+            {
+              transactionId: externalId,
+              status: 'SETTLEMENT_FAILED',
+              type: 'FAILED',
+              TransactionError: {
+                ErrorCode: 'errorCode',
+                ErrorMessage: 'errorReason',
+                ErrorType: 'errorType',
+                ErrorSource: 'pos',
+              },
+            }
+          );
           // Continue with payment success even if disbursement fails
         }
       }
@@ -276,24 +305,6 @@ export class MTNPaymentWebhookService {
         { transactionId: externalId },
         updateData
       );
-
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-        transactionId: externalId,
-        status: updateData.status,
-        type: 'PAYMENT',
-        amount: amount,
-        currency: currency,
-        uniqueId: updateData.uniqueId,
-        settlementStatus: updateData.settlementStatus,
-      });
-
-      this.logger.info('Webhook processed successfully', {
-        externalId,
-        status: updateData.status,
-        uniqueId: updateData.uniqueId,
-        settlementStatus: updateData.settlementStatus,
-      });
-
       // Call sandbox disbursement webhook if in sandbox environment
       const environment = process.env.MTN_TARGET_ENVIRONMENT;
       const webhookUrl = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;

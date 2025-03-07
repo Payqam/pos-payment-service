@@ -62,6 +62,17 @@ export class MTNDisbursementWebhookService {
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId,
+        status: 'SETTLEMENT_FAILED',
+        type: 'FAILED',
+        TransactionError: {
+          ErrorCode: errorMapping.statusCode,
+          ErrorMessage: errorReason,
+          ErrorType: errorMapping.label,
+          ErrorSource: 'pos',
+        },
+      });
       if (
         errorReason === 'INTERNAL_PROCESSING_ERROR' ||
         errorReason === 'SERVICE_UNAVAILABLE'
@@ -174,6 +185,16 @@ export class MTNDisbursementWebhookService {
               transactionId,
               transactionStatusResponse
             );
+      if (transactionStatusResponse.status === 'SUCCESSFUL') {
+        await this.snsService.publish(
+          process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+          {
+            transactionId,
+            Status: 'SETTLEMENT_SUCCESSFUL',
+            type: 'UPDATE',
+          }
+        );
+      }
 
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
     } catch (error) {
