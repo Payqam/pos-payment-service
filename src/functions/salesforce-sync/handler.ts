@@ -127,7 +127,7 @@ export class SalesforceSyncService {
       const urlHost = process.env.SALESFORCE_URL_HOST as string;
 
       // Fetch existing record
-      const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`; // todo update this according to production account
+      const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`;
       const queryResponse = await axios.get(queryUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });

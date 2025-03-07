@@ -54,6 +54,14 @@
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
       "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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"
 
+    },
+    "PROD": {
+      "CDK_ACCOUNT": "061051235502",
+      "CDK_REGION": "us-east-1",
+      "LOG_LEVEL": "INFO",
+      "CDK_STACK_NAME_PREFIX": "pos-payment-service",
+      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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"
+
     }
   }
 }

@@ -115,6 +115,29 @@ jobs:
         env:
           ENV: SQA
           NAMESPACE: ''
+          STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
+          STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
+          MTN_COLLECTION_SUBSCRIPTION_KEY: ${{ secrets.MTN_COLLECTION_SUBSCRIPTION_KEY }}
+          MTN_COLLECTION_API_USER: ${{ secrets.MTN_COLLECTION_API_USER }}
+          MTN_COLLECTION_API_KEY: ${{ secrets.MTN_COLLECTION_API_KEY }}
+          MTN_DISBURSEMENT_SUBSCRIPTION_KEY: ${{ secrets.MTN_DISBURSEMENT_SUBSCRIPTION_KEY }}
+          MTN_DISBURSEMENT_API_USER: ${{ secrets.MTN_DISBURSEMENT_API_USER }}
+          MTN_DISBURSEMENT_API_KEY: ${{ secrets.MTN_DISBURSEMENT_API_KEY }}
+          MTN_TARGET_ENVIRONMENT: ${{ vars.MTN_TARGET_ENVIRONMENT }}
+          KMS_KEY_ARN: ${{ vars.KMS_KEY_ARN }}
+          SALESFORCE_CLIENT_SECRET: ${{ secrets.SALESFORCE_CLIENT_SECRET }}
+          SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
+          SALESFORCE_URL_HOST: ${{ vars.SALESFORCE_URL_HOST }}
+          SALESFORCE_OWNER_ID: ${{ secrets.SALESFORCE_OWNER_ID }}
+          ENABLE_CACHE: ${{ vars.ENABLE_CACHE }}
+          ENABLE_DYNAMODB_PROVISIONING: ${{ vars.ENABLE_DYNAMODB_PROVISIONING }}
+          ORANGE_API_BASE_URL: ${{ vars.ORANGE_API_BASE_URL }}
+          ORANGE_API_TOKEN_URL: ${{ vars.ORANGE_API_TOKEN_URL }}
+          ORANGE_CLIENT_ID: ${{ secrets.ORANGE_CLIENT_ID }}
+          ORANGE_X_AUTH_TOKEN: ${{ secrets.ORANGE_X_AUTH_TOKEN }}
+          ORANGE_NOTIFY_URL=https: ${{ secrets.ORANGE_NOTIFY_URL }}
+          ORANGE_PAYQAM_MERCHANT_PHONE: ${{ secrets.ORANGE_PAYQAM_MERCHANT_PHONE }}
+          ORANGE_PAYQAM_PIN: ${{ secrets.ORANGE_PAYQAM_PIN }}
       - name: Integration tests
         if: ${{ vars.RUN_INTEGRATION_TESTS }}
         run: npm run test:integration

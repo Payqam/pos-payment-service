@@ -47,7 +47,7 @@
     { "type": "Uruguay (UY) - Visa", "number": "4000008580000003" }
   ],
 
-  "testCardsbyEurope&MiddleEast": [
+  "testCardsbyEurope_MiddleEast": [
     { "type": "United Arab Emirates (AE) - Visa", "number": "4000007840000001" },
     { "type": "United Arab Emirates (AE) - Mastercard", "number": "5200007840000022" },
     { "type": "Austria (AT) - Visa", "number": "4000000400000008" },
@@ -110,11 +110,66 @@
     { "type": "Thailand (TH) - Visa (debit)", "number": "4000057640000008" }
   ],
 
-  "testCardsFraudulentAndDisputes": [
+  "Authentication_3DSecure": [
+  {
+    "type": "Authenticate unless set up",
+    "card_number": "4000002500003155",
+    "outcome": "INTENT_REQUIRES_ACTION"
+  },
+  {
+    "type": "Always authenticate",
+    "card_number": "4000002760003184",
+    "outcome": "INTENT_REQUIRES_ACTION"
+  },
+  {
+    "type": "Already set up",
+    "card_number": "4000003800000446",
+    "outcome": "INTENT_REQUIRES_ACTION"
+  },
+  {
+    "type": "Insufficient funds",
+    "card_number": "4000008260003178",
+    "outcome": "INTENT_REQUIRES_ACTION"
+  },
+  {
+    "type": "3DS Required Declined",
+    "card_number": "4000008400001629",
+    "outcome": "INTENT_REQUIRES_ACTION"
+  },
+  {
+    "type": "3DS Required Error",
+    "card_number": "4000008400001280",
+    "outcome": "INTENT_REQUIRES_ACTION"
+  }
+],
+
+  "SecureSuccess": [
+    {
+      "type": "3DS Supported OK",
+      "card_number": "4000000000003055",
+      "outcome": "CHARGE_UPDATED"
+    },
+    {
+      "type": "3DS Supported Error",
+      "card_number": "4000000000003097",
+      "outcome": "CHARGE_UPDATED"
+    },
+    {
+      "type": "3DS Supported Unenrolled",
+      "card_number": "4242424242424242",
+      "outcome": "CHARGE_UPDATED"
+    },
+    {
+      "type": "3DS Not Supported",
+      "card_number": "378282246310005",
+      "outcome": "CHARGE_UPDATED"
+    }
+  ],
+
+"testCardsFraudulentAndDisputes": [
     { "type": "Fraudulent", "number": "4000000000000259" },
     { "type": "Multiple disputes", "number": "4000000404000079" },
-    { "type": "Visa Compelling Evidence 3.0", "number": "4000000404000038" },
-    { "type": "Visa compliance", "number": "4000008400000779" }
+    { "type": "Visa Compelling Evidence 3.0", "number": "4000000404000038" }
   ],
 
   "testCardsNotReceived": [
@@ -139,7 +194,44 @@
     { "type": "International Card", "number": "4000003720000278" }
   ],
 
-  "invalidCardTests":[
+  "EdgeCaseTestCard": [
+    {"title": "Minimum valid CVC (3-digit)", "card[cvc]": "123"},
+    {"title": "Maximum valid CVC (4-digit for AMEX)", "card[number]": "378282246310005", "card[cvc]": "1234"}
+  ],
+
+  "emptyFieldTest":[
+  {
+    "title": "Empty expiry month",
+    "body": {
+      "card[exp_month]": " "
+    }
+  },
+  {
+    "title": "Empty expiry year",
+    "body": {
+      "card[exp_year]": " "
+    }
+  },
+  {
+    "title": "No data sent in request",
+    "body": {
+      "card[number]": "",
+      "card[cvc]": "",
+      "card[exp_month]": " ",
+      "card[exp_year]": " ",
+      "card[type]": ""
+    }
+  },
+  {
+    "title": "Unsupported payment type",
+    "body": {
+      "card[type]": "bitcoin"
+    }
+  }
+],
+
+
+"invalidCardTests":[
   {
     "title": "Invalid card number",
     "body": { "card[number]": "1234567890123456" },
@@ -217,8 +309,17 @@
     "body": { "card[cvc]": "12$%" },
     "code": "invalid_cvc",
     "message": "Your card's security code is invalid."
-  }
+  },
+    {
+      "title": "CVC with 2 characters",
+      "body": { "card[cvc]": "12" },
+      "code": "invalid_cvc",
+      "message": "Your card's security code is invalid."
+    }
 ],
+
+
+
 
   "declineCard":[
   {
@@ -289,20 +390,20 @@
     }
     ],
 
+  "CVCCheckFails": [
+    {
+      "type": "CVC check fails",
+      "number": "4000000000000101",
+      "decline_details": "Your card's security code is incorrect."
+    }
+  ],
+
   "elevatedRisk": [
     {
       "type": "Elevated risk - Might be queued for review",
       "number": "4000000000009235",
       "property": "risk_level",
       "value": "elevated"
-    }
-  ],
-
-  "CVC_Check_Fails": [
-    {
-      "type": "CVC check fails",
-      "number": "4000000000000101",
-      "decline_details": "Your card's security code is incorrect."
     }
   ],
 
@@ -323,6 +424,33 @@
       "type": "Address unavailable",
       "number": "4000000000000044"
     }
-  ]
+  ],
+
+  "invalidPayloads":[
+  {
+    "testName": "SQL Injection",
+    "payload": {
+      "type": "card",
+      "card[number]": "' OR 1=1 --",
+      "card[exp_month]": "12",
+      "card[exp_year]": "2025",
+      "card[cvc]": "123"
+    }
+  },
+  {
+    "testName": "Cross-Site Scripting (XSS)",
+    "payload": {
+      "type": "card",
+      "card[number]": "<script>alert('XSS')</script>",
+      "card[exp_month]": "12",
+      "card[exp_year]": "2025",
+      "card[cvc]": "123"
+    }
+  }
+],
+  "idempotency":[
+    {
+      "idempotencyKey": "unique-key-123"
+    }]
 }
 

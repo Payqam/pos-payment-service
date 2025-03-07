@@ -1,22 +1,14 @@
-name: feature-branch-checks
-run-name: ${{ github.actor }} is running checks on feature branch
-on:
-  push:
-    branches:
-      - 'feature/**'
+name: Production Deployment
+run-name: Production Deployment
+on: workflow_dispatch
 
 jobs:
-  feature-branch-checks:
+  production-deployment:
     runs-on: ubuntu-latest
-    environment: DEV
+    environment: PROD
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Initialize
-        uses: benjlevesque/short-sha@v3.0
-        id: short-sha
-        with:
-          length: 5
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -27,29 +19,24 @@ jobs:
           npm i -g zx
           zx ./scripts/setup.mjs
         env:
-          ENV: DEV
-          NAMESPACE: ${{ steps.short-sha.outputs.sha }}
+          ENV: PROD
+          NAMESPACE: ''
       - name: Configure AWS Credentials for deployment
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{vars.AWS_REGION}}
-      - name: Lint
-        run: npm run lint
       - name: Build
         run: zx ./scripts/build.mjs
         env:
-          ENV: DEV
-          NAMESPACE: ${{ steps.short-sha.outputs.sha }}
-          STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
-          STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
+          ENV: PROD
       - name: Deploy
         id: deploy
         run: zx ./scripts/deploy.mjs
         env:
-          ENV: DEV
-          NAMESPACE: ${{ steps.short-sha.outputs.sha }}
+          ENV: PROD
+          NAMESPACE: ''
           STRIPE_API_SECRET: ${{ secrets.STRIPE_API_SECRET }}
           STRIPE_SIGNING_SECRET: ${{ secrets.STRIPE_SIGNING_SECRET }}
           MTN_COLLECTION_SUBSCRIPTION_KEY: ${{ secrets.MTN_COLLECTION_SUBSCRIPTION_KEY }}
@@ -73,12 +60,3 @@ jobs:
           ORANGE_NOTIFY_URL=https: ${{ secrets.ORANGE_NOTIFY_URL }}
           ORANGE_PAYQAM_MERCHANT_PHONE: ${{ secrets.ORANGE_PAYQAM_MERCHANT_PHONE }}
           ORANGE_PAYQAM_PIN: ${{ secrets.ORANGE_PAYQAM_PIN }}
-      - name: Destroy Deployment
-        if: ${{ steps.deploy.outcome == 'success' && always() }}
-        run: zx ./scripts/destroy.mjs
-        env:
-          ENV: DEV
-          NAMESPACE: ${{ steps.short-sha.outputs.sha }}
-      - name: Remove .npmrc
-        if: always()
-        run: rm -f ~/.npmrc
