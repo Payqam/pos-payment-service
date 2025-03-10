@@ -8,6 +8,7 @@ import { WebhookEvent } from '../../../types/mtn';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
+import { SNSService } from '../../../services/snsService';
 import * as process from 'node:process';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
@@ -67,10 +68,13 @@ export class MtnPaymentService {
 
   private readonly baseUrl: string;
 
+  private readonly snsService: SNSService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
+    this.snsService = SNSService.getInstance();
     this.baseUrl =
       process.env.MTN_API_BASE_URL || 'https://sandbox.momodeveloper.mtn.com';
     this.logger.info('init()');
@@ -374,6 +378,24 @@ export class MtnPaymentService {
           };
 
           await this.dbService.createPaymentRecord(paymentRecord);
+          await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+            transactionId,
+            paymentMethod: 'MTN MOMO',
+            status: 'PENDING',
+            type: 'CREATE',
+            amount,
+            merchantId,
+            transactionType: 'CHARGE',
+            metaData,
+            fee: fee,
+            createdOn: Math.floor(Date.now() / 1000),
+            customerPhone: mobileNo,
+            currency: currency,
+            exchangeRate: 'exchangeRate',
+            processingFee: 'processingFee',
+            netAmount: 'netAmount',
+            externalTransactionId: 'externalTransactionId',
+          });
 
           this.logger.info('Payment request created successfully', {
             transactionId,
@@ -411,6 +433,28 @@ export class MtnPaymentService {
             error: error instanceof Error ? error.message : 'Unknown error',
             transactionId,
           });
+
+          await this.snsService.publish(
+            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+            {
+              transactionId,
+              paymentMethod: 'MTN MOMO',
+              status: 'FAILED',
+              type: 'CREATE',
+              amount,
+              merchantId,
+              transactionType: 'CHARGE',
+              metaData,
+              fee,
+              createdOn: Math.floor(Date.now() / 1000),
+              customerPhone: mobileNo,
+              currency: currency,
+              exchangeRate: 'exchangeRate',
+              processingFee: 'processingFee',
+              netAmount: 'netAmount',
+              externalTransactionId: 'externalTransactionId',
+            }
+          );
 
           // If not a mapped MTN error, throw the original error
           throw new Error('Failed to process the payment');
@@ -508,7 +552,6 @@ export class MtnPaymentService {
    * @param amount - The amount to transfer
    * @param recipientMobileNo - Recipient's mobile number (MSISDN format)
    * @param currency - Transfer currency (default: EUR)
-   * @param tId
    * @returns The transfer ID for tracking
    */
   public async initiateTransfer(
