@@ -30,6 +30,7 @@ import { LambdaDashboard } from './cloudwatch-dashboards/lambda-dashboard';
 import { DynamoDBDashboard } from './cloudwatch-dashboards/dynamoDB-dashboard';
 import { SNSDashboard } from './cloudwatch-dashboards/sns-dashboard';
 import { ApiGatewayDashboard } from './cloudwatch-dashboards/apiGateway-dashboard';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -435,6 +436,20 @@ export class CDKStack extends cdk.Stack {
     // Grant SNS permissions to MTN webhook lambdas
     snsConstruct.eventTopic.grantPublish(mtnPaymentWebhookLambda.lambda);
     snsConstruct.eventTopic.grantPublish(mtnDisbursementWebhookLambda.lambda);
+
+    const dlqProcessLambda = new PAYQAMLambda(this, 'DLQProcessLambda', {
+      name: `DLQSubscriber-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.DLQ_PROCESSOR}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        SLACK_WEBHOOK_URL: props.slackWebhookUrl,
+      },
+    });
+    dlqProcessLambda.lambda.addEventSource(
+      new SqsEventSource(snsConstruct.dlq)
+    );
 
     const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
       name: `SlackNotifier-${props.envName}${props.namespace}`,
