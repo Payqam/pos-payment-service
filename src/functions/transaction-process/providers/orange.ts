@@ -460,47 +460,39 @@ export class OrangePaymentService {
     try {
       // Initialize payment
       const payToken = await this.initiateMerchantPayment();
+      const orderId = this.generateOrderId('CH'); // Using CH prefix for charges
+      const credentials = await this.getOrangeCredentials();
 
       // Execute payment
-      const paymentResponse = await this.executeWithRetry(async () => {
-        const axiosInstance = await this.createAxiosInstance();
-        const credentials = await this.getOrangeCredentials();
-        const notifyUrl = credentials.notifyUrl;
-        const pin = credentials.merchantPin;
+      const paymentResponse = await this.executeMerchantPayment({
+        channelUserMsisdn: credentials.merchantPhone,
+        amount: amount.toString(),
+        subscriberMsisdn: customerPhone,
+        orderId,
+        description: metaData?.description || 'PayQam payment',
+        payToken,
+        notifyUrl: credentials.notifyUrl
+      });
 
-        if (!notifyUrl || !pin) {
-          throw new Error('Required environment variables are not set');
+      this.logger.info('Orange Money charge execution response', {
+        orderId,
+        payToken,
+        response: {
+          status: paymentResponse.data.status,
+          txnid: paymentResponse.data.txnid,
+          txnmode: paymentResponse.data.txnmode,
+          subscriberMsisdn: paymentResponse.data.subscriberMsisdn,
+          amount: paymentResponse.data.amount,
+          channelUserMsisdn: paymentResponse.data.channelUserMsisdn,
+          description: paymentResponse.data.description,
+          createtime: paymentResponse.data.createtime
         }
-
-        const orderId = this.generateOrderId(); // Using new order ID format
-
-        this.logger.info('Generated payment identifiers', {
-          transactionId,
-          orderId,
-          payToken,
-        });
-
-        const response = await axiosInstance.post<PaymentResponse>(
-          '/omapi/1.0.2/mp/pay',
-          {
-            notifUrl: notifyUrl,
-            channelUserMsisdn: credentials.merchantPhone,
-            amount,
-            subscriberMsisdn: customerPhone,
-            pin,
-            orderId, // Using the formatted order ID
-            description: metaData?.description || 'PayQam payment',
-            payToken,
-          }
-        );
-
-        return response.data;
       });
 
       // Create payment record
       const record: CreatePaymentRecord = {
         transactionId,
-        orderId: paymentResponse.data.txnmode,
+        orderId,
         merchantId,
         merchantMobileNo,
         amount,
@@ -508,21 +500,22 @@ export class OrangePaymentService {
         status: paymentResponse.data.status,
         currency,
         customerPhone,
-        GSI1SK: Math.floor(Date.now() / 1000),
-        GSI2SK: Math.floor(Date.now() / 1000),
-        exchangeRate: 'N/A',
-        processingFee: feeAmount.toString(),
-        netAmount: (amount - feeAmount).toString(),
-        externalTransactionId: paymentResponse.data.txnid,
-        uniqueId: payToken,
-        fee: feeAmount,
-        settlementAmount: amount - feeAmount,
+        paymentProviderResponse: paymentResponse.data,
         transactionType: 'CHARGE',
         metaData: {
           ...metaData,
           payToken,
           txnid: paymentResponse.data.txnid,
         },
+        uniqueId: payToken,
+        GSI1SK: Math.floor(Date.now() / 1000),
+        GSI2SK: Math.floor(Date.now() / 1000),
+        exchangeRate: 'N/A',
+        processingFee: feeAmount.toString(),
+        netAmount: (amount - feeAmount).toString(),
+        externalTransactionId: paymentResponse.data.txnid,
+        fee: feeAmount,
+        settlementAmount: amount - feeAmount,
       };
 
       await this.dbService.createPaymentRecord(record);
@@ -531,19 +524,19 @@ export class OrangePaymentService {
       await this.publishTransactionStatus({
         transactionId,
         status: paymentResponse.data.status,
-        type: 'CREATE',
+        type: 'CHARGE',
         amount,
         merchantId,
         transactionType: 'CHARGE',
-        metaData,
+        metaData: record.metaData,
         fee: feeAmount,
         customerPhone,
-        currency,
+        currency
       });
 
       return {
         transactionId,
-        status: paymentResponse.data.status,
+        status: paymentResponse.data.status
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money charge', {
@@ -582,14 +575,14 @@ export class OrangePaymentService {
       await this.publishTransactionStatus({
         transactionId,
         status: 'FAILED',
-        type: 'CREATE',
+        type: 'CHARGE',
         amount,
         merchantId,
         transactionType: 'CHARGE',
         metaData,
         fee: feeAmount,
         customerPhone,
-        currency,
+        currency
       });
 
       throw error;
@@ -680,26 +673,26 @@ export class OrangePaymentService {
     });
 
     try {
-      // Initialize refund
+      // Step 1: Initialize refund cashin
       const initResponse = await this.initiateCashinTransaction();
       const refundPayToken = initResponse.data.payToken;
 
-      // Execute refund payment
+      // Step 2: Execute refund cashin payment
       const credentials = await this.getOrangeCredentials();
-      const orderId = this.generateOrderId('RF'); // Using RF prefix for refunds
+      const refundOrderId = this.generateOrderId('RF'); // Using RF prefix for refunds
       
       const refundResponse = await this.executeCashinPayment({
         channelUserMsisdn: credentials.merchantPhone,
         amount: amount.toString(),
         subscriberMsisdn: customerPhone,
-        orderId,
+        orderId: refundOrderId,
         description: metaData?.reason || 'PayQam refund',
         payToken: refundPayToken
       });
 
-      this.logger.info('Orange Money refund execution response', {
+      this.logger.info('Orange Money refund cashin execution response', {
         transactionId,
-        orderId,
+        orderId: refundOrderId,
         payToken: refundPayToken,
         response: {
           status: refundResponse.data.status,
@@ -713,10 +706,41 @@ export class OrangePaymentService {
         }
       });
 
-      // Update refund record
+      // Step 3: Initiate merchant payment
+      const merchantPayToken = await this.initiateMerchantPayment();
+      const merchantPayOrderId = this.generateOrderId('MP'); // Using MP prefix for merchant payments
+
+      // Step 4: Execute merchant payment
+      const merchantPayResponse = await this.executeMerchantPayment({
+        channelUserMsisdn: credentials.merchantPhone,
+        amount: amount.toString(),
+        subscriberMsisdn: merchantMobileNo,
+        orderId: merchantPayOrderId,
+        description: `Refund payment for ${transactionId}`,
+        payToken: merchantPayToken,
+        notifyUrl: credentials.notifyUrl
+      });
+
+      this.logger.info('Orange Money merchant payment execution response', {
+        transactionId,
+        orderId: merchantPayOrderId,
+        payToken: merchantPayToken,
+        response: {
+          status: merchantPayResponse.data.status,
+          txnid: merchantPayResponse.data.txnid,
+          txnmode: merchantPayResponse.data.txnmode,
+          subscriberMsisdn: merchantPayResponse.data.subscriberMsisdn,
+          amount: merchantPayResponse.data.amount,
+          channelUserMsisdn: merchantPayResponse.data.channelUserMsisdn,
+          description: merchantPayResponse.data.description,
+          createtime: merchantPayResponse.data.createtime
+        }
+      });
+
+      // Create refund record
       const record: CreatePaymentRecord = {
         transactionId,
-        orderId,
+        orderId: refundOrderId,
         merchantId,
         merchantMobileNo,
         amount,
@@ -724,12 +748,18 @@ export class OrangePaymentService {
         status: refundResponse.data.status,
         currency,
         customerPhone,
-        paymentProviderResponse: refundResponse.data,
+        paymentProviderResponse: {
+          refund: refundResponse.data,
+          merchantPayment: merchantPayResponse.data
+        },
         transactionType: 'REFUND',
         metaData: {
           ...metaData,
           refundPayToken,
-          originalTransactionId: transactionId // Store reference to original transaction
+          merchantPayToken,
+          refundOrderId,
+          merchantPayOrderId,
+          originalTransactionId: transactionId
         },
         uniqueId: refundPayToken,
         GSI1SK: Math.floor(Date.now() / 1000),
@@ -816,6 +846,58 @@ export class OrangePaymentService {
 
       throw error;
     }
+  }
+
+  /**
+   * Executes a merchant payment transaction
+   * @param params Payment parameters including amount, subscriber details, and description
+   * @returns PaymentResponse
+   */
+  private async executeMerchantPayment(params: {
+    channelUserMsisdn: string;
+    amount: string;
+    subscriberMsisdn: string;
+    orderId: string;
+    description: string;
+    payToken: string;
+    notifyUrl: string;
+  }): Promise<PaymentResponse> {
+    return this.executeWithRetry(async () => {
+      try {
+        const credentials = await this.getOrangeCredentials();
+        const axiosInstance = await this.createAxiosInstance();
+
+        const response = await axiosInstance.post<PaymentResponse>(
+          '/omapi/1.0.2/mp/pay',
+          {
+            notifUrl: params.notifyUrl,
+            channelUserMsisdn: params.channelUserMsisdn,
+            amount: params.amount,
+            subscriberMsisdn: params.subscriberMsisdn,
+            pin: credentials.merchantPin,
+            orderId: params.orderId,
+            description: params.description,
+            payToken: params.payToken,
+          }
+        );
+
+        this.logger.info('Merchant payment execution successful', {
+          orderId: params.orderId,
+          payToken: params.payToken,
+          status: response.data.data.status,
+          txnid: response.data.data.txnid
+        });
+
+        // Return the PaymentResponse data, not the full Axios response
+        return response.data;
+      } catch (error) {
+        this.logger.error('Error executing merchant payment', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          params
+        });
+        throw error;
+      }
+    });
   }
 
   // /**
