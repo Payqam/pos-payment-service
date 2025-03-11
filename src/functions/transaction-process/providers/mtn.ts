@@ -338,14 +338,13 @@ export class MtnPaymentService {
     switch (transactionType) {
       case 'CHARGE': {
         transactionId = uuidv4();
+        const { fee, settlementAmount } =
+          this.calculateFeeAndSettlement(amount);
         try {
           const axiosInstance = await this.createAxiosInstance(
             TransactionType.PAYMENT,
             transactionId
           );
-
-          const { fee, settlementAmount } =
-            this.calculateFeeAndSettlement(amount);
 
           // Create payment request in MTN
           await axiosInstance.post('/collection/v1_0/requesttopay', {
@@ -378,24 +377,27 @@ export class MtnPaymentService {
           };
 
           await this.dbService.createPaymentRecord(paymentRecord);
-          await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-            transactionId,
-            paymentMethod: 'MTN MOMO',
-            status: 'PENDING',
-            type: 'CREATE',
-            amount,
-            merchantId,
-            transactionType: 'CHARGE',
-            metaData,
-            fee: fee,
-            createdOn: Math.floor(Date.now() / 1000),
-            customerPhone: mobileNo,
-            currency: currency,
-            exchangeRate: 'exchangeRate',
-            processingFee: 'processingFee',
-            netAmount: 'netAmount',
-            externalTransactionId: 'externalTransactionId',
-          });
+          await this.snsService.publish(
+            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+            {
+              transactionId,
+              paymentMethod: 'MTN MOMO',
+              status: 'PENDING',
+              type: 'CREATE',
+              amount,
+              merchantId,
+              transactionType: 'CHARGE',
+              metaData,
+              fee: fee,
+              createdOn: Math.floor(Date.now() / 1000),
+              customerPhone: mobileNo,
+              currency: currency,
+              exchangeRate: 'exchangeRate',
+              processingFee: 'processingFee',
+              netAmount: 'netAmount',
+              externalTransactionId: 'externalTransactionId',
+            }
+          );
 
           this.logger.info('Payment request created successfully', {
             transactionId,
