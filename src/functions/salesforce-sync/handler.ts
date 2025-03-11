@@ -29,6 +29,7 @@ interface SNSMessage {
   netAmount: string;
   externalTransactionId: string;
   paymentMethod: string;
+  payerData: { externalId: string; partyId: string; partyIdType: string };
   TransactionError: {
     ErrorCode: string;
     ErrorMessage: string;
@@ -128,6 +129,39 @@ export class SalesforceSyncService {
 
       // Fetch existing record
       const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`;
+      let payer: string | undefined = undefined;
+      if (message.payerData.partyId) {
+        const queryPayer = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Payer__c+WHERE+partyId__c='${message.payerData.partyId}'`;
+        const payerQueryResponse = await axios.get(queryPayer, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        payer = payerQueryResponse.data.records[0].Id;
+
+        if (!payer) {
+          const payerPayload = {
+            OwnerId: process.env.SALESFORCE_OWNER_ID,
+            externalId__c: message.payerData.externalId,
+            partyId__c: message.payerData.partyId,
+            partyIdType__c: message.payerData.partyIdType,
+          };
+          const payerResponse = await axios.post(
+            `${urlHost}/services/data/v63.0/sobjects/Payer__c/`,
+            payerPayload,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          this.logger.info('Successfully created Salesforce record', {
+            recordId: payerResponse.data.id,
+          });
+          payer = payerResponse.data.id;
+        }
+      }
       const queryResponse = await axios.get(queryUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -145,6 +179,7 @@ export class SalesforceSyncService {
 
       // Update Salesforce Record
       const recordPayload = {
+        payer__c: payer,
         transactionId__c: message.transactionId,
         status__c: message.status,
         amount__c: message.amount,
