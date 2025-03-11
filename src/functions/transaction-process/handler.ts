@@ -81,6 +81,7 @@ export class TransactionProcessService {
       merchantMobileNo,
       transactionType,
       merchantId,
+      transactionId
     } = body;
 
     if (!paymentMethod) {
@@ -111,13 +112,16 @@ export class TransactionProcessService {
       merchantId,
       transactionType,
       merchantMobileNo,
+      transactionId
     });
 
     return {
       statusCode: 200,
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify({
-        message: 'Payment processed successfully',
+        message: transactionType === 'REFUND' 
+          ? (transactionResult.message || 'Refund processed successfully')
+          : 'Payment processed successfully',
         transactionDetails: transactionResult,
       }),
     };

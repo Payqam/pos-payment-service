@@ -276,14 +276,14 @@ export class OrangeWebhookService {
       ).toString();
 
       // Initialize disbursement
-      const initResponse = await this.orangeService.initDisbursement();
+      const initResponse = await this.orangeService.initiateCashinTransaction();
 
       if (!initResponse.data?.payToken) {
         throw new Error('Failed to get payToken for disbursement');
       }
 
       // Execute disbursement
-      const disbursementResponse = await this.orangeService.executeDisbursement(
+      const disbursementResponse = await this.orangeService.executeCashinPayment(
         {
           channelUserMsisdn: credentials.merchantPhone,
           amount: disbursementAmount,
