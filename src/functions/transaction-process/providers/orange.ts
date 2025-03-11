@@ -627,22 +627,30 @@ export class OrangePaymentService {
       
       const existingTransaction = existingTransactionResult.Item;
       
-      if (existingTransaction) {
-        this.logger.info('Found existing transaction', {
+      if (!existingTransaction) {
+        this.logger.warn('Transaction not found for refund', { transactionId });
+        return {
           transactionId,
-          type: existingTransaction.transactionType,
-          status: existingTransaction.status
-        });
+          status: 'FAILED',
+          message: `Transaction not found with ID: ${transactionId}`
+        };
+      }
 
-        // Check if it's already a successful refund
-        if (existingTransaction.transactionType === 'REFUND' && 
-            existingTransaction.status === 'SUCCESSFULL') {
-          return {
-            transactionId,
-            status: 'ALREADY_REFUNDED',
-            message: 'Transaction has already been refunded'
-          };
-        }
+      this.logger.info('Found existing transaction', {
+        transactionId,
+        type: existingTransaction.transactionType,
+        status: existingTransaction.status
+      });
+
+      // Check if it's already a successful refund
+      if (existingTransaction.transactionType === 'REFUND' && 
+          existingTransaction.status === 'SUCCESSFULL') {
+        return {
+          transactionId,
+          status: 'ALREADY_REFUNDED',
+          message: 'Transaction has already been refunded'
+        };
+      }
 
         // Check if the original transaction exists and was successful
         // if (existingTransaction.transactionType === 'CHARGE' && 
@@ -650,17 +658,24 @@ export class OrangePaymentService {
         //   throw new Error('Original transaction was not successful');
         // }
 
-        // TODO: Temporary check for PENDING transactions
-        if (existingTransaction.transactionType === 'CHARGE' && 
-          existingTransaction.status !== 'PENDING') {
+      // TODO: Temporary check for PENDING transactions
+      if (existingTransaction.transactionType === 'CHARGE' && 
+        existingTransaction.status !== 'PENDING') {
         throw new Error('Original transaction was not successful');
       }
-      }
     } catch (error) {
-      if ((error as Error).name !== 'ResourceNotFoundException') {
-        throw error;
+      if ((error as Error).name === 'ResourceNotFoundException') {
+        this.logger.warn('Transaction not found for refund', { 
+          transactionId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        return {
+          transactionId,
+          status: 'FAILED',
+          message: `Transaction not found with ID: ${transactionId}`
+        };
       }
-      // If record not found, proceed with refund
+      throw error;
     }
 
     this.logger.info('Processing Orange Money refund', {
