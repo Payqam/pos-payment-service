@@ -2,7 +2,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
-import { CreatePaymentRecord } from '../../../model';
+import { CreatePaymentRecord, UpdatePaymentRecord } from '../../../model';
 import { v4 as uuidv4 } from 'uuid';
 import axios, { AxiosInstance } from 'axios';
 import querystring from 'querystring';
@@ -753,9 +753,8 @@ export class OrangePaymentService {
         }
       });
 
-      // Create refund record
-      const record: CreatePaymentRecord = {
-        transactionId,
+      // Update refund record
+      const record: UpdatePaymentRecord = {
         orderId: refundOrderId,
         merchantId,
         merchantMobileNo,
@@ -788,7 +787,7 @@ export class OrangePaymentService {
         settlementAmount: amount
       };
 
-      await this.dbService.createPaymentRecord(record);
+      await this.dbService.updatePaymentRecord({transactionId},record);
 
       // Publish status to SNS
       await this.publishTransactionStatus({
@@ -816,9 +815,8 @@ export class OrangePaymentService {
         customerPhone
       });
 
-      // Create failed refund record
-      const failedRecord: CreatePaymentRecord = {
-        transactionId,
+      // Update failed refund record
+      const failedRecord: UpdatePaymentRecord = {
         merchantId,
         merchantMobileNo,
         amount,
@@ -844,7 +842,7 @@ export class OrangePaymentService {
         settlementAmount: amount
       };
 
-      await this.dbService.createPaymentRecord(failedRecord);
+      await this.dbService.updatePaymentRecord({transactionId}, failedRecord);
 
       // Publish failed status to SNS
       await this.publishTransactionStatus({
