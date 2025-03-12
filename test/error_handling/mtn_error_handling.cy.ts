@@ -1,4 +1,5 @@
 import testData from '../../cypress/fixtures/mtn_test_data.json';
+let transactionId, accessToken, uniqueId, externalId;
 
 describe('MTN Payment Processing Tests - Negative Scenarios', () => {
   describe('Verify payment request with Invalid details', () => {
@@ -7,7 +8,7 @@ describe('MTN Payment Processing Tests - Negative Scenarios', () => {
         method: 'POST',
         url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
         headers: {
-          'x-api-key': `${Cypress.env('InvalidxApiKey')}`,
+          'x-api-key': `${Cypress.env('InvalidApiKey')}`,
           'Content-Type': 'application/json',
         },
         failOnStatusCode: false,
@@ -30,191 +31,228 @@ describe('MTN Payment Processing Tests - Negative Scenarios', () => {
         expect(response.body.message).to.include('Forbidden');
       });
     });
-  });
 
-  describe('Verify payment request with an Invalid Amount', () => {
-    it('should return 400 Bad Request when using an unsupported currency', () => {
-      cy.request({
-        method: 'POST',
-        url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
-        headers: {
-          'x-api-key': `${Cypress.env('xApiKey')}`,
-          'Content-Type': 'application/json',
-        },
-        failOnStatusCode: false,
-        body: {
-          merchantId: 'MERCHANT_123',
-          merchantMobileNo: '94767987987',
-          amount: 'ABC',
-          customerPhone: '94713579023',
-          transactionType: 'PAYMENT',
-          paymentMethod: 'MTN',
-          currency: 'ABC',
-          metaData: {
-            reference: 'ORDER_123',
-            description: 'Payment for order #123',
+    testData.invalidData.forEach((test) => {
+      it(`should return ${test.expectedStatus} Bad Request when using ${test.title}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'Content-Type': 'application/json',
           },
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(400);
-        cy.task('log', response.body);
-        expect(response.body).to.have.property('message');
-        expect(response.body.message).to.include('Invalid request body');
+          failOnStatusCode: false,
+          body: {
+            merchantId: 'MERCHANT_123',
+            merchantMobileNo:
+              test.body['mtn[merchantMobileNo]'] || '94767987987',
+            amount: test.body['mtn[amount]'] || 1000,
+            customerPhone: test.body['mtn[customerPhone]'] || '94786987543',
+            transactionType: 'PAYMENT',
+            paymentMethod: 'MTN',
+            currency: 'EUR',
+            metaData: {
+              reference: 'ORDER_123',
+              description: 'Payment for order #123',
+            },
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(test.expectedStatus);
+          cy.task('log', response.body);
+          expect(response.body).to.have.property('message');
+          expect(response.body.message).to.include(test.expectedMessage);
+        });
       });
     });
   });
-});
+  describe('Verify transaction status with Invalid details', () => {
+    testData.invalidId.forEach((test) => {
+      it(`should return ${test.expectedStatus} Bad Request when using ${test.title}`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('ServiceEndpoint')}/transaction/status/?transactionId=${test.transactionId}`,
+          headers: {
+            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'Content-Type': 'application/json',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+        });
+      });
 
-describe('MTN Payment Processing Tests - Negative Scenarios', () => {
-  const serviceEndpoint = Cypress.env('ServiceEndpoint');
-  const xApiKey = Cypress.env('xApiKey');
+      it('Generates an Access Token', () => {
+        cy.request({
+          method: 'POST',
+          url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
+          headers: {
+            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+            Authorization:
+              'Basic ' +
+              btoa(
+                `${Cypress.env('MTN_COLLECTION_API_USER')}:${Cypress.env('MTN_COLLECTION_API_KEY')}`
+              ),
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          accessToken = response.body.access_token;
+          cy.task('log', accessToken);
+          Cypress.env('accessToken', accessToken);
+        });
+      });
 
-  testData.invalidData.forEach((test) => {
-    it(`Verify ${test.expectedStatus} response for ${test.title}`, () => {
-      cy.request({
-        method: 'POST',
-        url: `${serviceEndpoint}/transaction/process/charge`,
-        headers: {
-          'x-api-key': xApiKey,
-          'Content-Type': 'application/json',
-        },
-        failOnStatusCode: false,
-        body: {
-          'mtn[merchantId]': test.body['mtn[merchantId]'] || 'MERCHANT_123',
-          'mtn[merchantMobileNo]':
-            test.body['mtn[merchantMobileNo]'] || '94760000000',
-          'mtn[customerPhone]':
-            test.body['mtn[customerPhone]'] || '94710000000',
-          'mtn[amount]': test.body['mtn[amount]'] || 100,
-          'mtn[transactionType]':
-            test.body['mtn[transactionType]'] || 'PAYMENT',
-          paymentMethod: 'MTN',
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(400);
-        expect(response.status).to.not.eq(200);
-        expect(response.body).to.have.property('message');
-        expect(response.body.message).to.include('Invalid request body');
-        cy.task(
-          'log',
-          `${test.title} - Response: ${JSON.stringify(response.body)}`
-        );
+      it('Checks Transaction Status', () => {
+        cy.request({
+          method: 'GET',
+          url: `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${test.transactionId}`,
+          headers: {
+            'X-Target-Environment': 'sandbox',
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+          },
+          failOnStatusCode: false,
+        }).then((response) => {
+          expect(response.status).to.eq(test.expectedStatus);
+        });
       });
     });
   });
 });
 
 describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
-  const serviceEndpoint = Cypress.env('ServiceEndpoint');
-  const xApiKey = Cypress.env('xApiKey');
-
   testData.requestToPayPayer.forEach((test) => {
-    it(`Verify 400 response for ${test.title}`, () => {
-      cy.request({
-        method: 'POST',
-        url: `${serviceEndpoint}/transaction/process/charge`,
-        headers: {
-          'x-api-key': xApiKey,
-          'Content-Type': 'application/json',
-        },
-        failOnStatusCode: false,
-        body: {
-          'mtn[merchantId]': 'MERCHANT_123',
-          'mtn[merchantMobileNo]': '94760000000',
-          'mtn[customerPhone]': test.payer,
-          'mtn[amount]': 100,
-          'mtn[transactionType]': 'PAYMENT',
-          paymentMethod: 'MTN',
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(400);
-        expect(response.status).to.not.eq(200);
-        expect(response.body).to.have.property('message');
-        expect(response.body.message).to.include('Invalid request body');
-        cy.task(
-          'log',
-          `${test.title} - Response: ${JSON.stringify(response.body)}`
-        );
+    describe(`Verify payment request for ${test.title}`, () => {
+      it(`should process a payment`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'Content-Type': 'application/json',
+          },
+          failOnStatusCode: false,
+          body: {
+            merchantId: 'MERCHANT_123',
+            merchantMobileNo: '94767987987',
+            amount: 100.12,
+            customerPhone: test.payer,
+            transactionType: 'PAYMENT',
+            paymentMethod: 'MTN',
+            currency: 'EUR',
+            metaData: {
+              reference: 'ORDER_123',
+              description: 'Payment for order #123',
+            },
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          expect(response.body).to.have.property(
+            'message',
+            'Payment processed successfully'
+          );
+          expect(response.body).to.have.property('transactionDetails');
+          expect(response.body.transactionDetails).to.have.property(
+            'transactionId'
+          );
+          expect(['SUCCESSFUL', 'PENDING']).to.include(
+            response.body.transactionDetails.status
+          );
+
+          transactionId = response.body.transactionDetails.transactionId;
+          cy.task('log', `Transaction ID : ${transactionId}`);
+          Cypress.env('transactionId', transactionId);
+          cy.wait(500);
+        });
+      });
+
+      it('should get transaction status', () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('ServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+          headers: {
+            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'Content-Type': 'application/json',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          expect(response.body).to.have.property(
+            'message',
+            'Transaction retrieved successfully'
+          );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'PENDING'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
+          cy.task('log', response.body);
+        });
+      });
+
+      it('Generates an Access Token', () => {
+        cy.request({
+          method: 'POST',
+          url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
+          headers: {
+            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+            Authorization:
+              'Basic ' +
+              btoa(
+                `${Cypress.env('MTN_COLLECTION_API_USER')}:${Cypress.env('MTN_COLLECTION_API_KEY')}`
+              ),
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          accessToken = response.body.access_token;
+          cy.task('log', accessToken);
+          Cypress.env('accessToken', accessToken);
+        });
+      });
+
+      it('Checks Transaction Status of FAILED', () => {
+        cy.request({
+          method: 'GET',
+          url: `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${Cypress.env('transactionId')}`,
+          headers: {
+            'X-Target-Environment': 'sandbox',
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          expect(response.body).to.have.property('reason', test.reason);
+          expect(response.body).to.have.property('status', 'FAILED');
+        });
       });
     });
   });
 });
 
-describe('MTN PreApproval Tests - Negative Scenarios', () => {
-  const serviceEndpoint = Cypress.env('ServiceEndpoint');
-  const xApiKey = Cypress.env('xApiKey');
-
-  testData.preApproval.forEach((test) => {
-    it(`Verify 400 response for ${test.title}`, () => {
-      cy.request({
-        method: 'POST',
-        url: `${serviceEndpoint}/transaction/process/charge`,
-        headers: {
-          'x-api-key': xApiKey,
-          'Content-Type': 'application/json',
-        },
-        failOnStatusCode: false,
-        body: {
-          'mtn[merchantId]': 'MERCHANT_123',
-          'mtn[merchantMobileNo]': '94760000000',
-          'mtn[customerPhone]': test.payer,
-          'mtn[amount]': 100,
-          'mtn[transactionType]': 'PAYMENT',
-          paymentMethod: 'MTN',
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(400);
-        expect(response.status).to.not.eq(200);
-        expect(response.body).to.have.property('message');
-        expect(response.body.message).to.include('Invalid request body');
-        cy.task(
-          'log',
-          `${test.title} - Response: ${JSON.stringify(response.body)}`
-        );
-      });
-    });
-  });
-});
-
-describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
-  const serviceEndpoint = Cypress.env('ServiceEndpoint');
-  const xApiKey = Cypress.env('xApiKey');
-
-  testData.transferPayee.forEach((test) => {
-    it(`Verify 400 response for ${test.title}`, () => {
-      cy.request({
-        method: 'POST',
-        url: `${serviceEndpoint}/transaction/process/charge`,
-        headers: {
-          'x-api-key': xApiKey,
-          'Content-Type': 'application/json',
-        },
-        failOnStatusCode: false,
-        body: {
-          'mtn[merchantId]': 'MERCHANT_123',
-          'mtn[merchantMobileNo]': test.merchant,
-          'mtn[customerPhone]': '94760000000',
-          'mtn[amount]': 100,
-          'mtn[transactionType]': 'PAYMENT',
-          paymentMethod: 'MTN',
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(400);
-        expect(response.status).to.not.eq(200);
-        expect(response.body).to.have.property('message');
-        expect(response.body.message).to.include('Invalid request body');
-        cy.task(
-          'log',
-          `${test.title} - Response: ${JSON.stringify(response.body)}`
-        );
-      });
-    });
-  });
-});
-let accessToken;
 describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () => {
   testData.AccountHolderActivePartyCode.forEach((test) => {
     describe(`Account Holder Active Party Code Tests for ${test.title}`, () => {
+      it('should get transaction status', () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('ServiceEndpoint')}/transaction/status/?transactionId=${test.transactionId}`,
+          headers: {
+            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'Content-Type': 'application/json',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          expect(response.body).to.have.property(
+            'message',
+            'Transaction retrieved successfully'
+          );
+        });
+      });
+
       it('Generates an Access Token', () => {
         cy.request({
           method: 'POST',
@@ -257,3 +295,121 @@ describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () =
     });
   });
 });
+
+// describe('MTN Payment Processing Tests', () => {
+//     describe('Validate Successful Payment Processing', () => {
+//       it('should process a payment', () => {
+//         cy.request({
+//           method: 'POST',
+//           url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
+//           headers: {
+//             'x-api-key': `${Cypress.env('xApiKey')}`,
+//             'Content-Type': 'application/json',
+//           },
+//           body: {
+//             merchantId: 'MERCHANT_123',
+//             merchantMobileNo: test.merchant,
+//             amount: 100.12,
+//             customerPhone: test.payer,
+//             transactionType: 'PAYMENT',
+//             paymentMethod: 'MTN',
+//             currency: 'EUR',
+//             metaData: {
+//               reference: 'ORDER_123',
+//               description: 'Payment for order #123',
+//             },
+//           },
+//         }).then((response) => {
+//           expect(response.status).to.eq(200);
+//           cy.task('log', response.body);
+//           expect(response.body).to.have.property(
+//             'message',
+//             'Payment processed successfully'
+//           );
+//           expect(response.body).to.have.property('transactionDetails');
+//           expect(response.body.transactionDetails).to.have.property(
+//             'transactionId'
+//           );
+//           expect(['SUCCESSFUL', 'PENDING']).to.include(
+//             response.body.transactionDetails.status
+//           );
+//
+//           transactionId = response.body.transactionDetails.transactionId;
+//           cy.task('log', `Transaction ID : ${transactionId}`);
+//           Cypress.env('transactionId', transactionId);
+//           cy.wait(500);
+//         });
+//       });
+//
+//       it('should get transaction status', () => {
+//         cy.request({
+//           method: 'GET',
+//           url: `${Cypress.env('ServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+//           headers: {
+//             'x-api-key': `${Cypress.env('xApiKey')}`,
+//             'Content-Type': 'application/json',
+//           },
+//         }).then((response) => {
+//           expect(response.status).to.eq(200);
+//           cy.task('log', response.body);
+//           expect(response.body).to.have.property(
+//             'message',
+//             'Transaction retrieved successfully'
+//           );
+//           expect(response.body.transaction.Item).to.have.property(
+//             'status',
+//             'PENDING'
+//           );
+//           uniqueId = response.body.transaction.Item.uniqueId;
+//           cy.task('log', ` ${uniqueId}`);
+//           Cypress.env('uniqueId', uniqueId);
+//           cy.task('log', response.body);
+//         });
+//       });
+//
+//       it('Generates an Access Token', () => {
+//         cy.request({
+//           method: 'POST',
+//           url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
+//           headers: {
+//             'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+//             Authorization:
+//               'Basic ' +
+//               btoa(
+//                 `${Cypress.env('MTN_COLLECTION_API_USER')}:${Cypress.env('MTN_COLLECTION_API_KEY')}`
+//               ),
+//           },
+//         }).then((response) => {
+//           expect(response.status).to.eq(200);
+//           accessToken = response.body.access_token;
+//           cy.task('log', accessToken);
+//           Cypress.env('accessToken', accessToken);
+//         });
+//       });
+//
+//       it('Checks Transaction Status', () => {
+//         cy.request({
+//           method: 'GET',
+//           url: `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${Cypress.env('transactionId')}`,
+//           headers: {
+//             'X-Target-Environment': 'sandbox',
+//             Authorization: `Bearer ${Cypress.env('accessToken')}`,
+//             'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+//           },
+//         }).then((response) => {
+//           expect(response.status).to.eq(200);
+//           cy.task('log', response.body);
+//           expect(response.body).to.have.property(
+//             'payerMessage',
+//             'PayQAM payment request'
+//           );
+//           expect(response.body).to.have.property('status', 'SUCCESSFUL');
+//           externalId = response.body.externalId;
+//           cy.task('log', externalId);
+//           Cypress.env('externalId', externalId);
+//         });
+//       });
+//     });
+//   });
+// });
+

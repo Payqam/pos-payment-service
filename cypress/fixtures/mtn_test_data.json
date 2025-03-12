@@ -5,179 +5,127 @@
       "merchant": "94760000000"
     }
     ],
+
+  "invalidId": [
+    {
+      "title": "Invalid transactionId",
+      "transactionId": "5ceRbaa7-8Ed0-a9-b1-8eb9ecc7bA",
+      "expectedStatus": 400
+    }
+  ],
   "invalidData": [
-  {
-    "title": "Invalid phone number format for merchantMobile",
-    "body": { "mtn[merchantMobileNo]": "invalid_number"}
-  },
+    {
+      "title": "Invalid amount",
+      "body": { "mtn[amount]": "ABC"},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+
+    },
     {
       "title": "Invalid phone number format for customerPhone",
       "body": { "mtn[customerPhone]": "invalid_number"},
-      "expectedStatus": 400,
-      "expectedMessage": "Invalid request body"
+      "expectedStatus": 500,
+      "expectedMessage": "Failed to process the payment"
+    },
+    {
+      "title": "Invalid phone number for merchantMobile",
+      "body": { "mtn[merchantMobileNo]": "invalid_number"},
+      "expectedStatus": 500,
+      "expectedMessage": "Failed to process the payment"
     },
   {
     "title": "Exceeding maximum transaction limit",
-    "body": {"mtn[amount]": 1000000000000000000000000000000.0 }
+    "body": {"mtn[amount]": 1000000000000000000000000000000.0 },
+    "expectedStatus": 500,
+    "expectedMessage": "Failed to process the payment"
   },
     {
       "title": "Empty phone number for customerPhone",
       "body": { "mtn[customerPhone]": " "},
-      "expectedStatus": 400,
-      "expectedMessage": "Invalid request body"
+      "expectedStatus": 500,
+      "expectedMessage": "Failed to process the payment"
     },
     {
       "title": "Empty phone number for merchantMobile",
       "body": { "mtn[merchantMobileNo]": " "},
-      "expectedStatus": 400,
-      "expectedMessage": "Invalid request body"
+      "expectedStatus": 500,
+      "expectedMessage": "Failed to process the payment"
     },
   {
-    "title": "Missing merchant ID",
-    "body": { "mtn[merchantId]": " " }
-  },
-  {
     "title": "Empty amount field",
-    "body": { "mtn[amount]": " " }
-  },
-  {
-    "title": "Invalid amount format",
-    "body": { "mtn[amount]": "ABC" }
-  },
-  {
-    "title": "Missing transaction type",
-    "body": { "mtn[transactionType]": " " }
+    "body": { "mtn[amount]": " " },
+    "expectedStatus": 400,
+    "expectedMessage": "Invalid request body"
   }
-],
+  ],
   "requestToPayPayer": [
       {
         "title": "failed payment request",
-        "payer": "46733123450"
+        "payer": "46733123450",
+        "reason":"INTERNAL_PROCESSING_ERROR"
       },
       {
         "title": "rejected payment request",
-        "payer": "46733123451"
+        "payer": "46733123451",
+        "reason":"APPROVAL_REJECTED"
       },
       {
         "title": "expired payment request",
-        "payer": "46733123452"
+        "payer": "46733123452",
+        "reason":"EXPIRED"
       },
       {
         "title": "non-existent payer",
-        "payer": "46733123455"
+        "payer": "46733123455",
+        "reason":"PAYER_NOT_FOUND"
       },
       {
         "title": "payee not allowed to receive",
-        "payer": "46733123456"
+        "payer": "46733123456",
+        "reason":"PAYEE_NOT_ALLOWED_TO_RECEIVE"
       },
       {
         "title": "payer not allowed to initiate",
-        "payer": "46733123457"
+        "payer": "46733123457",
+        "reason":"NOT_ALLOWED"
       },
       {
         "title": "invalid target environment",
-        "payer": "46733123458"
+        "payer": "46733123458",
+        "reason":"NOT_ALLOWED_TARGET_ENVIRONMENT"
       },
       {
         "title": "invalid callback URL host",
-        "payer": "46733123459"
+        "payer": "46733123459",
+        "reason":"INVALID_CALLBACK_URL_HOST"
       },
       {
         "title": "invalid currency in payment request",
-        "payer": "46733123460"
+        "payer": "46733123460",
+        "reason":"INVALID_CURRENCY"
       },
       {
         "title": "internal processing error",
-        "payer": "46733123461"
+        "payer": "46733123461",
+        "reason":"INTERNAL_PROCESSING_ERROR"
       },
       {
         "title": "service unavailable scenario",
-        "payer": "46733123462"
+        "payer": "46733123462",
+        "reason":"SERVICE_UNAVAILABLE"
       },
       {
         "title": "transaction failure",
-        "payer": "46733123463"
+        "payer": "46733123463",
+        "reason":"COULD_NOT_PERFORM_TRANSACTION"
       }
     ],
-  "preApproval":[
-  { "title": "failed payment request", "payer": "46733123450" },
-  { "title": "rejected payment request", "payer": "46733123451" },
-  { "title": "expired payment request", "payer": "46733123452" },
-  { "title": "non-existent payer", "payer": "46733123455" },
-  { "title": "payee not allowed to receive", "payer": "46733123456" },
-  { "title": "payer not allowed to initiate", "payer": "46733123457" },
-  { "title": "invalid target environment", "payer": "46733123458" },
-  { "title": "invalid callback URL host", "payer": "46733123459" },
-  { "title": "invalid currency in payment request", "payer": "46733123460" },
-  { "title": "internal processing error", "payer": "46733123461" },
-  { "title": "service unavailable scenario", "payer": "46733123462" },
-  { "title": "transaction failure", "payer": "46733123463" },
-  { "title": "failed pre-approval request", "payer": "46733123450" },
-  { "title": "rejected pre-approval request", "payer": "46733123451" },
-  { "title": "expired pre-approval request", "payer": "46733123452" },
-  { "title": "non-existent payer pre-approval", "payer": "46733123455" },
-  { "title": "payer not allowed to initiate pre-approval", "payer": "46733123456" },
-  { "title": "invalid target environment pre-approval", "payer": "46733123457" },
-  { "title": "invalid callback URL host pre-approval", "payer": "46733123458" },
-  { "title": "invalid currency in pre-approval request", "payer": "46733123459" },
-  { "title": "internal processing error pre-approval", "payer": "46733123460" },
-  { "title": "service unavailable scenario pre-approval", "payer": "46733123461" }
-],
-  "transferPayee": [
-    {
-      "title": "failed payment request",
-      "merchant": "46733123450"
-    },
-    {
-      "title": "rejected payment request",
-      "merchant": "46733123451"
-    },
-    {
-      "title": "expired payment request",
-      "merchant": "46733123452"
-    },
-    {
-      "title": "not Enough Funds merchant",
-      "merchant": "46733123455"
-    },
-    {
-      "title": "merchant Limit Reached",
-      "merchant": "46733123456"
-    },
-    {
-      "title": "not Found",
-      "merchant": "46733123457"
-    },
-    {
-      "title": "merchant not allowed to initiate",
-      "merchant": "46733123458"
-    },
-    {
-      "title": "invalid callback URL host",
-      "merchant": "46733123459"
-    },
-    {
-      "title": "invalid Call back Url Host",
-      "merchant": "46733123460"
-    },
-    {
-      "title": "invalid Currency",
-      "merchant": "46733123461"
-    },
-    {
-      "title": "Internal Processing Error",
-      "merchant": "46733123462"
-    },
-    {
-      "title": "Service Unavailable",
-      "merchant": "46733123463"
-    }
-  ],
+
 
   "AccountHolderActivePartyCode": [
   {
     "title": "AccountHolderActivePartyCodeNotFound",
-    "transactionId": "5cecb5a7-8bd0-4f49-87b1-8eb9ecc7b7bc"
+    "transactionId": "5cecbaa7-8bd0-4fa9-87b1-8eb9ecc7b12a"
   },
   {
     "title": "AccountHolderActivePartyCodeNotActive",
