@@ -37,14 +37,16 @@
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
-      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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"
+      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
+      "APP_VPC_ID": "vpc-0be13050bd13db6a5"
     },
     "SQA": {
       "CDK_ACCOUNT": "061051235502",
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
-      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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"
+      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
+      "APP_VPC_ID": "vpc-0be13050bd13db6a5"
 
     },
     "UAT": {
@@ -52,7 +54,8 @@
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
-      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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"
+      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
+      "APP_VPC_ID": "vpc-0be13050bd13db6a5"
 
     },
     "PROD": {
@@ -60,7 +63,8 @@
       "CDK_REGION": "us-east-1",
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
-      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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"
+      "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
+      "APP_VPC_ID": "vpc-0be13050bd13db6a5"
 
     }
   }
