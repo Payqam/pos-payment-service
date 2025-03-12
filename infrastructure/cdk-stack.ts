@@ -39,6 +39,7 @@ interface CDKStackProps extends cdk.StackProps {
   namespace: string;
   envConfigs: EnvConfig;
   slackWebhookUrl: string;
+  appVpcId: string;
 }
 
 export class CDKStack extends cdk.Stack {
@@ -46,8 +47,10 @@ export class CDKStack extends cdk.Stack {
     super(scope, id, props);
     const env: Environment = props.env as Environment;
 
-    // Create VPC
-    const vpcConstruct = new PaymentServiceVPC(this, 'VPC');
+    // Get App VPC
+    const vpcConstruct = new PaymentServiceVPC(this, 'VPC', {
+      appVpcId: props.appVpcId,
+    });
 
     // Create Security Groups
     const securityGroups = new PaymentServiceSecurityGroups(

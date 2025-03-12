@@ -1,5 +1,6 @@
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
+import * as cdk from 'aws-cdk-lib';
 
 /**
  * PaymentServiceVPC creates a minimal VPC configuration:
@@ -8,28 +9,19 @@ import { Construct } from 'constructs';
  * - Total IP addresses: 128 (optimized for small deployments)
  * - Maintains high availability across 2 AZs
  */
-export class PaymentServiceVPC extends Construct {
-  public readonly vpc: ec2.Vpc;
+interface PaymentServiceVPCProps extends cdk.StackProps {
+  appVpcId: string;
+}
 
-  constructor(scope: Construct, id: string) {
+export class PaymentServiceVPC extends Construct {
+  public readonly vpc: ec2.IVpc;
+
+  constructor(scope: Construct, id: string, props: PaymentServiceVPCProps) {
     super(scope, id);
 
-    this.vpc = new ec2.Vpc(this, 'PaymentServiceVPC', {
-      maxAzs: 2,
-      ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/24'), // Smaller CIDR range
-      subnetConfiguration: [
-        {
-          cidrMask: 27, // 32 IPs per subnet
-          name: 'Public',
-          subnetType: ec2.SubnetType.PUBLIC,
-        },
-        {
-          cidrMask: 27, // 32 IPs per subnet
-          name: 'Private',
-          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-        },
-      ],
-      natGateways: 1, // Reduce to 1 NAT Gateway to save costs
+    // Try to get App VPC
+    this.vpc = ec2.Vpc.fromLookup(this, 'PayQam-App-VPC', {
+      vpcId: props.appVpcId,
     });
   }
 }
