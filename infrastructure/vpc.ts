@@ -17,7 +17,7 @@ export class PaymentServiceVPC extends Construct {
     // Try to get an existing VPC by name
     this.vpc = ec2.Vpc.fromLookup(this, 'ExistingVPC', {
       isDefault: false, // Ensure it's not the default VPC
-      vpcName: 'PaymentServiceSharedVPC',
+      vpcName: 'pos-payment-service-backend-SQA/VPC/PaymentServiceVPC',
     });
 
     if (!this.vpc) {
