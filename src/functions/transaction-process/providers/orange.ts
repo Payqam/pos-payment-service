@@ -608,6 +608,7 @@ export class OrangePaymentService {
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
   ): Promise<{ transactionId: string; status: string; message?: string }> {
+
     if (!transactionId) {
       const error = new Error('Transaction ID is required for refund');
       this.logger.error('Error processing Orange Money refund: Missing transaction ID', {
@@ -624,9 +625,9 @@ export class OrangePaymentService {
         { transactionId },
         'TransactionIndex'
       );
-      
+
       const existingTransaction = existingTransactionResult.Item;
-      
+
       if (!existingTransaction) {
         this.logger.warn('Transaction not found for refund', { transactionId });
         return {
@@ -643,8 +644,8 @@ export class OrangePaymentService {
       });
 
       // Check if it's already a successful refund
-      if (existingTransaction.transactionType === 'REFUND' && 
-          existingTransaction.status === 'SUCCESSFULL') {
+      if (existingTransaction.transactionType === 'REFUND' &&
+        existingTransaction.status === 'SUCCESSFULL') {
         return {
           transactionId,
           status: 'ALREADY_REFUNDED',
@@ -652,20 +653,20 @@ export class OrangePaymentService {
         };
       }
 
-        // Check if the original transaction exists and was successful
-        // if (existingTransaction.transactionType === 'CHARGE' && 
-        //     existingTransaction.status !== 'SUCCESSFULL') {
-        //   throw new Error('Original transaction was not successful');
-        // }
+      // Check if the original transaction exists and was successful
+      // if (existingTransaction.transactionType === 'CHARGE' && 
+      //     existingTransaction.status !== 'SUCCESSFULL') {
+      //   throw new Error('Original transaction was not successful');
+      // }
 
       // TODO: Temporary check for PENDING transactions
-      if (existingTransaction.transactionType === 'CHARGE' && 
+      if (existingTransaction.transactionType === 'CHARGE' &&
         existingTransaction.status !== 'PENDING') {
         throw new Error('Original transaction was not successful');
       }
     } catch (error) {
       if ((error as Error).name === 'ResourceNotFoundException') {
-        this.logger.warn('Transaction not found for refund', { 
+        this.logger.warn('Transaction not found for refund', {
           transactionId,
           error: error instanceof Error ? error.message : 'Unknown error'
         });
@@ -687,15 +688,15 @@ export class OrangePaymentService {
       currency
     });
 
-    try {
-      // Step 1: Initialize refund cashin
-      const initResponse = await this.initiateCashinTransaction();
-      const refundPayToken = initResponse.data.payToken;
+    // Step 1: Initialize refund cashin
+    const initResponse = await this.initiateCashinTransaction();
+    const refundPayToken = initResponse.data.payToken;
 
+    try {
       // Step 2: Execute refund cashin payment
       const credentials = await this.getOrangeCredentials();
       const refundOrderId = this.generateOrderId('RF'); // Using RF prefix for refunds
-      
+
       const refundResponse = await this.executeCashinPayment({
         channelUserMsisdn: credentials.merchantPhone,
         amount: amount.toString(),
@@ -776,7 +777,7 @@ export class OrangePaymentService {
           merchantPayOrderId,
           originalTransactionId: transactionId
         },
-        uniqueId: refundPayToken,
+        merchantRefundId: refundPayToken,
         GSI1SK: Math.floor(Date.now() / 1000),
         GSI2SK: Math.floor(Date.now() / 1000),
         exchangeRate: 'N/A',
@@ -832,7 +833,7 @@ export class OrangePaymentService {
         },
         transactionType: 'REFUND',
         metaData,
-        uniqueId: transactionId,
+        merchantRefundId: refundPayToken,
         GSI1SK: Math.floor(Date.now() / 1000),
         GSI2SK: Math.floor(Date.now() / 1000),
         exchangeRate: 'N/A',

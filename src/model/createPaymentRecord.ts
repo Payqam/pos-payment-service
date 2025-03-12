@@ -23,6 +23,7 @@ export interface CreatePaymentRecord {
   settlementAmount?: number;
   settlementStatus?: string;
   uniqueId?: string;
+  merchantRefundId?: string;
   settlementDate?: number;
   transactionType?: string;
   GSI1SK: number;

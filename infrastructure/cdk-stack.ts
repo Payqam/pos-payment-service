@@ -326,6 +326,46 @@ export class CDKStack extends cdk.Stack {
     orangeSecret.grantRead(orangeWebhookLambda.lambda);
     createLambdaLogGroup(this, orangeWebhookLambda.lambda);
 
+    // Create Orange charge webhook Lambda
+    const orangeChargeWebhookLambda = new PAYQAMLambda(this, 'OrangeChargeWebhookLambda', {
+      name: `OrangeChargeWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.ORANGE_CHARGE_WEBHOOK}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        ORANGE_API_SECRET: orangeSecret.secretName,
+      },
+    });
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    orangeSecret.grantRead(orangeChargeWebhookLambda.lambda);
+    createLambdaLogGroup(this, orangeChargeWebhookLambda.lambda);
+
+    // Create Orange refund webhook Lambda
+    const orangeRefundWebhookLambda = new PAYQAMLambda(this, 'OrangeRefundWebhookLambda', {
+      name: `OrangeRefundWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.ORANGE_REFUND_WEBHOOK}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        ORANGE_API_SECRET: orangeSecret.secretName,
+      },
+    });
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    orangeSecret.grantRead(orangeRefundWebhookLambda.lambda);
+    createLambdaLogGroup(this, orangeRefundWebhookLambda.lambda);
+
     // Add secrets policy to transactions process Lambda
     orangeSecret.grantRead(transactionsProcessLambda.lambda);
 
@@ -429,6 +469,8 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(orangeChargeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(orangeRefundWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnPaymentWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnDisbursementWebhookLambda.lambda);
     // dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
@@ -452,6 +494,8 @@ export class CDKStack extends cdk.Stack {
       stripeWebhookLambda.lambda,
       transactionsProcessLambda.lambda,
       orangeWebhookLambda.lambda,
+      orangeChargeWebhookLambda.lambda,
+      orangeRefundWebhookLambda.lambda,
     ];
     monitoredLambdas.forEach((logGroupName: IFunction) => {
       const subscriptionFilter = new logs.SubscriptionFilter(
@@ -645,6 +689,78 @@ export class CDKStack extends cdk.Stack {
         },
       },
       {
+        path: 'webhooks/orange/charge',
+        method: 'POST',
+        lambda: orangeChargeWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'OrangeChargeWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  payToken: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  inittxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                  confirmtxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                },
+                required: ['payToken'],
+              },
+            },
+            required: ['type', 'data'],
+          },
+        },
+        responseModel: {
+          modelName: 'OrangeChargeWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+              payToken: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/orange/refund',
+        method: 'POST',
+        lambda: orangeRefundWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'OrangeRefundWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  payToken: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  inittxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                  confirmtxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                },
+                required: ['payToken'],
+              },
+            },
+            required: ['type', 'data'],
+          },
+        },
+        responseModel: {
+          modelName: 'OrangeRefundWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+              payToken: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
         path: 'webhooks/mtn/payment',
         method: 'POST',
         lambda: mtnPaymentWebhookLambda.lambda,
@@ -783,6 +899,8 @@ export class CDKStack extends cdk.Stack {
       stripeWebhookLambda.lambda.functionName,
       mtnDisbursementWebhookLambda.lambda.functionName,
       orangeWebhookLambda.lambda.functionName,
+      orangeChargeWebhookLambda.lambda.functionName,
+      orangeRefundWebhookLambda.lambda.functionName,
       mtnPaymentWebhookLambda.lambda.functionName,
       slackNotifierLambda.lambda.functionName,
       salesforceSyncLambda.lambda.functionName,
