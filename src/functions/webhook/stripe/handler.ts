@@ -54,7 +54,7 @@ export class StripeWebhookService {
     updateData: Record<string, unknown>
   ): Promise<void> {
     try {
-      const paymentProviderResponse = updateData.paymentProviderResponse as {
+      const paymentResponse = updateData.paymentResponse as {
         last_payment_error?: { code: string; message: string; type: string };
         failure_code?: string;
         failure_message?: string;
@@ -72,23 +72,23 @@ export class StripeWebhookService {
       let transactionError;
 
       if (isFailedStatus) {
-        if (paymentProviderResponse.last_payment_error) {
+        if (paymentResponse.last_payment_error) {
           // Handle INTENT_FAILED structure
           transactionError = {
-            ErrorCode: paymentProviderResponse.last_payment_error.code,
-            ErrorMessage: paymentProviderResponse.last_payment_error.message,
-            ErrorType: paymentProviderResponse.last_payment_error.type,
+            ErrorCode: paymentResponse.last_payment_error.code,
+            ErrorMessage: paymentResponse.last_payment_error.message,
+            ErrorType: paymentResponse.last_payment_error.type,
             ErrorSource: 'POS',
           };
         } else if (
-          paymentProviderResponse.failure_code &&
-          paymentProviderResponse.failure_message
+          paymentResponse.failure_code &&
+          paymentResponse.failure_message
         ) {
           // Handle CHARGE_FAILED structure
           transactionError = {
-            ErrorCode: paymentProviderResponse.failure_code,
-            ErrorMessage: paymentProviderResponse.failure_message,
-            ErrorType: paymentProviderResponse.outcome?.type,
+            ErrorCode: paymentResponse.failure_code,
+            ErrorMessage: paymentResponse.failure_message,
+            ErrorType: paymentResponse.outcome?.type,
             ErrorSource: 'POS',
           };
         }
@@ -222,7 +222,7 @@ export class StripeWebhookService {
       {
         status,
         refundId: 'refund' in eventObject ? eventObject.id : undefined,
-        paymentProviderResponse: eventObject,
+        paymentResponse: eventObject,
       }
     );
   }

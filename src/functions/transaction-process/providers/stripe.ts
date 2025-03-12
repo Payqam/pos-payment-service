@@ -91,10 +91,7 @@ export class CardPaymentService {
                 amount,
                 paymentMethod: 'CARD',
                 status: 'FAILED',
-                paymentProviderResponse: paymentError.raw as Record<
-                  string,
-                  unknown
-                >,
+                paymentResponse: paymentError.raw as Record<string, unknown>,
                 transactionType: 'CHARGE',
                 metaData,
                 fee: feeAmount,
@@ -148,7 +145,7 @@ export class CardPaymentService {
             amount,
             paymentMethod: 'CARD',
             status: paymentIntent?.status as string,
-            paymentProviderResponse: paymentIntent,
+            paymentResponse: paymentIntent,
             transactionType: 'CHARGE',
             metaData,
             fee: feeAmount,

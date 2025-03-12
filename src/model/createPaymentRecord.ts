@@ -10,7 +10,7 @@ export interface CreatePaymentRecord {
   customerPhone?: string;
   destinationId?: string;
   status: string;
-  paymentProviderResponse?:
+  paymentResponse?:
     | Stripe.PaymentIntent
     | Stripe.Refund
     | OrangePaymentResponse['data']

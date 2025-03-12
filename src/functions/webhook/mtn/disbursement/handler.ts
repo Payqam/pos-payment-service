@@ -13,6 +13,7 @@ import {
 } from '../../../transaction-process/providers';
 import {
   MTN_TRANSFER_ERROR_MAPPINGS,
+  MTNPaymentStatus,
   MTNTransferErrorReason,
   WebhookEvent,
 } from '../../../../types/mtn';
@@ -64,7 +65,7 @@ export class MTNDisbursementWebhookService {
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
         transactionId,
-        status: 'SETTLEMENT_FAILED',
+        status: MTNPaymentStatus.DISBURSEMENT_FAILED,
         type: 'FAILED',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
@@ -103,7 +104,7 @@ export class MTNDisbursementWebhookService {
 
               const newTransactionId = await this.mtnService.initiateTransfer(
                 parseFloat(transactionStatus.amount),
-                transactionStatus.payee.partyId,
+                transactionStatus?.payee?.partyId as string,
                 transactionStatus.currency
               );
 
@@ -112,9 +113,9 @@ export class MTNDisbursementWebhookService {
               });
 
               return {
-                settlementStatus: 'RETRYING',
+                Status: MTNPaymentStatus.RETRYING_DISBURSEMENT,
                 uniqueId: newTransactionId,
-                settlementRetryResponse: {
+                disbursementRetryResponse: {
                   retryCount: retryCount + 1,
                   newTransactionId,
                   reason: errorReason,
@@ -143,9 +144,9 @@ export class MTNDisbursementWebhookService {
       );
 
       return {
-        settlementStatus: 'FAILED',
-        settlementResponse: {
-          status: transactionStatus.status,
+        status: MTNPaymentStatus.DISBURSEMENT_FAILED,
+        disbursementResponse: {
+          ...transactionStatus,
           errorMessage: enhancedError.message,
           reason: transactionStatus.reason as string,
           retryable: errorMapping.retryable,
@@ -172,14 +173,8 @@ export class MTNDisbursementWebhookService {
       const updateData =
         transactionStatusResponse.status === 'SUCCESSFUL'
           ? {
-              settlementStatus: transactionStatusResponse.status,
-              settlementResponse: {
-                status: transactionStatusResponse.status,
-                financialTransactionId:
-                  transactionStatusResponse.financialTransactionId,
-                payeeNote: transactionStatusResponse.payeeNote || '',
-                payerMessage: transactionStatusResponse.payerMessage || '',
-              },
+              status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
+              disbursementResponse: transactionStatusResponse,
             }
           : await this.handleFailedTransfer(
               transactionId,
@@ -190,7 +185,7 @@ export class MTNDisbursementWebhookService {
           process.env.TRANSACTION_STATUS_TOPIC_ARN!,
           {
             transactionId,
-            Status: 'SETTLEMENT_SUCCESSFUL',
+            status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
             type: 'UPDATE',
           }
         );
@@ -237,12 +232,23 @@ export class MTNDisbursementWebhookService {
    * @throws WebhookError if validation fails
    */
   private parseWebhookEvent(body: string | null): WebhookEvent {
+    this.logger.info('[debug]parseWebhookEvent', {
+      hasBody: !!body,
+      bodyLength: body?.length,
+    });
+
     if (!body) {
+      this.logger.info('[debug]no body provided');
       throw new WebhookError('No body provided in webhook', 400);
     }
 
     try {
       const webhookEvent = JSON.parse(body) as WebhookEvent;
+
+      this.logger.info('[debug]parsed webhook event', {
+        externalId: webhookEvent.externalId,
+        status: webhookEvent.status,
+      });
 
       // Validate required fields
       if (
@@ -251,12 +257,18 @@ export class MTNDisbursementWebhookService {
         !webhookEvent.currency ||
         !webhookEvent.status
       ) {
+        this.logger.info('[debug]missing required fields', {
+          hasExternalId: !!webhookEvent.externalId,
+          hasAmount: !!webhookEvent.amount,
+          hasCurrency: !!webhookEvent.currency,
+          hasStatus: !!webhookEvent.status,
+        });
         throw new WebhookError('Missing required fields in webhook event', 400);
       }
 
       return webhookEvent;
     } catch (error) {
-      this.logger.error('Invalid webhook payload', body);
+      this.logger.info('[debug]error--------', error);
       throw new WebhookError('Invalid webhook payload', 400);
     }
   }
@@ -268,6 +280,12 @@ export class MTNDisbursementWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.info('[debug]processWebhook received', {
+        path: event.path,
+        method: event.httpMethod,
+        hasBody: !!event.body,
+      });
+
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
 
@@ -307,6 +325,8 @@ export class MTNDisbursementWebhookService {
         error: webhookError,
         details: webhookError.details,
       });
+
+      this.logger.info('[debug]error--------', error);
 
       return {
         statusCode: webhookError.statusCode,

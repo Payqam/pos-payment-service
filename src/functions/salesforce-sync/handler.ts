@@ -26,10 +26,13 @@ interface SNSMessage {
   currency: string;
   exchangeRate: string;
   processingFee: string;
-  netAmount: string;
+  settlementAmount: string;
   externalTransactionId: string;
   paymentMethod: string;
-  payerData: { externalId: string; partyId: string; partyIdType: string };
+  partyIdType: string;
+  partyId: string;
+  payeeNote: string;
+  payerMessage: string;
   TransactionError: {
     ErrorCode: string;
     ErrorMessage: string;
@@ -129,39 +132,6 @@ export class SalesforceSyncService {
 
       // Fetch existing record
       const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`;
-      let payer: string | undefined = undefined;
-      if (message.payerData.partyId) {
-        const queryPayer = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Payer__c+WHERE+partyId__c='${message.payerData.partyId}'`;
-        const payerQueryResponse = await axios.get(queryPayer, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-
-        payer = payerQueryResponse.data.records[0].Id;
-
-        if (!payer) {
-          const payerPayload = {
-            OwnerId: process.env.SALESFORCE_OWNER_ID,
-            externalId__c: message.payerData.externalId,
-            partyId__c: message.payerData.partyId,
-            partyIdType__c: message.payerData.partyIdType,
-          };
-          const payerResponse = await axios.post(
-            `${urlHost}/services/data/v63.0/sobjects/Payer__c/`,
-            payerPayload,
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-
-          this.logger.info('Successfully created Salesforce record', {
-            recordId: payerResponse.data.id,
-          });
-          payer = payerResponse.data.id;
-        }
-      }
       const queryResponse = await axios.get(queryUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -179,11 +149,14 @@ export class SalesforceSyncService {
 
       // Update Salesforce Record
       const recordPayload = {
-        payer__c: payer,
         transactionId__c: message.transactionId,
         status__c: message.status,
         amount__c: message.amount,
         merchantId__c: message.merchantId,
+        partyIdType__c: message.partyIdType,
+        partyId__c: message.partyId,
+        payeeNote__c: message.payeeNote,
+        payerMessage__c: message.payerMessage,
       };
 
       await axios.patch(
@@ -214,12 +187,14 @@ export class SalesforceSyncService {
       const accessToken = await this.getAccessToken(credentials);
       const urlHost = process.env.SALESFORCE_URL_HOST as string;
 
+      // todo: fix date issue
+      // todo: add merchant phone number
       const recordPayload = {
         OwnerId: process.env.SALESFORCE_OWNER_ID,
         ServiceType__c: message.paymentMethod,
         transactionId__c: message.transactionId,
         status__c: message.status,
-        amount__c: message.amount,
+        amount__c: message.settlementAmount,
         merchantId__c: message.merchantId,
         Transaction_Type__c: message.transactionType,
         metaData__C: JSON.stringify(message.metaData),
@@ -230,7 +205,7 @@ export class SalesforceSyncService {
         Currency__c: message.currency,
         Exchange_Rate__c: message.exchangeRate,
         Processing_Fee__c: message.processingFee,
-        Net_Amount__c: message.netAmount,
+        Net_Amount__c: message.amount,
         ExternalTransactionId__c: message.externalTransactionId,
       };
 

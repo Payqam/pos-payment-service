@@ -76,12 +76,15 @@ export class TransactionProcessService {
       transactionId,
       amount,
       paymentMethod,
+      currency,
       cardData,
       customerPhone,
       metaData,
       merchantMobileNo,
       transactionType,
       merchantId,
+      payerMessage,
+      payeeNote,
     } = body;
 
     if (!paymentMethod) {
@@ -107,12 +110,15 @@ export class TransactionProcessService {
       transactionId,
       amount,
       paymentMethod,
+      currency,
       cardData,
       customerPhone,
       metaData,
       merchantId,
       transactionType,
       merchantMobileNo,
+      payerMessage,
+      payeeNote,
     });
 
     return {

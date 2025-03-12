@@ -30,12 +30,15 @@ export class PaymentService {
       transactionId,
       amount,
       paymentMethod,
+      currency,
       cardData,
       customerPhone,
       metaData,
       merchantId,
       merchantMobileNo,
       transactionType,
+      payerMessage,
+      payeeNote,
     } = transaction;
     switch (paymentMethod) {
       case 'CARD':
@@ -48,7 +51,7 @@ export class PaymentService {
         }
         this.logger.info('Processing card payment', { amount, cardData });
         return this.cardPaymentService.processCardPayment(
-          amount,
+          amount as number,
           cardData,
           transactionType as string,
           merchantId as string,
@@ -79,11 +82,14 @@ export class PaymentService {
         });
         return this.mtnPaymentService.processPayment(
           transactionId as string,
-          amount,
+          amount as number,
           transactionType as string,
           customerPhone,
           merchantId,
           merchantMobileNo,
+          currency as string,
+          payerMessage as string,
+          payeeNote as string,
           metaData
         );
 
@@ -117,7 +123,7 @@ export class PaymentService {
           transactionType,
         });
         return this.orangePaymentService.processPayment(
-          amount,
+          amount as number,
           customerPhone,
           merchantId,
           merchantMobileNo,
