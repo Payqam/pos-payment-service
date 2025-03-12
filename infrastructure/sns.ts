@@ -38,14 +38,15 @@ export class PaymentServiceSNS extends Construct {
     // Create DLQ for failed message processing
     // Messages that fail processing will be sent here for investigation
     this.dlq = new sqs.Queue(this, 'SalesforceDLQ', {
-      queueName: `salesforce-dlq-${props.envName}-${props.namespace}`,
+      queueName: `salesforce-dlq-${props.envName}${props.namespace}`,
       retentionPeriod: cdk.Duration.days(14), // Keep failed messages for 2 weeks
+      visibilityTimeout: cdk.Duration.seconds(65),
     });
 
     // Create SNS Topic for payment events
     // This topic decouples payment processing from Salesforce sync
     this.eventTopic = new sns.Topic(this, 'SalesforceEventTopic', {
-      topicName: `salesforce-events-${props.envName}-${props.namespace}`,
+      topicName: `salesforce-events-${props.envName}${props.namespace}`,
       displayName: 'Salesforce Event Topic',
     });
 
@@ -53,15 +54,6 @@ export class PaymentServiceSNS extends Construct {
     this.eventTopic.addSubscription(
       new subscriptions.LambdaSubscription(props.salesforceSyncLambda, {
         deadLetterQueue: this.dlq, // Failed messages go to DLQ
-        // filterPolicy: {
-        //   // Only process specific payment events
-        //   eventType: sns.SubscriptionFilter.stringFilter({
-        //     allowlist: [
-        //       'PAYMENT_STATUS_UPDATE', // When payment status changes
-        //       'PAYMENT_CREATED', // When new payment is created
-        //     ],
-        //   }),
-        // },
       })
     );
 

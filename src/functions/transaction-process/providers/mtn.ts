@@ -377,7 +377,7 @@ export class MtnPaymentService {
             externalId: transactionId,
             amount: amount as unknown as string,
             currency,
-            payer: {
+            payee: {
               partyIdType: 'MSISDN',
               partyId: mobileNo,
             },
@@ -439,6 +439,7 @@ export class MtnPaymentService {
    * @param amount - The amount to transfer
    * @param recipientMobileNo - Recipient's mobile number (MSISDN format)
    * @param currency - Transfer currency (default: EUR)
+   * @param tId
    * @returns The transfer ID for tracking
    */
   public async initiateTransfer(

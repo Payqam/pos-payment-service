@@ -8,5 +8,6 @@ export const PATHS = {
     MTN_DISBURSEMENT_WEBHOOK: '../src/functions/webhook/mtn/disbursement',
     DISBURSEMENT: '../src/functions/disbursement',
     SLACK_NOTIFIER: '../src/functions/slack-notifier',
+    DLQ_PROCESSOR: '../src/functions/dlq-processor',
   },
 } as const;

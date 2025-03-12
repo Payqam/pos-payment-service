@@ -1,12 +1,8 @@
-describe('Dispute', () => {
-  (
-    Cypress.env('testCardsFraudulentAndDisputes') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
+import testData from 'cypress/fixtures/test_data.json';
+let paymentMethodId, transactionId, uniqueId;
 
+describe('Dispute', () => {
+  testData.testCardsFraudulentAndDisputes.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -87,6 +83,7 @@ describe('Dispute', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -101,14 +98,21 @@ describe('Dispute', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
-        cy.wait(500);
+        cy.wait(2000);
       });
 
       it(`Verify Payment on Stripe for ${dispute.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -121,7 +125,7 @@ describe('Dispute', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
           cy.wait(5000);
         });
@@ -130,7 +134,7 @@ describe('Dispute', () => {
       it(`Retrieve dispute details for ${dispute.type} `, () => {
         cy.request({
           method: 'GET',
-          url: `https://api.stripe.com/v1/disputes?payment_intent=${Cypress.env('transactionId')}`,
+          url: `https://api.stripe.com/v1/disputes?payment_intent=${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -140,10 +144,27 @@ describe('Dispute', () => {
           expect(response.body.data[0]).to.have.property(
             'status',
             'needs_response'
-          ); // Check dispute status
+          );
           expect(response.body.data[0]).to.have.property(
             'reason',
             'fraudulent'
+          );
+        });
+      });
+
+      it(`Accept dispute for ${dispute.type}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `https://api.stripe.com/v1/disputes/${Cypress.env('uniqueId')}/close`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body).to.have.property('status', 'lost'); // Stripe marks it as lost when accepted
+          cy.task(
+            'log',
+            `Dispute accepted for transaction ${Cypress.env('transactionId')}`
           );
         });
       });
@@ -152,14 +173,7 @@ describe('Dispute', () => {
 });
 
 describe('Dispute - Not Received', () => {
-  (
-    Cypress.env('testCardsNotReceived') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsNotReceived.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -240,6 +254,7 @@ describe('Dispute - Not Received', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -254,6 +269,13 @@ describe('Dispute - Not Received', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -261,7 +283,7 @@ describe('Dispute - Not Received', () => {
       it(`Verify Payment on Stripe for ${dispute.type}`, () => {
         cy.request({
           method: 'GET',
-          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('transactionId')}`, // Or /charges/{charge_id}
+          url: `https://api.stripe.com/v1/payment_intents/${Cypress.env('uniqueId')}`,
           headers: {
             Authorization: `Bearer ${Cypress.env('stripeSecretKey')}`,
           },
@@ -305,14 +327,7 @@ describe('Dispute - Not Received', () => {
 });
 
 describe('Dispute - Inquiry', () => {
-  (
-    Cypress.env('testCardsInquiry') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsInquiry.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -393,6 +408,7 @@ describe('Dispute - Inquiry', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -407,6 +423,13 @@ describe('Dispute - Inquiry', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
@@ -458,14 +481,7 @@ describe('Dispute - Inquiry', () => {
 });
 
 describe('Dispute - Warning', () => {
-  (
-    Cypress.env('testCardsWarning') as {
-      type: string;
-      number: string;
-    }[]
-  ).forEach((dispute) => {
-    let paymentMethodId, transactionId;
-
+  testData.testCardsWarning.forEach((dispute) => {
     describe(`Dispute- ${dispute.type}`, () => {
       it(`Create a Payment Method with ${dispute.type}`, () => {
         cy.request({
@@ -546,6 +562,7 @@ describe('Dispute - Warning', () => {
       });
 
       it(`Should retrieve transaction status with ${dispute.type}`, () => {
+        cy.wait(3000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -560,6 +577,13 @@ describe('Dispute - Warning', () => {
             'message',
             'Transaction retrieved successfully'
           );
+          expect(response.body.transaction.Item).to.have.property(
+            'status',
+            'CHARGE_UPDATED'
+          );
+          uniqueId = response.body.transaction.Item.uniqueId;
+          cy.task('log', ` ${uniqueId}`);
+          Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
       });
