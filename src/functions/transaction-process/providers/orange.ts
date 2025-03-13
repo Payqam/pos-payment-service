@@ -688,11 +688,13 @@ export class OrangePaymentService {
       currency
     });
 
-    // Step 1: Initialize refund cashin
-    const initResponse = await this.initiateCashinTransaction();
-    const refundPayToken = initResponse.data.payToken;
+
 
     try {
+      // Step 1: Initialize refund cashin
+      const initResponse = await this.initiateCashinTransaction();
+      const refundPayToken = initResponse.data.payToken;
+
       // Step 2: Execute refund cashin payment
       const credentials = await this.getOrangeCredentials();
       const refundOrderId = this.generateOrderId('RF'); // Using RF prefix for refunds
@@ -776,7 +778,7 @@ export class OrangePaymentService {
           merchantPayOrderId,
           originalTransactionId: transactionId
         },
-        merchantRefundId: refundPayToken,
+        merchantRefundId: merchantPayToken,
         GSI1SK: Math.floor(Date.now() / 1000),
         GSI2SK: Math.floor(Date.now() / 1000),
         exchangeRate: 'N/A',
@@ -787,7 +789,7 @@ export class OrangePaymentService {
         settlementAmount: amount
       };
 
-      await this.dbService.updatePaymentRecord({transactionId},record);
+      await this.dbService.updatePaymentRecord({ transactionId }, record);
 
       // Publish status to SNS
       await this.publishTransactionStatus({
@@ -831,7 +833,7 @@ export class OrangePaymentService {
         },
         transactionType: 'REFUND',
         metaData,
-        merchantRefundId: refundPayToken,
+        merchantRefundId: '',
         GSI1SK: Math.floor(Date.now() / 1000),
         GSI2SK: Math.floor(Date.now() / 1000),
         exchangeRate: 'N/A',
@@ -842,7 +844,7 @@ export class OrangePaymentService {
         settlementAmount: amount
       };
 
-      await this.dbService.updatePaymentRecord({transactionId}, failedRecord);
+      await this.dbService.updatePaymentRecord({ transactionId }, failedRecord);
 
       // Publish failed status to SNS
       await this.publishTransactionStatus({

@@ -4,6 +4,14 @@ import {
   APIGatewayProxyResult,
 } from 'aws-lambda';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { OrangePaymentService } from '../../../transaction-process/providers';
+import {
+  DynamoDBService,
+  TransactionRecord,
+} from '../../../../services/dynamodbService';
+import { SNSService } from '../../../../services/snsService';
+import { PaymentResponse } from '../../../transaction-process/interfaces/orange';
+import { SecretsManagerService } from '../../../../services/secretsManagerService';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -11,6 +19,23 @@ interface WebhookEvent {
   data: {
     payToken: string;
   };
+}
+
+interface PaymentRecordUpdate {
+  status: string;
+  paymentProviderResponse: {
+    status: string;
+    inittxnstatus?: string;
+    confirmtxnstatus?: string;
+  };
+  settlementStatus?: string;
+  settlementAmount?: number;
+  settlementPayToken?: string;
+  settlementResponse?: {
+    status: string;
+    orderId?: string;
+  };
+  fee?: number;
 }
 
 class WebhookError extends Error {
@@ -26,9 +51,17 @@ class WebhookError extends Error {
 
 export class OrangeRefundWebhookService {
   private readonly logger: Logger;
+  private readonly dbService: DynamoDBService;
+  private readonly snsService: SNSService;
+  private readonly orangeService: OrangePaymentService;
+  private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
+    this.dbService = new DynamoDBService();
+    this.snsService = SNSService.getInstance();
+    this.orangeService = new OrangePaymentService();
+    this.secretsManagerService = new SecretsManagerService();
   }
 
   private async validateWebhook(
@@ -62,6 +95,71 @@ export class OrangeRefundWebhookService {
     }
   }
 
+  private async getTransactionByMerchantRefundId(
+    payToken: string
+  ): Promise<TransactionRecord | null> {
+    try {
+      const result = await this.dbService.queryByGSI(
+        { merchantRefundId: payToken },
+        'GSI4'
+      );
+
+      if (!result.Items || result.Items.length === 0) {
+        return null;
+      }
+
+      return result.Items[0] as TransactionRecord;
+    } catch (error) {
+      this.logger.error('Failed to get transaction by merchantRefundId', {
+        payToken,
+        error,
+      });
+      throw new WebhookError('Failed to get transaction', 500, error);
+    }
+  }
+
+  private determineRefundStatus(paymentResponse: PaymentResponse): string {
+    const status = paymentResponse.data.status;
+    const initStatus = paymentResponse.data.inittxnstatus;
+    const confirmStatus = paymentResponse.data.confirmtxnstatus;
+
+    this.logger.info('Determining refund status', {
+      status,
+      initStatus,
+      confirmStatus,
+    });
+
+    if (confirmStatus === '200') {
+      return 'REFUNDED';
+    }
+
+    if (initStatus !== '200' || (confirmStatus && confirmStatus !== '200')) {
+      return 'REFUND_FAILED';
+    }
+
+    if (status === 'PENDING' && initStatus === '200' && !confirmStatus) {
+      return 'REFUND_PENDING';
+    }
+
+    return 'REFUND_FAILED';
+  }
+
+  private async updatePaymentRecord(
+    transactionId: string,
+    update: PaymentRecordUpdate
+  ): Promise<void> {
+    try {
+      const key = { transactionId };
+      await this.dbService.updatePaymentRecord(key, update);
+    } catch (error) {
+      this.logger.error('Failed to update payment record', {
+        transactionId,
+        error,
+      });
+      throw new WebhookError('Failed to update payment record', 500, error);
+    }
+  }
+
   public async handleWebhook(
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
@@ -74,11 +172,32 @@ export class OrangeRefundWebhookService {
         eventType: webhookEvent.type
       });
 
+      // Get transaction using merchantRefundId (GSI4)
+      const transaction = await this.getTransactionByMerchantRefundId(payToken);
+      if (!transaction) {
+        throw new WebhookError('Transaction not found', 404, { payToken });
+      }
+
+      // Get payment status from Orange API
+      const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
+      const refundStatus = this.determineRefundStatus(paymentStatus);
+
+      // Update transaction record
+      await this.updatePaymentRecord(transaction.transactionId, {
+        status: refundStatus,
+        paymentProviderResponse: {
+          status: paymentStatus.data.status,
+          inittxnstatus: paymentStatus.data.inittxnstatus,
+          confirmtxnstatus: paymentStatus.data.confirmtxnstatus ?? undefined
+        }
+      });
+
       return {
         statusCode: 200,
         body: JSON.stringify({
-          message: 'Refund webhook received successfully',
-          payToken
+          message: 'Refund webhook processed successfully',
+          payToken,
+          status: refundStatus
         }),
       };
     } catch (error) {

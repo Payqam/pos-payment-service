@@ -226,19 +226,25 @@ export class DynamoDBService {
    * @returns The first matching item, if any
    */
   public async queryByGSI(
-    key: { uniqueId: string },
+    key:
+      | { uniqueId: string }
+      | { customerRefundId: string }
+      | { merchantRefundId: string },
     indexName: string
   ): Promise<QueryCommandOutput> {
     try {
+      const attributeName = Object.keys(key)[0];
+      const attributeValue = (key as Record<string, string>)[attributeName];
+
       const params = new QueryCommand({
         TableName: this.tableName,
         IndexName: indexName,
         KeyConditionExpression: '#pk = :pk',
         ExpressionAttributeNames: {
-          '#pk': 'uniqueId',
+          '#pk': attributeName,
         },
         ExpressionAttributeValues: {
-          ':pk': key.uniqueId,
+          ':pk': attributeValue,
         },
         Limit: 1, // We only need one item
       });
