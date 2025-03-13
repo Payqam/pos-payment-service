@@ -390,10 +390,6 @@ export class CDKStack extends cdk.Stack {
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           INSTANT_DISBURSEMENT_ENABLED: 'true', // Enable instant disbursement by default
           PAYQAM_FEE_PERCENTAGE: '2.5', // PayQAM takes 2.5% of each transaction
-          MTN_PAYMENT_WEBHOOK_URL:
-            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com//DEV/webhooks/mtn/payment',
-          MTN_DISBURSEMENT_WEBHOOK_URL:
-            'https://wnbazhdk29.execute-api.us-east-1.amazonaws.com/DEV/webhooks/mtn/disbursement', // Sample webhook
         },
       }
     );
@@ -428,6 +424,61 @@ export class CDKStack extends cdk.Stack {
     );
     mtnDisbursementWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, mtnDisbursementWebhookLambda.lambda);
+
+    // Create MTN customer refund webhook Lambda
+    const mtnCustomerRefundWebhookLambda = new PAYQAMLambda(
+      this,
+      'MTNCustomerRefundWebhookLambda',
+      {
+        name: `MTNWebhook-customer-refund-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.MTN_CUSTOMER_REFUND_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        },
+      }
+    );
+    mtnCustomerRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
+    mtnCustomerRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    mtnCustomerRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.snsPolicy
+    );
+    createLambdaLogGroup(this, mtnCustomerRefundWebhookLambda.lambda);
+
+    // Create MTN merchant refund webhook Lambda
+    const mtnMerchantRefundWebhookLambda = new PAYQAMLambda(
+      this,
+      'MTNMerchantRefundWebhookLambda',
+      {
+        name: `MTNWebhook-merchant-refund-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.MTN_MERCHANT_REFUND_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        },
+      }
+    );
+    mtnMerchantRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
+    mtnMerchantRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    mtnMerchantRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.snsPolicy
+    );
+    createLambdaLogGroup(this, mtnMerchantRefundWebhookLambda.lambda);
 
     // Create Daily Disbursement Lambda with configurable execution time
     // const disbursementLambda = new PAYQAMLambda(this, 'DisbursementLambda', {
@@ -556,8 +607,11 @@ export class CDKStack extends cdk.Stack {
               customerPhone: { type: apigateway.JsonSchemaType.STRING },
               transactionType: { type: apigateway.JsonSchemaType.STRING },
               paymentMethod: { type: apigateway.JsonSchemaType.STRING },
+              currency: { type: apigateway.JsonSchemaType.STRING },
               metaData: { type: apigateway.JsonSchemaType.OBJECT },
               cardData: { type: apigateway.JsonSchemaType.OBJECT },
+              payerMessage: { type: apigateway.JsonSchemaType.STRING },
+              payeeNote: { type: apigateway.JsonSchemaType.STRING },
             },
             required: [
               'merchantId',
@@ -565,6 +619,7 @@ export class CDKStack extends cdk.Stack {
               'customerPhone',
               'transactionType',
               'paymentMethod',
+              'currency',
               'metaData',
             ],
           },
@@ -597,15 +652,16 @@ export class CDKStack extends cdk.Stack {
               paymentMethod: { type: apigateway.JsonSchemaType.STRING },
               metaData: { type: apigateway.JsonSchemaType.OBJECT },
               cardData: { type: apigateway.JsonSchemaType.OBJECT },
+              transactionId: { type: apigateway.JsonSchemaType.STRING },
             },
-            required: [
-              'merchantId',
-              // 'amount',
-              'customerPhone',
-              'transactionType',
-              'paymentMethod',
-              'metaData',
-            ],
+            // required: [
+            //   'merchantId',
+            //   'amount',
+            //   'customerPhone',
+            //   'transactionType',
+            //   'paymentMethod',
+            //   'metaData',
+            // ],
           },
         },
         responseModel: {
@@ -851,6 +907,78 @@ export class CDKStack extends cdk.Stack {
           },
         },
       },
+      {
+        path: 'webhooks/mtn/refund/customer',
+        method: 'POST',
+        lambda: mtnCustomerRefundWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNCustomerRefundWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'MTNCustomerRefundWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/mtn/refund/merchant',
+        method: 'POST',
+        lambda: mtnMerchantRefundWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'MTNMerchantRefundWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  transactionId: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  reason: { type: apigateway.JsonSchemaType.STRING },
+                  amount: { type: apigateway.JsonSchemaType.STRING },
+                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  payerMessage: { type: apigateway.JsonSchemaType.STRING },
+                  payeeNote: { type: apigateway.JsonSchemaType.STRING },
+                },
+              },
+            },
+          },
+        },
+        responseModel: {
+          modelName: 'MTNMerchantRefundWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
     ];
 
     // Create API Gateway with WAF association
@@ -884,7 +1012,10 @@ export class CDKStack extends cdk.Stack {
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
         },
-        newEnvVars: { MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment' },
+        newEnvVars: {
+          MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment',
+          MTN_CUSTOMER_REFUND_WEBHOOK_URL: 'webhooks/mtn/refund/customer',
+        },
       }
     );
     new UpdateLambdaEnv(
@@ -909,6 +1040,26 @@ export class CDKStack extends cdk.Stack {
         newEnvVars: {
           MTN_PAYMENT_WEBHOOK_URL: 'webhooks/mtn/payment',
           MTN_DISBURSEMENT_WEBHOOK_URL: 'webhooks/mtn/disbursement',
+        },
+      }
+    );
+    new UpdateLambdaEnv(
+      this,
+      'UpdateLambdaEnvironmentForMTNCustomerRefundWebhookLambda',
+      {
+        lambda: mtnCustomerRefundWebhookLambda.lambda,
+        apiGateway: apiGateway.api,
+        stage: props.envName,
+        envName: props.envName,
+        currentEnvVars: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          MTN_TARGET_ENVIRONMENT: process.env.MTN_TARGET_ENVIRONMENT as string,
+          MTN_API_SECRET: mtnSecret.secretName,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        },
+        newEnvVars: {
+          MTN_MERCHANT_REFUND_WEBHOOK_URL: 'webhooks/mtn/refund/merchant',
         },
       }
     );

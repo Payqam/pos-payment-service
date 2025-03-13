@@ -81,9 +81,19 @@ export class DynamoDBConstruct extends Construct {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
-    // Add GSI4 for refund lookups
+    // Add GSI4 for customer refund lookups
     this.table.addGlobalSecondaryIndex({
       indexName: 'GSI4',
+      partitionKey: {
+        name: 'customerRefundId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Add GSI5 for merchant refund lookups
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'GSI5',
       partitionKey: {
         name: 'merchantRefundId',
         type: dynamodb.AttributeType.STRING,

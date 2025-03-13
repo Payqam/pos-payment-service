@@ -8,6 +8,8 @@ export const PATHS = {
     ORANGE_REFUND_WEBHOOK: '../src/functions/webhook/orange/refund',
     MTN_PAYMENT_WEBHOOK: '../src/functions/webhook/mtn/payment',
     MTN_DISBURSEMENT_WEBHOOK: '../src/functions/webhook/mtn/disbursement',
+    MTN_CUSTOMER_REFUND_WEBHOOK: '../src/functions/webhook/mtn/refund/customer',
+    MTN_MERCHANT_REFUND_WEBHOOK: '../src/functions/webhook/mtn/refund/merchant',
     DISBURSEMENT: '../src/functions/disbursement',
     SLACK_NOTIFIER: '../src/functions/slack-notifier',
     DLQ_PROCESSOR: '../src/functions/dlq-processor',

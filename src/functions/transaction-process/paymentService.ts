@@ -27,15 +27,18 @@ export class PaymentService {
     transaction: PaymentRequest
   ): Promise<{ transactionId: string; status: string } | string> {
     const {
+      transactionId,
       amount,
       paymentMethod,
+      currency,
       cardData,
       customerPhone,
       metaData,
       merchantId,
       merchantMobileNo,
       transactionType,
-      transactionId
+      payerMessage,
+      payeeNote,
     } = transaction;
     switch (paymentMethod) {
       case 'CARD':
@@ -48,7 +51,7 @@ export class PaymentService {
         }
         this.logger.info('Processing card payment', { amount, cardData });
         return this.cardPaymentService.processCardPayment(
-          amount,
+          amount as number,
           cardData,
           transactionType as string,
           merchantId as string,
@@ -57,20 +60,6 @@ export class PaymentService {
         );
 
       case 'MTN':
-        if (!customerPhone) {
-          throw new EnhancedError(
-            'MISSING_PHONE',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing customer phone number for MTN payment'
-          );
-        }
-        if (!merchantId || !merchantMobileNo) {
-          throw new EnhancedError(
-            'MISSING_MERCHANT_INFO',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing merchant information for MTN payment'
-          );
-        }
         this.logger.info('Processing MTN payment', {
           amount,
           customerPhone,
@@ -78,10 +67,15 @@ export class PaymentService {
           merchantMobileNo,
         });
         return this.mtnPaymentService.processPayment(
-          amount,
-          customerPhone,
-          merchantId,
-          merchantMobileNo,
+          transactionId as string,
+          amount as number,
+          transactionType as string,
+          customerPhone as string,
+          merchantId as string,
+          merchantMobileNo as string,
+          currency as string,
+          payerMessage as string,
+          payeeNote as string,
           metaData
         );
 
@@ -116,7 +110,7 @@ export class PaymentService {
           transactionId,
         });
         return this.orangePaymentService.processPayment(
-          amount,
+          amount as number,
           customerPhone,
           merchantId,
           merchantMobileNo,

@@ -11,14 +11,17 @@ interface CardData {
 }
 
 interface PaymentRequest {
-  amount: number;
-  paymentMethod: string;
+  amount?: number;
+  paymentMethod?: string;
+  currency?: string;
   cardData?: CardData;
   customerPhone?: string;
   metaData?: Record<string, string>;
   merchantId?: string;
   merchantMobileNo?: string;
   transactionType?: string;
+  payerMessage?: string;
+  payeeNote?: string;
   transactionId?: string;
 }
 

@@ -588,7 +588,7 @@ export class OrangePaymentService {
         amount,
         paymentMethod: 'ORANGE',
         status: 'FAILED',
-        paymentProviderResponse: {
+        paymentResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
           timestamp: Math.floor(Date.now() / 1000),

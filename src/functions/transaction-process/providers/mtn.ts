@@ -4,10 +4,13 @@ import { DynamoDBService } from '../../../services/dynamodbService';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { CreatePaymentRecord } from '../../../model';
-import { WebhookEvent } from '../../../types/mtn';
+import { MTNPaymentStatus, WebhookEvent } from '../../../types/mtn';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
+import { SNSService } from '../../../services/snsService';
+import * as process from 'node:process';
+import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
   process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
@@ -49,6 +52,8 @@ interface MTNToken {
 export enum TransactionType {
   PAYMENT = 'payment',
   TRANSFER = 'transfer',
+  CUSTOMER_REFUND = 'customer_refund',
+  MERCHANT_REFUND = 'merchant_refund',
 }
 
 /**
@@ -64,10 +69,13 @@ export class MtnPaymentService {
 
   private readonly baseUrl: string;
 
+  private readonly snsService: SNSService;
+
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
+    this.snsService = SNSService.getInstance();
     this.baseUrl =
       process.env.MTN_API_BASE_URL || 'https://sandbox.momodeveloper.mtn.com';
     this.logger.info('init()');
@@ -84,7 +92,7 @@ export class MtnPaymentService {
     settlementAmount: number;
   } {
     const feePercentage = PAYQAM_FEE_PERCENTAGE / 100;
-    const fee = Math.round(amount * feePercentage); // Round to nearest cent
+    const fee = amount * feePercentage; // Keep the exact decimal value
     return {
       fee,
       settlementAmount: amount - fee,
@@ -109,7 +117,8 @@ export class MtnPaymentService {
   ): Record<string, string> {
     const headers: Record<string, string> = {
       'Ocp-Apim-Subscription-Key':
-        type === TransactionType.PAYMENT
+        type === TransactionType.PAYMENT ||
+        type === TransactionType.MERCHANT_REFUND
           ? credentials.collection.subscriptionKey
           : credentials.disbursement.subscriptionKey,
       'Content-Type': 'application/json',
@@ -126,20 +135,18 @@ export class MtnPaymentService {
     if (transactionId) headers['X-Reference-Id'] = transactionId;
 
     // Add callback URL based on transaction type
-    if (process.env.MTN_PAYMENT_WEBHOOK_URL) {
-      headers['X-Callback-Url'] = process.env.MTN_PAYMENT_WEBHOOK_URL;
-      this.logger.info('Added callback URL to headers', {
-        type,
-        callbackUrl: process.env.MTN_PAYMENT_WEBHOOK_URL,
-      });
-    } else if (process.env.MTN_DISBURSEMENT_WEBHOOK_URL) {
-      headers['X-Callback-Url'] = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
+    if (type === TransactionType.PAYMENT) {
+      headers['X-Callback-Url'] = process.env.MTN_PAYMENT_WEBHOOK_URL as string;
+    } else if (type === TransactionType.TRANSFER) {
+      headers['X-Callback-Url'] = process.env
+        .MTN_DISBURSEMENT_WEBHOOK_URL as string;
+    } else if (type === TransactionType.CUSTOMER_REFUND) {
+      headers['X-Callback-Url'] = process.env
+        .MTN_CUSTOMER_REFUND_WEBHOOK_URL as string;
+    } else {
+      headers['X-Callback-Url'] = process.env
+        .MTN_MERCHANT_REFUND_WEBHOOK_URL as string;
     }
-    this.logger.info('Added callback URL to headers', {
-      type,
-      callbackUrl: process.env.MTN_DISBURSEMENT_WEBHOOK_URL,
-    });
-
     this.logger.info('Generated headers for MTN request', {
       type,
       headers,
@@ -157,7 +164,7 @@ export class MtnPaymentService {
    * @param transactionId - Optional transaction ID for reference
    * @returns An axios instance configured with the appropriate credentials and token
    */
-  private async createAxiosInstance(
+  async createAxiosInstance(
     type: TransactionType,
     transactionId?: string
   ): Promise<AxiosInstance> {
@@ -197,11 +204,13 @@ export class MtnPaymentService {
   ): Promise<MTNToken> {
     try {
       const apiPath =
-        type === TransactionType.PAYMENT
+        type === TransactionType.PAYMENT ||
+        type === TransactionType.MERCHANT_REFUND
           ? '/collection/token/'
           : '/disbursement/token/';
       const creds =
-        type === TransactionType.PAYMENT
+        type === TransactionType.PAYMENT ||
+        type === TransactionType.MERCHANT_REFUND
           ? credentials.collection
           : credentials.disbursement;
 
@@ -248,18 +257,24 @@ export class MtnPaymentService {
     type: TransactionType
   ): Promise<void> {
     const environment = process.env.MTN_TARGET_ENVIRONMENT;
-    const webhookUrl =
-      type === TransactionType.PAYMENT
-        ? process.env.MTN_PAYMENT_WEBHOOK_URL
-        : process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
+    if (environment !== 'sandbox') {
+      return;
+    }
+    let webhookUrl = process.env.MTN_PAYMENT_WEBHOOK_URL;
+    if (type === TransactionType.TRANSFER)
+      webhookUrl = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
+    else if (type === TransactionType.CUSTOMER_REFUND)
+      webhookUrl = process.env.MTN_CUSTOMER_REFUND_WEBHOOK_URL;
+    else if (type === TransactionType.MERCHANT_REFUND)
+      webhookUrl = process.env.MTN_MERCHANT_REFUND_WEBHOOK_URL;
 
-    if (!webhookUrl || environment !== 'sandbox') {
+    if (!webhookUrl) {
       return;
     }
 
     try {
       // Parse the URL to determine if it's HTTP or HTTPS
-      const url = new URL(webhookUrl);
+      const url = new URL(webhookUrl as string);
       const isHttps = url.protocol === 'https:';
 
       // Create options for the request
@@ -306,102 +321,248 @@ export class MtnPaymentService {
    * Processes a payment request from a customer.
    * Creates a payment request via MTN's collection API and stores the transaction in DynamoDB.
    *
+   * @param transactionId
    * @param amount - The payment amount
+   * @param transactionType
    * @param mobileNo - Customer's mobile number (MSISDN format)
    * @param merchantId - ID of the merchant receiving the payment
    * @param merchantMobileNo - Merchant's mobile number for disbursement
    * @param metaData - Optional metadata for the transaction
    * @param currency - Payment currency (default: EUR)
+   * @param payerMessage
+   * @param payeeNote
    * @returns The transaction ID for tracking
    */
   public async processPayment(
+    transactionId: string,
     amount: number,
+    transactionType: string,
     mobileNo: string,
     merchantId: string,
     merchantMobileNo: string,
-    metaData?: Record<string, never> | Record<string, string>,
-    currency: string = 'EUR'
+    currency: string,
+    payerMessage: string,
+    payeeNote: string,
+    metaData?: Record<string, never> | Record<string, string>
   ): Promise<{ transactionId: string; status: string } | string> {
-    const transactionId = uuidv4();
-    try {
-      const axiosInstance = await this.createAxiosInstance(
-        TransactionType.PAYMENT,
-        transactionId
-      );
+    switch (transactionType) {
+      case 'CHARGE': {
+        if (!mobileNo) {
+          throw new EnhancedError(
+            'MISSING_PHONE',
+            ErrorCategory.VALIDATION_ERROR,
+            'Missing customer phone number for MTN payment'
+          );
+        }
+        if (!merchantId || !merchantMobileNo) {
+          throw new EnhancedError(
+            'MISSING_MERCHANT_INFO',
+            ErrorCategory.VALIDATION_ERROR,
+            'Missing merchant information for MTN payment'
+          );
+        }
+        transactionId = uuidv4();
+        const { fee, settlementAmount } =
+          this.calculateFeeAndSettlement(amount);
+        try {
+          const axiosInstance = await this.createAxiosInstance(
+            TransactionType.PAYMENT,
+            transactionId
+          );
 
-      const { fee, settlementAmount } = this.calculateFeeAndSettlement(amount);
+          // Create payment request in MTN
 
-      // Create payment request in MTN
-      await axiosInstance.post('/collection/v1_0/requesttopay', {
-        amount: amount.toString(),
-        currency,
-        externalId: transactionId,
-        payer: {
-          partyIdType: 'MSISDN',
-          partyId: mobileNo,
-        },
-        payerMessage: 'PayQAM payment request',
-        payeeNote: 'Thank you for your payment',
-      });
-
-      // Store transaction record in DynamoDB
-      const paymentRecord: CreatePaymentRecord = {
-        transactionId,
-        amount,
-        currency,
-        paymentMethod: 'MTN',
-        status: 'PENDING',
-        mobileNo,
-        merchantId,
-        merchantMobileNo,
-        metaData,
-        fee,
-        settlementAmount,
-        GSI1SK: Math.floor(Date.now() / 1000),
-        GSI2SK: Math.floor(Date.now() / 1000),
-      };
-
-      await this.dbService.createPaymentRecord(paymentRecord);
-
-      this.logger.info('Payment request created successfully', {
-        transactionId,
-        status: 'PENDING',
-      });
-
-      // Check if we're in sandbox environment
-      const targetEnvironment = process.env.MTN_TARGET_ENVIRONMENT;
-      if (targetEnvironment === 'sandbox') {
-        await this.callWebhook(
-          {
-            financialTransactionId: uuidv4(),
-            externalId: transactionId,
-            amount: amount as unknown as string,
+          await axiosInstance.post('/collection/v1_0/requesttopay', {
+            amount: amount.toString(),
             currency,
-            payee: {
+            externalId: transactionId,
+            payer: {
               partyIdType: 'MSISDN',
               partyId: mobileNo,
             },
-            payeeNote: 'PayQAM payment request',
-            payerMessage: 'Thank you for your payment',
-            reason: undefined,
-            status: 'SUCCESSFUL',
-          },
-          TransactionType.PAYMENT
-        );
+            payerMessage,
+            payeeNote,
+          });
+
+          // Store transaction record in DynamoDB
+          const createdOn = Math.floor(Date.now() / 1000);
+          const paymentRecord: CreatePaymentRecord = {
+            transactionId,
+            amount,
+            currency,
+            paymentMethod: 'MTN',
+            status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+            mobileNo,
+            merchantId,
+            merchantMobileNo,
+            metaData,
+            fee,
+            settlementAmount,
+            GSI1SK: createdOn,
+            GSI2SK: createdOn,
+          };
+
+          await this.dbService.createPaymentRecord(paymentRecord);
+
+          await this.snsService.publish(
+            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+            {
+              transactionId,
+              paymentMethod: 'MTN MOMO',
+              status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+              type: 'CREATE',
+              amount,
+              settlementAmount,
+              merchantId,
+              transactionType: 'CHARGE',
+              metaData,
+              fee: fee,
+              createdOn: createdOn,
+              customerPhone: mobileNo,
+              currency: currency,
+              //exchangeRate: 'n/a',
+              //processingFee: 'n/a',
+              //netAmount: 'n/a',
+              //externalTransactionId: 'n/a',
+            }
+          );
+
+          this.logger.info('Payment request created successfully', {
+            transactionId,
+            status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+            amount,
+            settlementAmount,
+          });
+
+          // Check if we're in sandbox environment
+          const targetEnvironment = process.env.MTN_TARGET_ENVIRONMENT;
+          if (targetEnvironment === 'sandbox') {
+            await this.callWebhook(
+              {
+                financialTransactionId: uuidv4(),
+                externalId: transactionId,
+                amount: amount as unknown as string,
+                currency,
+                payer: {
+                  partyIdType: 'MSISDN',
+                  partyId: mobileNo,
+                },
+                payerMessage: 'Thank you for your payment',
+                payeeNote: 'PayQAM payment request',
+                reason: undefined,
+                status: 'SUCCESSFUL',
+              },
+              TransactionType.PAYMENT
+            );
+          }
+
+          return {
+            transactionId,
+            status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+          };
+        } catch (error) {
+          this.logger.error('Failed to process payment', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            transactionId,
+          });
+
+          await this.snsService.publish(
+            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+            {
+              transactionId,
+              paymentMethod: 'MTN MOMO',
+              status: MTNPaymentStatus.PAYMENT_FAILED,
+              type: 'CREATE',
+              amount,
+              merchantId,
+              transactionType: 'CHARGE',
+              metaData,
+              fee,
+              createdOn: Math.floor(Date.now() / 1000),
+              customerPhone: mobileNo,
+              currency: currency,
+              //exchangeRate: 'n/a',
+              //processingFee: 'n/a',
+              //netAmount: 'n/a',
+              //externalTransactionId: 'n/a',
+            }
+          );
+
+          // If not a mapped MTN error, throw the original error
+          throw new Error('Failed to process the payment');
+        }
       }
 
-      return {
-        transactionId,
-        status: 'PENDING',
-      };
-    } catch (error) {
-      this.logger.error('Failed to process payment', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        transactionId,
-      });
+      case 'REFUND': {
+        if (!transactionId) {
+          throw new EnhancedError(
+            'MISSING_TRANSACTION_ID',
+            ErrorCategory.VALIDATION_ERROR,
+            'Missing transaction id for the refund'
+          );
+        }
+        // Get record from DB using transactionId
+        const transactionRecord = await this.dbService.getItem({
+          transactionId,
+        });
 
-      // If not a mapped MTN error, throw the original error
-      throw new Error('Failed to process the payment');
+        if (!transactionRecord?.Item) {
+          throw new Error('Transaction not found for refund');
+        }
+
+        // Call the disbursement transfer API to transfer money to the customer
+        const customerRefundId = await this.initiateTransfer(
+          transactionRecord.Item.amount,
+          transactionRecord.Item.mobileNo,
+          transactionRecord.Item.currency,
+          TransactionType.CUSTOMER_REFUND
+        );
+
+        const updateData = {
+          status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
+          customerRefundId: customerRefundId,
+        };
+        await this.dbService.updatePaymentRecord({ transactionId }, updateData);
+        // Send to SalesForce
+        await this.snsService.publish(
+          process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+          {
+            transactionId: transactionRecord.Item.transactionId,
+            status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
+            type: 'UPDATE',
+          }
+        );
+
+        // Check if we're in sandbox environment
+        const targetEnvironment = process.env.MTN_TARGET_ENVIRONMENT;
+        if (targetEnvironment === 'sandbox') {
+          await this.callWebhook(
+            {
+              financialTransactionId: uuidv4(),
+              externalId: customerRefundId,
+              amount: transactionRecord.Item.amount as unknown as string,
+              currency: transactionRecord.Item.currency,
+              payee: {
+                partyIdType: 'MSISDN',
+                partyId: mobileNo,
+              },
+              payeeNote: `Refund is processed for the transaction ${transactionRecord.Item.transactionId}`,
+              payerMessage: 'YOur refund is processing. Thank you.',
+              reason: undefined,
+              status: 'SUCCESSFUL',
+            },
+            TransactionType.CUSTOMER_REFUND
+          );
+        }
+
+        return {
+          transactionId,
+          status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
+        };
+      }
+
+      default:
+        throw new Error(`Unsupported transaction type: ${transactionType}`);
     }
   }
 
@@ -419,7 +580,8 @@ export class MtnPaymentService {
     try {
       const axiosInstance = await this.createAxiosInstance(type);
       const endpoint =
-        type === TransactionType.PAYMENT
+        type === TransactionType.PAYMENT ||
+        type === TransactionType.MERCHANT_REFUND
           ? `/collection/v1_0/requesttopay/${transactionId}`
           : `/disbursement/v1_0/transfer/${transactionId}`;
 
@@ -439,22 +601,23 @@ export class MtnPaymentService {
    * @param amount - The amount to transfer
    * @param recipientMobileNo - Recipient's mobile number (MSISDN format)
    * @param currency - Transfer currency (default: EUR)
-   * @param tId
+   * @param transactionType
    * @returns The transfer ID for tracking
    */
   public async initiateTransfer(
     amount: number,
     recipientMobileNo: string,
-    currency: string = 'EUR'
+    currency: string,
+    transactionType: TransactionType
   ): Promise<string> {
     try {
       const transactionId = uuidv4();
+
       const axiosInstance = await this.createAxiosInstance(
-        TransactionType.TRANSFER,
+        transactionType,
         transactionId
       );
 
-      // TODO: Log the request details (mask sensitive data)
       await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,

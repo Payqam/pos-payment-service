@@ -89,7 +89,8 @@ export class PaymentServiceIAM extends Construct {
         'dynamodb:Scan', // List transactions (use sparingly)
       ],
       resources: [
-        `arn:aws:dynamodb:${env.region}:${env.account}:table/PayQAM-*`,
+        `arn:aws:dynamodb:${env.region}:${env.account}:table/PAYQAM-*`,
+        `arn:aws:dynamodb:${env.region}:${env.account}:table/PAYQAM-*/index/*`,
       ],
     });
   }
