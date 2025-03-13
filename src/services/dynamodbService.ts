@@ -16,8 +16,10 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 
 interface AdditionalTransactionFields {
   paymentMethod?: string;
-  paymentProviderResponse?: Record<string, unknown>;
-  settlementStatus?: string;
+  paymentResponse?: Record<string, unknown>;
+  disbursementResponse?: Record<string, unknown>;
+  customerRefundResponse?: Record<string, unknown>;
+  merchantRefundResponse?: Record<string, unknown>;
   uniqueId?: string;
   settlementDate?: number;
   fee?: number;
@@ -86,8 +88,10 @@ export class DynamoDBService {
       merchantId: item.merchantId,
       merchantMobileNo: item.merchantMobileNo,
       paymentMethod: item.paymentMethod,
-      paymentProviderResponse: item.paymentProviderResponse,
-      settlementStatus: item.settlementStatus,
+      paymentResponse: item.paymentResponse,
+      disbursementRespons: item.isbursementResponse,
+      customerRefundResponse: item.customerRefundResponse,
+      merchantRefundResponse: item.merchantRefundResponse,
       uniqueId: item.uniqueId,
       settlementDate: item.settlementDate,
       fee: item.fee,
@@ -225,20 +229,27 @@ export class DynamoDBService {
    * @param indexName - Name of the GSI to use
    * @returns The first matching item, if any
    */
+
   public async queryByGSI(
-    key: { uniqueId: string },
+    key:
+      | { uniqueId: string }
+      | { customerRefundId: string }
+      | { merchantRefundId: string },
     indexName: string
   ): Promise<QueryCommandOutput> {
     try {
+      const attributeName = Object.keys(key)[0];
+      const attributeValue = (key as Record<string, string>)[attributeName];
+
       const params = new QueryCommand({
         TableName: this.tableName,
         IndexName: indexName,
         KeyConditionExpression: '#pk = :pk',
         ExpressionAttributeNames: {
-          '#pk': 'uniqueId',
+          '#pk': attributeName,
         },
         ExpressionAttributeValues: {
-          ':pk': key.uniqueId,
+          ':pk': attributeValue,
         },
         Limit: 1, // We only need one item
       });

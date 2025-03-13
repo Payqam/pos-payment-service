@@ -23,7 +23,7 @@ interface WebhookEvent {
 
 interface PaymentRecordUpdate {
   status: string;
-  paymentProviderResponse: {
+  paymentResponse: {
     status: string;
     inittxnstatus?: string;
     confirmtxnstatus?: string;
@@ -356,7 +356,7 @@ export class OrangeWebhookService {
 
       const updatePayload: PaymentRecordUpdate = {
         status,
-        paymentProviderResponse: {
+        paymentResponse: {
           status,
           inittxnstatus: paymentResponse.data.inittxnstatus || undefined,
           confirmtxnstatus: paymentResponse.data.confirmtxnstatus || undefined,
