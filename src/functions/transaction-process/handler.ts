@@ -115,7 +115,7 @@ export class TransactionProcessService {
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify({
         message: transactionType === 'REFUND' 
-          ? (transactionResult.message || 'Refund processed successfully')
+          ? ('Refund processed successfully')
           : 'Payment processed successfully',
         transactionDetails: transactionResult,
       }),

@@ -682,7 +682,7 @@ export class OrangePaymentService {
 
       // Check if it's already a successful refund
       if (existingTransaction.transactionType === 'REFUND' &&
-        existingTransaction.status === 'SUCCESSFULL') {
+        existingTransaction.status === OrangePaymentStatus.CUSTOMER_REFUND_SUCCESSFUL) {
         return {
           transactionId,
           status: 'ALREADY_REFUNDED',
@@ -698,7 +698,7 @@ export class OrangePaymentService {
 
       // TODO: Temporary check for PENDING transactions
       if (existingTransaction.transactionType === 'CHARGE' &&
-        existingTransaction.status !== 'PENDING') {
+        existingTransaction.status !== OrangePaymentStatus.PAYMENT_SUCCESSFUL) {
         throw new Error('Original transaction was not successful');
       }
     } catch (error) {
@@ -724,8 +724,6 @@ export class OrangePaymentService {
       merchantMobileNo,
       currency
     });
-
-
 
     try {
       // Step 1: Initialize refund cashin
@@ -854,7 +852,7 @@ export class OrangePaymentService {
 
       return {
         transactionId,
-        status: refundResponse.data.status
+        status: OrangePaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money refund', {
