@@ -1,6 +1,6 @@
 import {
-  APIGatewayProxyHandler,
   APIGatewayProxyEvent,
+  APIGatewayProxyHandler,
   APIGatewayProxyResult,
 } from 'aws-lambda';
 import { API } from '../../../../../configurations/api';
@@ -105,7 +105,8 @@ export class MTNDisbursementWebhookService {
               const newTransactionId = await this.mtnService.initiateTransfer(
                 parseFloat(transactionStatus.amount),
                 transactionStatus?.payee?.partyId as string,
-                transactionStatus.currency
+                transactionStatus.currency,
+                TransactionType.TRANSFER
               );
 
               this.logger.info(`Retry successful with new transactionId`, {

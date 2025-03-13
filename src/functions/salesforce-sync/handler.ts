@@ -153,10 +153,16 @@ export class SalesforceSyncService {
         status__c: message.status,
         amount__c: message.amount,
         merchantId__c: message.merchantId,
-        partyIdType__c: message.partyIdType,
-        partyId__c: message.partyId,
-        payeeNote__c: message.payeeNote,
-        payerMessage__c: message.payerMessage,
+        ...(message.partyIdType !== undefined && {
+          partyIdType__c: message.partyIdType,
+        }),
+        ...(message.partyId !== undefined && { partyId__c: message.partyId }),
+        ...(message.payeeNote !== undefined && {
+          payeeNote__c: message.payeeNote,
+        }),
+        ...(message.payerMessage !== undefined && {
+          payerMessage__c: message.payerMessage,
+        }),
       };
 
       await axios.patch(

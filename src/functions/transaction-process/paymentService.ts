@@ -60,20 +60,6 @@ export class PaymentService {
         );
 
       case 'MTN':
-        if (!customerPhone) {
-          throw new EnhancedError(
-            'MISSING_PHONE',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing customer phone number for MTN payment'
-          );
-        }
-        if (!merchantId || !merchantMobileNo) {
-          throw new EnhancedError(
-            'MISSING_MERCHANT_INFO',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing merchant information for MTN payment'
-          );
-        }
         this.logger.info('Processing MTN payment', {
           amount,
           customerPhone,
@@ -84,9 +70,9 @@ export class PaymentService {
           transactionId as string,
           amount as number,
           transactionType as string,
-          customerPhone,
-          merchantId,
-          merchantMobileNo,
+          customerPhone as string,
+          merchantId as string,
+          merchantMobileNo as string,
           currency as string,
           payerMessage as string,
           payeeNote as string,

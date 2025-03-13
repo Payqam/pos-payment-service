@@ -95,17 +95,6 @@ export class TransactionProcessService {
       );
     }
 
-    if (
-      (paymentMethod === 'MTN' || paymentMethod === 'ORANGE') &&
-      (!merchantId || !merchantMobileNo)
-    ) {
-      return ErrorHandler.createErrorResponse(
-        'MISSING_MERCHANT_INFO',
-        ErrorCategory.VALIDATION_ERROR,
-        `Missing required fields: merchantId or merchantMobileNo for ${paymentMethod} payment`
-      );
-    }
-
     const transactionResult = await this.paymentService.processPayment({
       transactionId,
       amount,

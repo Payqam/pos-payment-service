@@ -108,7 +108,8 @@ export class MTNPaymentWebhookService {
       const uniqueId = await this.mtnService.initiateTransfer(
         amount,
         result.Item.merchantMobileNo,
-        currency
+        currency,
+        TransactionType.TRANSFER
       );
 
       if (!uniqueId) {

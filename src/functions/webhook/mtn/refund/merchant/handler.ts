@@ -13,6 +13,7 @@ import { DynamoDBService } from '../../../../../services/dynamodbService';
 import { SNSService } from '../../../../../services/snsService';
 import {
   MTN_REQUEST_TO_PAY_ERROR_MAPPINGS,
+  MTNPaymentStatus,
   MTNRequestToPayErrorReason,
   WebhookEvent,
 } from '../../../../../types/mtn';
@@ -68,76 +69,30 @@ export class MTNPaymentWebhookService {
   }
 
   /**
-   * Processes instant disbursement for a successful payment
-   * @throws WebhookError if disbursement processing fails
-   */
-  private async processInstantDisbursement(
-    transactionId: string,
-    amount: number,
-    currency: string
-  ): Promise<string> {
-    try {
-      this.logger.info('Processing instant disbursement', {
-        transactionId,
-        amount,
-        currency,
-      });
-
-      const result = await this.dbService.getItem({
-        transactionId,
-      });
-
-      if (!result?.Item) {
-        throw new WebhookError('Transaction not found for disbursement', 404, {
-          transactionId,
-        });
-      }
-
-      const uniqueId = await this.mtnService.initiateTransfer(
-        amount,
-        result.Item.merchantMobileNo,
-        currency
-      );
-
-      if (!uniqueId) {
-        throw new WebhookError('Failed to initiate transfer', 500, {
-          transactionId,
-          amount,
-          currency,
-        });
-      }
-
-      return uniqueId;
-    } catch (error) {
-      if (error instanceof WebhookError) throw error;
-      throw new WebhookError('Error processing instant disbursement', 500, {
-        error,
-        transactionId,
-        amount,
-      });
-    }
-  }
-
-  /**
    * Handles successful payment processing
    * @throws WebhookError if processing fails
    */
   private async handleSuccessfulPayment(
-    externalId: string,
-    amount: string,
-    currency: string,
+    transactionId: string,
     webhookEvent: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
-      const amountNumber = parseFloat(amount);
       const updateData: Record<string, unknown> = {
-        status: 'SUCCESSFUL',
-        paymentProviderResponse: {
-          status: webhookEvent.status,
-          reason: webhookEvent.payeeNote,
-          amount: amountNumber,
-        },
+        status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        merchantRefundResponse: webhookEvent,
       };
+      this.logger.info('[debug]update data', {
+        updateData,
+      });
+      // Send to SalesForce
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId,
+        status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        type: 'UPDATE',
+      });
+      this.logger.info('[debug]sent to sns', {
+        updateData,
+      });
       return updateData;
     } catch (error) {
       this.logger.error('Failed to handle the successful payment');
@@ -150,7 +105,7 @@ export class MTNPaymentWebhookService {
    * @throws WebhookError if processing fails
    */
   private async handleFailedPayment(
-    externalId: string,
+    transactionId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -172,11 +127,23 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
-
+      // Send to SalesForce
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId,
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'FAILED',
+        TransactionError: {
+          ErrorCode: errorMapping.statusCode,
+          ErrorMessage: errorReason,
+          ErrorType: errorMapping.label,
+          ErrorSource: 'pos',
+        },
+      });
+      this.logger.info('[debug]sent failed to sns', {});
       return {
-        status: 'FAILED',
-        paymentProviderResponse: {
-          status: transactionStatus.status,
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        merchantRefundResponse: {
+          ...transactionStatus,
           errorMessage: enhancedError.message,
           reason: transactionStatus.reason as string,
           retryable: errorMapping.retryable,
@@ -219,57 +186,52 @@ export class MTNPaymentWebhookService {
   }
 
   /**
-   * Processes the MTN payment webhook
+   * Processes the MTN merchant refund webhook
    */
   public async processWebhook(
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
       const webhookEvent = this.parseWebhookEvent(event.body);
-      const { externalId, amount, currency } = webhookEvent;
+      const { externalId } = webhookEvent;
 
       const result = await this.dbService.queryByGSI(
         {
-          customerRefundId: externalId,
+          merchantRefundId: externalId,
         },
         'GSI5'
       );
-      if (!result || !result.Items) {
+      if (!result || result.Items?.length === 0) {
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
-      const transaction = result.Items[0];
+      const transaction = result?.Items?.[0] ?? null;
 
       const transactionStatus: WebhookEvent =
         await this.mtnService.checkTransactionStatus(
           externalId,
-          TransactionType.PAYMENT
+          TransactionType.MERCHANT_REFUND
         );
-
+      this.logger.info('[debug]transaction status', transactionStatus);
+      this.logger.info('[debug]transaction', transaction);
+      this.logger.info('[debug]result', result);
       const updateData: Record<string, unknown> =
         transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
-              transaction.transactionId,
-              amount,
-              currency,
+              transaction?.transactionId,
               webhookEvent
             )
-          : await this.handleFailedPayment(externalId, transactionStatus);
-
+          : await this.handleFailedPayment(
+              transaction?.transactionId,
+              transactionStatus
+            );
+      this.logger.info('[debug]update data', {
+        updateData,
+      });
       await this.dbService.updatePaymentRecord(
-        { transactionId: transaction.transactionId },
+        { transactionId: transaction?.transactionId },
         updateData
       );
-
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-        transactionId: transaction.transactionId,
-        status: updateData.status,
-        type: 'PAYMENT',
-        amount: amount,
-        currency: currency,
-        uniqueId: updateData.uniqueId,
-        settlementStatus: updateData.settlementStatus,
-      });
 
       this.logger.info('Webhook processed successfully', {
         externalId,
