@@ -114,11 +114,7 @@ export class DynamoDBService {
 
     while (attempt < this.maxRetries) {
       try {
-        this.logger.info('[debug]createPaymentRecord params', params);
         await this.dbClient.sendCommand(new PutCommand(params));
-        this.logger.info('[debug]createPaymentRecord success', {
-          transactionId: record.transactionId,
-        });
         return;
       } catch (error: unknown) {
         if (
@@ -126,7 +122,6 @@ export class DynamoDBService {
           attempt === this.maxRetries - 1
         ) {
           this.logger.error('Error inserting record to DynamoDB', error);
-          this.logger.info('[debug]error--------', error);
           throw error;
         }
 
@@ -171,16 +166,9 @@ export class DynamoDBService {
 
     let attempt = 0;
 
-    this.logger.info('[debug]updatePaymentRecord params', {
-      key,
-      updateFields,
-      params,
-    });
-
     while (attempt < this.maxRetries) {
       try {
         await this.dbClient.updateCommandAsync(new UpdateCommand(params));
-        this.logger.info('[debug]updatePaymentRecord success', { key });
         return;
       } catch (error: unknown) {
         if (
@@ -188,7 +176,6 @@ export class DynamoDBService {
           attempt === this.maxRetries - 1
         ) {
           this.logger.error('Error updating record in DynamoDB', error);
-          this.logger.info('[debug]error--------', error);
           throw error;
         }
 
