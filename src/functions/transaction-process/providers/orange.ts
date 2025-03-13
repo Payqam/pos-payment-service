@@ -12,6 +12,7 @@ import {
   PaymentResponse,
 } from '../interfaces/orange';
 import { config } from 'cypress/types/bluebird';
+import { OrangePaymentStatus } from 'src/types/orange';
 
 /**
  * Orange API credentials structure
@@ -523,7 +524,7 @@ export class OrangePaymentService {
         merchantMobileNo,
         amount,
         paymentMethod: 'ORANGE',
-        status: paymentResponse.data.status,
+        status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED,
         currency,
         customerPhone,
         paymentResponse: paymentResponse.data,
@@ -572,7 +573,7 @@ export class OrangePaymentService {
 
       return {
         transactionId,
-        status: paymentResponse.data.status
+        status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money charge', {
@@ -587,7 +588,7 @@ export class OrangePaymentService {
         merchantId,
         amount,
         paymentMethod: 'ORANGE',
-        status: 'FAILED',
+        status: OrangePaymentStatus.PAYMENT_FAILED,
         paymentResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',

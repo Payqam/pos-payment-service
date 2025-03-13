@@ -12,7 +12,9 @@ import {
 import { SNSService } from '../../../../services/snsService';
 import { PaymentResponse } from '../../../transaction-process/interfaces/orange';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
-import { TEST_NUMBERS } from '../../../../../configurations/sandbox/orange';
+import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
+import { PAYMENT_SCENARIOS, PaymentScenario } from 'configurations/sandbox/orange/scenarios';
+import { OrangePaymentStatus } from 'src/types/orange';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -136,21 +138,21 @@ export class OrangeChargeWebhookService {
     });
 
     // If the payment is still pending, keep it as pending
-    if (status === 'PENDING' && initStatus === '200' && !confirmStatus) {
-      return 'PENDING';
+    if (status === 'PENDING') {
+      return OrangePaymentStatus.PAYMENT_PENDING;
     }
 
     // If we have a successful confirmation, mark as success
-    if (confirmStatus === '200') {
-      return 'SUCCESS';
+    if (status === 'SUCCESSFULL') {
+      return OrangePaymentStatus.PAYMENT_SUCCESSFUL;
     }
 
     // If init failed or confirmation failed, mark as failed
-    if (initStatus !== '200' || (confirmStatus && confirmStatus !== '200')) {
-      return 'FAILED';
+    if (status === 'FAILED') {
+      return OrangePaymentStatus.PAYMENT_FAILED;
     }
 
-    return status || 'FAILED'; // Default to failed if status is unclear
+    return status || OrangePaymentStatus.PAYMENT_FAILED; // Default to failed if status is unclear
   }
 
   /**
@@ -342,60 +344,40 @@ export class OrangeChargeWebhookService {
         const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
 
         // Override payment status based on test phone numbers
-        if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.INSUFFICIENT_FUNDS) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '402';
-          paymentResponse.data.inittxnmessage = 'Insufficient funds';
-        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.CUSTOMER_DECLINED) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '403';
-          paymentResponse.data.inittxnmessage = 'Customer declined payment';
-        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.EXPIRED_PAYMENT) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '408';
-          paymentResponse.data.inittxnmessage = 'Payment request expired';
-        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.INVALID_PHONE) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '400';
-          paymentResponse.data.inittxnmessage = 'Invalid phone number';
-        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.TRANSACTION_LIMIT_EXCEEDED) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '402';
-          paymentResponse.data.inittxnmessage = 'Transaction limit exceeded';
-        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.PAYMENT_DECLINED) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '403';
-          paymentResponse.data.inittxnmessage = 'Payment declined by provider';
-        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.MERCHANT_DECLINED) {
-          paymentResponse.data.status = 'FAILED';
-          paymentResponse.data.inittxnstatus = '403';
-          paymentResponse.data.inittxnmessage = 'Merchant declined payment';
+        const scenarioKey = Object.entries(TEST_NUMBERS.PAYMENT_SCENARIOS)
+          .find(([_, number]) => number === subscriberMsisdn)?.[0];
+
+        if (scenarioKey && scenarioKey in PAYMENT_SCENARIOS) {
+          const scenario = PAYMENT_SCENARIOS[scenarioKey as keyof typeof PAYMENT_SCENARIOS];
+          paymentResponse.data.status = scenario.status;
+          paymentResponse.data.inittxnstatus = scenario.txnStatus;
+          paymentResponse.data.inittxnmessage = scenario.message;
         }
-      }  
+      }
 
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
-      // // Don't process disbursement for pending payments
-      // if (status === 'PENDING') {
-      //   const updatePayload: PaymentRecordUpdate = {
-      //     status,
-      //     paymentProviderResponse: {
-      //       status,
-      //       inittxnstatus: paymentResponse.data.inittxnstatus || undefined
-      //     }
-      //   };
+      // Don't process disbursement for pending payments
+      if (status === OrangePaymentStatus.PAYMENT_PENDING) {
+        const updatePayload: PaymentRecordUpdate = {
+          status: OrangePaymentStatus.PAYMENT_PENDING,
+          paymentProviderResponse: {
+            status: paymentResponse.data.status,
+            inittxnstatus: paymentResponse.data.inittxnstatus || undefined
+          }
+        };
 
-      //   await this.updatePaymentRecord(transaction.transactionId, updatePayload);
+        await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
-      //   return {
-      //     statusCode: 200,
-      //     body: JSON.stringify({ message: 'Payment is still pending' })
-      //   };
-      // }
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ message: 'Payment is still pending' })
+        };
+      }
 
       const updatePayload: PaymentRecordUpdate = {
-        status,
+        status: OrangePaymentStatus.PAYMENT_SUCCESSFUL,
         paymentProviderResponse: {
           status,
           inittxnstatus: paymentResponse.data.inittxnstatus || undefined,
@@ -403,31 +385,40 @@ export class OrangeChargeWebhookService {
         },
       };
 
-      // TEMPORARY: Process disbursement for failed payments (testing only)
-      this.logger.info('SANDBOX: Processing disbursement for testing', {
-        status,
-      });
-      if (status === 'PENDING') {
+      // // TEMPORARY: Process disbursement for failed payments (testing only)
+      // this.logger.info('SANDBOX: Processing disbursement for testing', {
+      //   status,
+      // });
+      if (status === OrangePaymentStatus.PAYMENT_SUCCESSFUL) {
         const disbursementResult = await this.processDisbursement(
           transaction,
           transaction.amount.toString()
         );
 
-        // Only add disbursement data if we have valid results
-        // if (disbursementResult.status !== 'FAILED') {
-
-        Object.assign(updatePayload, {
-          settlementStatus: disbursementResult.status,
-          settlementPayToken: disbursementResult.payToken,
-          settlementResponse: {
-            status: disbursementResult.status,
-            orderId: disbursementResult.orderId,
-          },
-          settlementAmount: transaction.settlementAmount,
+        this.logger.debug('Checking disbursement result status', {
+          status: disbursementResult.status,
+          typeofStatus: typeof disbursementResult.status,
+          isSuccessful: disbursementResult.status === 'SUCCESSFULL'
         });
-        // } else {
-        //   updatePayload.disbursementStatus = 'FAILED';
-        // }
+
+        // Only add disbursement data if we have valid results
+        if (disbursementResult.status === 'SUCCESSFULL') {
+          this.logger.debug('Inside successful disbursement block');
+          Object.assign(updatePayload, {
+            settlementStatus: OrangePaymentStatus.DISBURSEMENT_SUCCESSFUL,
+            settlementPayToken: disbursementResult.payToken,
+            settlementResponse: {
+              status: disbursementResult.status,
+              orderId: disbursementResult.orderId,
+            },
+            settlementAmount: transaction.settlementAmount,
+          });
+        } else {
+          this.logger.debug('Inside failed disbursement block', {
+            status: disbursementResult.status
+          });
+          updatePayload.settlementStatus = OrangePaymentStatus.DISBURSEMENT_FAILED;
+        }
       }
 
       // Update the transaction record
