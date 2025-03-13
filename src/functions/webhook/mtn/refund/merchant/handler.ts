@@ -3,25 +3,24 @@ import {
   APIGatewayProxyHandler,
   APIGatewayProxyResult,
 } from 'aws-lambda';
-import { API } from '../../../../../configurations/api';
+import { API } from '../../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import {
   MtnPaymentService,
   TransactionType,
-} from '../../../transaction-process/providers';
-import { DynamoDBService } from '../../../../services/dynamodbService';
-import { SNSService } from '../../../../services/snsService';
+} from '../../../../transaction-process/providers';
+import { DynamoDBService } from '../../../../../services/dynamodbService';
+import { SNSService } from '../../../../../services/snsService';
 import {
   MTN_REQUEST_TO_PAY_ERROR_MAPPINGS,
   MTNPaymentStatus,
   MTNRequestToPayErrorReason,
   WebhookEvent,
-} from '../../../../types/mtn';
-import { v4 as uuidv4 } from 'uuid';
+} from '../../../../../types/mtn';
 import {
   EnhancedError,
   ErrorCategory,
-} from '../../../../../utils/errorHandler';
+} from '../../../../../../utils/errorHandler';
 
 class WebhookError extends Error {
   constructor(
@@ -70,124 +69,30 @@ export class MTNPaymentWebhookService {
   }
 
   /**
-   * Processes instant disbursement for a successful payment
-   * @throws WebhookError if disbursement processing fails
-   */
-  private async processInstantDisbursement(
-    transactionId: string,
-    amount: number,
-    currency: string
-  ): Promise<string> {
-    try {
-      this.logger.info('Processing instant disbursement', {
-        transactionId,
-        amount,
-        currency,
-      });
-      const result = await this.dbService.getItem({
-        transactionId,
-      });
-
-      if (!result?.Item) {
-        throw new WebhookError('Transaction not found for disbursement', 404, {
-          transactionId,
-        });
-      }
-
-      const uniqueId = await this.mtnService.initiateTransfer(
-        amount,
-        result.Item.merchantMobileNo,
-        currency,
-        TransactionType.TRANSFER
-      );
-
-      if (!uniqueId) {
-        throw new WebhookError('Failed to initiate transfer', 500, {
-          transactionId,
-          amount,
-          currency,
-        });
-      }
-
-      return uniqueId;
-    } catch (error) {
-      if (error instanceof WebhookError) throw error;
-      throw new WebhookError('Error processing instant disbursement', 500, {
-        error,
-        transactionId,
-        amount,
-      });
-    }
-  }
-
-  /**
    * Handles successful payment processing
    * @throws WebhookError if processing fails
    */
   private async handleSuccessfulPayment(
-    externalId: string,
-    amount: string,
-    currency: string,
+    transactionId: string,
     webhookEvent: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
-      const amountNumber = parseFloat(amount);
-      const settlementAmount = this.calculateSettlementAmount(amountNumber);
       const updateData: Record<string, unknown> = {
-        status: MTNPaymentStatus.PAYMENT_SUCCESSFUL,
-        paymentResponse: webhookEvent,
-        fee: amountNumber - settlementAmount,
+        status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        merchantRefundResponse: webhookEvent,
       };
-
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-        transactionId: externalId,
-        status: MTNPaymentStatus.PAYMENT_SUCCESSFUL,
-        type: 'UPDATE',
-        partyIdType: webhookEvent.payer?.partyIdType,
-        partyId: webhookEvent.payer?.partyId,
-        payeeNote: webhookEvent.payeeNote,
-        payerMessage: webhookEvent.payerMessage,
+      this.logger.info('[debug]update data', {
+        updateData,
       });
-
-      if (this.instantDisbursementEnabled) {
-        try {
-          updateData.uniqueId = await this.processInstantDisbursement(
-            externalId,
-            settlementAmount,
-            currency
-          );
-          updateData.status = MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED;
-          updateData.settlementDate = Date.now();
-          updateData.settlementAmount = settlementAmount;
-          await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-            {
-              transactionId: externalId,
-              status: MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED,
-              type: 'UPDATE',
-            }
-          );
-        } catch (error: unknown) {
-          this.logger.error('Failed to process instant disbursement', {
-            error,
-          });
-          await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-            {
-              transactionId: externalId,
-              status: MTNPaymentStatus.DISBURSEMENT_FAILED,
-              type: 'FAILED',
-              TransactionError: {
-                ErrorCode: 'errorCode',
-                ErrorMessage: 'errorReason',
-                ErrorType: 'errorType',
-                ErrorSource: 'pos',
-              },
-            }
-          );
-        }
-      }
-
+      // Send to SalesForce
+      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+        transactionId,
+        status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        type: 'UPDATE',
+      });
+      this.logger.info('[debug]sent to sns', {
+        updateData,
+      });
       return updateData;
     } catch (error) {
       this.logger.error('Failed to handle the successful payment');
@@ -200,7 +105,7 @@ export class MTNPaymentWebhookService {
    * @throws WebhookError if processing fails
    */
   private async handleFailedPayment(
-    externalId: string,
+    transactionId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -222,9 +127,10 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
+      // Send to SalesForce
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-        transactionId: externalId,
-        status: MTNPaymentStatus.PAYMENT_FAILED,
+        transactionId,
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
         type: 'FAILED',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
@@ -233,10 +139,10 @@ export class MTNPaymentWebhookService {
           ErrorSource: 'pos',
         },
       });
-
+      this.logger.info('[debug]sent failed to sns', {});
       return {
-        status: MTNPaymentStatus.PAYMENT_FAILED,
-        paymentResponse: {
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        merchantRefundResponse: {
           ...transactionStatus,
           errorMessage: enhancedError.message,
           reason: transactionStatus.reason as string,
@@ -280,70 +186,59 @@ export class MTNPaymentWebhookService {
   }
 
   /**
-   * Processes the MTN payment webhook
+   * Processes the MTN merchant refund webhook
    */
   public async processWebhook(
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
       const webhookEvent = this.parseWebhookEvent(event.body);
-      const { externalId, amount, currency } = webhookEvent;
+      const { externalId } = webhookEvent;
 
-      const result = await this.dbService.getItem({
-        transactionId: externalId,
-      });
-      if (!result) {
+      const result = await this.dbService.queryByGSI(
+        {
+          merchantRefundId: externalId,
+        },
+        'GSI5'
+      );
+      if (!result || result.Items?.length === 0) {
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
+
+      const transaction = result?.Items?.[0] ?? null;
 
       const transactionStatus: WebhookEvent =
         await this.mtnService.checkTransactionStatus(
           externalId,
-          TransactionType.PAYMENT
+          TransactionType.MERCHANT_REFUND
         );
-
+      this.logger.info('[debug]transaction status', transactionStatus);
+      this.logger.info('[debug]transaction', transaction);
+      this.logger.info('[debug]result', result);
       const updateData: Record<string, unknown> =
         transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
-              externalId,
-              amount,
-              currency,
+              transaction?.transactionId,
               webhookEvent
             )
-          : await this.handleFailedPayment(externalId, transactionStatus);
-
+          : await this.handleFailedPayment(
+              transaction?.transactionId,
+              transactionStatus
+            );
+      this.logger.info('[debug]update data', {
+        updateData,
+      });
       await this.dbService.updatePaymentRecord(
-        { transactionId: externalId },
+        { transactionId: transaction?.transactionId },
         updateData
       );
-      // Call sandbox disbursement webhook if in sandbox environment
-      const environment = process.env.MTN_TARGET_ENVIRONMENT;
-      const webhookUrl = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
 
-      if (
-        environment === 'sandbox' &&
-        webhookUrl &&
-        updateData.uniqueId &&
-        updateData.settlementAmount
-      ) {
-        await this.mtnService.callWebhook(
-          {
-            financialTransactionId: uuidv4(),
-            externalId: updateData.uniqueId as string,
-            amount: webhookEvent.amount,
-            currency: webhookEvent.currency,
-            payee: {
-              partyIdType: 'MSISDN',
-              partyId: result.Item?.merchantMobileNo,
-            },
-            payeeNote: 'PayQAM payment request',
-            payerMessage: 'Thank you for your payment',
-            reason: undefined,
-            status: 'SUCCESSFUL',
-          },
-          TransactionType.TRANSFER
-        );
-      }
+      this.logger.info('Webhook processed successfully', {
+        externalId,
+        status: updateData.status,
+        uniqueId: updateData.uniqueId,
+        settlementStatus: updateData.settlementStatus,
+      });
 
       return {
         statusCode: 200,

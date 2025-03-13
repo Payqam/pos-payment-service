@@ -26,9 +26,13 @@ interface SNSMessage {
   currency: string;
   exchangeRate: string;
   processingFee: string;
-  netAmount: string;
+  settlementAmount: string;
   externalTransactionId: string;
   paymentMethod: string;
+  partyIdType: string;
+  partyId: string;
+  payeeNote: string;
+  payerMessage: string;
   TransactionError: {
     ErrorCode: string;
     ErrorMessage: string;
@@ -149,6 +153,16 @@ export class SalesforceSyncService {
         status__c: message.status,
         amount__c: message.amount,
         merchantId__c: message.merchantId,
+        ...(message.partyIdType !== undefined && {
+          partyIdType__c: message.partyIdType,
+        }),
+        ...(message.partyId !== undefined && { partyId__c: message.partyId }),
+        ...(message.payeeNote !== undefined && {
+          payeeNote__c: message.payeeNote,
+        }),
+        ...(message.payerMessage !== undefined && {
+          payerMessage__c: message.payerMessage,
+        }),
       };
 
       await axios.patch(
@@ -179,12 +193,14 @@ export class SalesforceSyncService {
       const accessToken = await this.getAccessToken(credentials);
       const urlHost = process.env.SALESFORCE_URL_HOST as string;
 
+      // todo: fix date issue
+      // todo: add merchant phone number
       const recordPayload = {
         OwnerId: process.env.SALESFORCE_OWNER_ID,
         ServiceType__c: message.paymentMethod,
         transactionId__c: message.transactionId,
         status__c: message.status,
-        amount__c: message.amount,
+        amount__c: message.settlementAmount,
         merchantId__c: message.merchantId,
         Transaction_Type__c: message.transactionType,
         metaData__C: JSON.stringify(message.metaData),
@@ -195,7 +211,7 @@ export class SalesforceSyncService {
         Currency__c: message.currency,
         Exchange_Rate__c: message.exchangeRate,
         Processing_Fee__c: message.processingFee,
-        Net_Amount__c: message.netAmount,
+        Net_Amount__c: message.amount,
         ExternalTransactionId__c: message.externalTransactionId,
       };
 

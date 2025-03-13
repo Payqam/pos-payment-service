@@ -34,6 +34,7 @@ export class CardPaymentService {
     cardData: CardData,
     transactionType: string,
     merchantId: string,
+    currency: string,
     customerPhone?: string,
     metaData?: Record<string, string>
   ): Promise<{ transactionId: string; status: string }> {
@@ -66,7 +67,7 @@ export class CardPaymentService {
           try {
             paymentIntent = await stripeClient.paymentIntents.create({
               amount,
-              currency: cardData.currency as string,
+              currency: currency,
               payment_method: cardData.paymentMethodId,
               confirm: true,
               transfer_data: {
@@ -91,10 +92,7 @@ export class CardPaymentService {
                 amount,
                 paymentMethod: 'CARD',
                 status: 'FAILED',
-                paymentProviderResponse: paymentError.raw as Record<
-                  string,
-                  unknown
-                >,
+                paymentResponse: paymentError.raw as Record<string, unknown>,
                 transactionType: 'CHARGE',
                 metaData,
                 fee: feeAmount,
@@ -124,7 +122,7 @@ export class CardPaymentService {
                   fee: feeAmount,
                   createdOn: Math.floor(Date.now() / 1000),
                   customerPhone,
-                  currency: cardData.currency,
+                  currency: currency,
                   exchangeRate: 'exchangeRate',
                   processingFee: 'processingFee',
                   netAmount: 'netAmount',
@@ -148,7 +146,7 @@ export class CardPaymentService {
             amount,
             paymentMethod: 'CARD',
             status: paymentIntent?.status as string,
-            paymentProviderResponse: paymentIntent,
+            paymentResponse: paymentIntent,
             transactionType: 'CHARGE',
             metaData,
             fee: feeAmount,
@@ -182,7 +180,7 @@ export class CardPaymentService {
               fee: feeAmount,
               createdOn: Math.floor(Date.now() / 1000),
               customerPhone,
-              currency: cardData.currency,
+              currency: currency,
               exchangeRate: 'exchangeRate',
               processingFee: 'processingFee',
               netAmount: 'netAmount',
