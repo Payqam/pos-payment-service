@@ -2,7 +2,7 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 
 export interface SecurityGroupsProps {
-  vpc: ec2.Vpc;
+  vpc: ec2.IVpc;
   envName: string;
   namespace: string;
 }
