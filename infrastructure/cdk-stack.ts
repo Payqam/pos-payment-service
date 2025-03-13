@@ -154,6 +154,8 @@ export class CDKStack extends cdk.Stack {
         notifyUrl: process.env.ORANGE_NOTIFY_URL || '',
         merchantPhone: process.env.ORANGE_PAYQAM_MERCHANT_PHONE || '',
         merchantPin: process.env.ORANGE_PAYQAM_PIN || '',
+        chargeWebhookUrl: process.env.ORANGE_CHARGE_WEBHOOK_URL || '',
+        refundWebhookUrl: process.env.ORANGE_REFUND_WEBHOOK_URL || '',
       },
     };
 

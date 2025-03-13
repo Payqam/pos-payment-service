@@ -526,7 +526,7 @@ export class OrangePaymentService {
         status: paymentResponse.data.status,
         currency,
         customerPhone,
-        paymentProviderResponse: paymentResponse.data,
+        paymentResponse: paymentResponse.data,
         transactionType: 'CHARGE',
         metaData: {
           ...metaData,
