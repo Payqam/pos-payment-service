@@ -146,6 +146,7 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
+        targetEnvironment: process.env.ORANGE_TARGET_ENVIRONMENT || 'sandbox',
         baseUrl: process.env.ORANGE_API_BASE_URL || '',
         tokenUrl: process.env.ORANGE_API_TOKEN_URL || '',
         clientId: process.env.ORANGE_CLIENT_ID || '',

@@ -12,6 +12,7 @@ import {
 import { SNSService } from '../../../../services/snsService';
 import { PaymentResponse } from '../../../transaction-process/interfaces/orange';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
+import { TEST_NUMBERS } from '../../../../../configurations/sandbox/orange';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -333,6 +334,45 @@ export class OrangeChargeWebhookService {
       const paymentResponse =
         await this.orangeService.getPaymentStatus(payToken);
 
+      // Get Orange credentials
+      const credentials = await this.getOrangeCredentials();
+
+      // Check if we're in sandbox environment
+      if (credentials.targetEnvironment === 'sandbox') {
+        const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
+
+        // Override payment status based on test phone numbers
+        if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.INSUFFICIENT_FUNDS) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '402';
+          paymentResponse.data.inittxnmessage = 'Insufficient funds';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.CUSTOMER_DECLINED) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '403';
+          paymentResponse.data.inittxnmessage = 'Customer declined payment';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.EXPIRED_PAYMENT) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '408';
+          paymentResponse.data.inittxnmessage = 'Payment request expired';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.INVALID_PHONE) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '400';
+          paymentResponse.data.inittxnmessage = 'Invalid phone number';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.TRANSACTION_LIMIT_EXCEEDED) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '402';
+          paymentResponse.data.inittxnmessage = 'Transaction limit exceeded';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.PAYMENT_DECLINED) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '403';
+          paymentResponse.data.inittxnmessage = 'Payment declined by provider';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.MERCHANT_DECLINED) {
+          paymentResponse.data.status = 'FAILED';
+          paymentResponse.data.inittxnstatus = '403';
+          paymentResponse.data.inittxnmessage = 'Merchant declined payment';
+        }
+      }  
+
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
@@ -436,4 +476,3 @@ export const handler: APIGatewayProxyHandler = async (
 ): Promise<APIGatewayProxyResult> => {
   return service.handleWebhook(event);
 };
-

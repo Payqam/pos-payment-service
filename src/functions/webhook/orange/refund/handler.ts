@@ -12,6 +12,7 @@ import {
 import { SNSService } from '../../../../services/snsService';
 import { PaymentResponse } from '../../../transaction-process/interfaces/orange';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
+import { TEST_NUMBERS } from '../../../../../configurations/sandbox/orange';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -160,6 +161,12 @@ export class OrangeRefundWebhookService {
     }
   }
 
+  private async getOrangeCredentials(): Promise<any> {
+    return this.secretsManagerService.getSecret(
+      process.env.ORANGE_API_SECRET as string
+    );
+  }
+
   public async handleWebhook(
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
@@ -180,6 +187,46 @@ export class OrangeRefundWebhookService {
 
       // Get payment status from Orange API
       const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
+
+      // Get Orange credentials
+      const credentials = await this.getOrangeCredentials();
+
+      // Check if we're in sandbox environment
+      if (credentials.targetEnvironment === 'sandbox') {
+        const subscriberMsisdn = paymentStatus.data.subscriberMsisdn;
+
+        // Override payment status based on test phone numbers
+        if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.INSUFFICIENT_FUNDS) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '402';
+          paymentStatus.data.inittxnmessage = 'Insufficient funds';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.CUSTOMER_DECLINED) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '403';
+          paymentStatus.data.inittxnmessage = 'Customer declined refund';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.EXPIRED_PAYMENT) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '408';
+          paymentStatus.data.inittxnmessage = 'Refund request expired';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.INVALID_PHONE) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '400';
+          paymentStatus.data.inittxnmessage = 'Invalid phone number';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.TRANSACTION_LIMIT_EXCEEDED) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '402';
+          paymentStatus.data.inittxnmessage = 'Refund limit exceeded';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.PAYMENT_DECLINED) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '403';
+          paymentStatus.data.inittxnmessage = 'Refund declined by provider';
+        } else if (subscriberMsisdn === TEST_NUMBERS.PAYMENT_SCENARIOS.MERCHANT_DECLINED) {
+          paymentStatus.data.status = 'FAILED';
+          paymentStatus.data.inittxnstatus = '403';
+          paymentStatus.data.inittxnmessage = 'Merchant declined refund';
+        }
+      }
+
       const refundStatus = this.determineRefundStatus(paymentStatus);
 
       // Update transaction record
