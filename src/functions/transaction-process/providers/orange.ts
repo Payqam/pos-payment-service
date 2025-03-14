@@ -422,7 +422,8 @@ export class OrangePaymentService {
     customerPhone?: string;
     currency?: string;
   }) {
-    const timestamp = Math.floor(Date.now() / 1000);
+    const dateTime = new Date().toISOString();
+    const timestamp = Math.floor(new Date(dateTime).getTime() / 1000);
     await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
       transactionId: params.transactionId,
       paymentMethod: 'Orange',
@@ -550,8 +551,8 @@ export class OrangePaymentService {
       // Publish status to SNS
       await this.publishTransactionStatus({
         transactionId,
-        status: paymentResponse.data.status,
-        type: 'CHARGE',
+        status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED,
+        type: 'CREATE',
         amount,
         merchantId,
         transactionType: 'CHARGE',
@@ -611,8 +612,8 @@ export class OrangePaymentService {
       // Publish failed status to SNS
       await this.publishTransactionStatus({
         transactionId,
-        status: 'FAILED',
-        type: 'CHARGE',
+        status: OrangePaymentStatus.PAYMENT_FAILED,
+        type: 'CREATE',
         amount,
         merchantId,
         transactionType: 'CHARGE',
@@ -842,8 +843,8 @@ export class OrangePaymentService {
       // Publish status to SNS
       await this.publishTransactionStatus({
         transactionId,
-        status: refundResponse.data.status,
-        type: 'REFUND',
+        status: OrangePaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        type: 'UPDATE',
         amount,
         merchantId,
         transactionType: 'REFUND',
@@ -897,8 +898,8 @@ export class OrangePaymentService {
       // Publish failed status to SNS
       await this.publishTransactionStatus({
         transactionId,
-        status: 'FAILED',
-        type: 'REFUND',
+        status: OrangePaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'UPDATE',
         amount,
         merchantId,
         transactionType: 'REFUND',
