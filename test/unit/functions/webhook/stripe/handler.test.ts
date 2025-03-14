@@ -71,12 +71,12 @@ describe('CardPaymentService', () => {
     const result = await service.processCardPayment(
       1000,
       {
-        currency: 'usd',
         paymentMethodId: 'pm_mock',
         destinationId: 'acct_mock',
       },
       'CHARGE',
-      'merchant123'
+      'merchant123',
+      'usd'
     );
 
     expect(mockStripeClient.paymentIntents.create).toHaveBeenCalledWith({
@@ -121,7 +121,8 @@ describe('CardPaymentService', () => {
         reverse_transfer: true,
       },
       'REFUND',
-      'merchant123'
+      'merchant123',
+      'usd'
     );
 
     expect(mockStripeClient.refunds.create).toHaveBeenCalledWith({
@@ -152,7 +153,8 @@ describe('CardPaymentService', () => {
         500,
         { paymentIntentId: 'pi_mock' },
         'INVALID_TYPE',
-        'merchant123'
+        'merchant123',
+        'usd'
       )
     ).rejects.toThrow('Unsupported transaction type: INVALID_TYPE');
   });

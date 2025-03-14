@@ -345,6 +345,7 @@ export class MtnPaymentService {
     payeeNote: string,
     metaData?: Record<string, never> | Record<string, string>
   ): Promise<{ transactionId: string; status: string } | string> {
+    const dateTime = new Date().toISOString();
     switch (transactionType) {
       case 'CHARGE': {
         if (!mobileNo) {
@@ -385,7 +386,6 @@ export class MtnPaymentService {
           });
 
           // Store transaction record in DynamoDB
-          const createdOn = Math.floor(Date.now() / 1000);
           const paymentRecord: CreatePaymentRecord = {
             transactionId,
             amount,
@@ -398,8 +398,8 @@ export class MtnPaymentService {
             metaData,
             fee,
             settlementAmount,
-            GSI1SK: createdOn,
-            GSI2SK: createdOn,
+            GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
+            GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
           };
 
           await this.dbService.createPaymentRecord(paymentRecord);
@@ -417,7 +417,7 @@ export class MtnPaymentService {
               transactionType: 'CHARGE',
               metaData,
               fee: fee,
-              createdOn: createdOn,
+              createdOn: dateTime,
               customerPhone: mobileNo,
               currency: currency,
               //exchangeRate: 'n/a',
@@ -478,7 +478,7 @@ export class MtnPaymentService {
               transactionType: 'CHARGE',
               metaData,
               fee,
-              createdOn: Math.floor(Date.now() / 1000),
+              createdOn: dateTime,
               customerPhone: mobileNo,
               currency: currency,
               //exchangeRate: 'n/a',
