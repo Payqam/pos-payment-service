@@ -205,7 +205,7 @@ export class OrangeRefundWebhookService {
       const credentials = await this.getOrangeCredentials();
 
       // Check if we're in sandbox environment
-      if (credentials.environment === 'sandbox') {
+      if (credentials.targetEnvironment === 'sandbox') {
         const subscriberMsisdn = transaction.customerPhone;
 
         // Override refund status based on test phone numbers

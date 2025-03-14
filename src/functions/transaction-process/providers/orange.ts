@@ -763,7 +763,7 @@ export class OrangePaymentService {
         refundCashinResponse: refundResponse.data
       };
 
-      await this.dbService.updatePaymentRecord(transactionId, refundCashinResponsePayload);
+      await this.dbService.updatePaymentRecord({ transactionId }, refundCashinResponsePayload);
 
       // Step 3: Initiate merchant payment
       const merchantPayToken = await this.initiateMerchantPayment();
