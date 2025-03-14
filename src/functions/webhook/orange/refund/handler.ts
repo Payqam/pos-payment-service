@@ -15,6 +15,7 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { REFUND_SCENARIOS, PaymentScenario } from 'configurations/sandbox/orange/scenarios';
 import { PAYMENT_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
+import { OrangePaymentStatus } from 'src/types/orange';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -104,7 +105,7 @@ export class OrangeRefundWebhookService {
     try {
       const result = await this.dbService.queryByGSI(
         { merchantRefundId: payToken },
-        'GSI4'
+        'GSI5'
       );
 
       if (!result.Items || result.Items.length === 0) {
@@ -132,19 +133,22 @@ export class OrangeRefundWebhookService {
       confirmStatus,
     });
 
-    if (confirmStatus === '200') {
-      return 'REFUNDED';
+    // If the payment is still pending, keep it as pending
+    if (status === 'PENDING') {
+      return OrangePaymentStatus.MERCHANT_REFUND_PENDING;
     }
 
-    if (initStatus !== '200' || (confirmStatus && confirmStatus !== '200')) {
-      return 'REFUND_FAILED';
+    // If we have a successful confirmation, mark as success
+    if (status === 'SUCCESSFULL') {
+      return OrangePaymentStatus.MERCHANT_REFUND_SUCCESSFUL;
     }
 
-    if (status === 'PENDING' && initStatus === '200' && !confirmStatus) {
-      return 'REFUND_PENDING';
+    // If init failed or confirmation failed, mark as failed
+    if (status === 'FAILED') {
+      return OrangePaymentStatus.MERCHANT_REFUND_FAILED;
     }
 
-    return 'REFUND_FAILED';
+    return OrangePaymentStatus.MERCHANT_REFUND_FAILED;
   }
 
   private async updatePaymentRecord(

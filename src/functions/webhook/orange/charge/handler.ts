@@ -25,8 +25,10 @@ interface WebhookEvent {
 }
 
 interface PaymentRecordUpdate {
-  status: string;
-  paymentProviderResponse: {
+  status?: string;
+  chargeMpGetResponse?: PaymentResponse['data'];
+  settlementCashInResponse?: PaymentResponse['data'];
+  paymentProviderResponse?: {
     status: string;
     inittxnstatus?: string;
     confirmtxnstatus?: string;
@@ -297,6 +299,12 @@ export class OrangeChargeWebhookService {
         }
       );
 
+      const disbursementResponsePayload: PaymentRecordUpdate = {
+        settlementCashInResponse: disbursementResponse.data
+      };
+
+      await this.updatePaymentRecord(transaction.transactionId, disbursementResponsePayload);
+
       const result = {
         status: disbursementResponse.data.status,
         payToken: initResponse.data.payToken,
@@ -336,6 +344,12 @@ export class OrangeChargeWebhookService {
       const paymentResponse =
         await this.orangeService.getPaymentStatus(payToken);
 
+        const getpaymentResponsePayload: PaymentRecordUpdate = {
+          chargeMpGetResponse: paymentResponse.data
+        };
+
+        await this.updatePaymentRecord(transaction.transactionId, getpaymentResponsePayload);
+
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
 
@@ -362,10 +376,6 @@ export class OrangeChargeWebhookService {
       if (status === OrangePaymentStatus.PAYMENT_PENDING) {
         const updatePayload: PaymentRecordUpdate = {
           status: OrangePaymentStatus.PAYMENT_PENDING,
-          paymentProviderResponse: {
-            status: paymentResponse.data.status,
-            inittxnstatus: paymentResponse.data.inittxnstatus || undefined
-          }
         };
 
         await this.updatePaymentRecord(transaction.transactionId, updatePayload);
@@ -378,11 +388,6 @@ export class OrangeChargeWebhookService {
 
       const updatePayload: PaymentRecordUpdate = {
         status: OrangePaymentStatus.PAYMENT_SUCCESSFUL,
-        paymentProviderResponse: {
-          status,
-          inittxnstatus: paymentResponse.data.inittxnstatus || undefined,
-          confirmtxnstatus: paymentResponse.data.confirmtxnstatus || undefined,
-        },
       };
 
       // // TEMPORARY: Process disbursement for failed payments (testing only)

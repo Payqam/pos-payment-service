@@ -527,7 +527,7 @@ export class OrangePaymentService {
         status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED,
         currency,
         customerPhone,
-        paymentResponse: paymentResponse.data,
+        chargeMpResponse: paymentResponse.data,
         transactionType: 'CHARGE',
         metaData: {
           ...metaData,
@@ -589,7 +589,7 @@ export class OrangePaymentService {
         amount,
         paymentMethod: 'ORANGE',
         status: OrangePaymentStatus.PAYMENT_FAILED,
-        paymentResponse: {
+        chargeMpResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
           timestamp: Math.floor(Date.now() / 1000),
@@ -758,6 +758,12 @@ export class OrangePaymentService {
           createtime: refundResponse.data.createtime
         }
       });
+
+      const refundCashinResponsePayload: UpdatePaymentRecord = {
+        refundCashinResponse: refundResponse.data
+      };
+
+      await this.dbService.updatePaymentRecord(transactionId, refundCashinResponsePayload);
 
       // Step 3: Initiate merchant payment
       const merchantPayToken = await this.initiateMerchantPayment();
