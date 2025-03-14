@@ -414,6 +414,7 @@ export class MtnPaymentService {
               amount,
               settlementAmount,
               merchantId,
+              merchantMobileNo,
               transactionType: 'CHARGE',
               metaData,
               fee: fee,
