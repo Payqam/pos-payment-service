@@ -25,31 +25,31 @@
       "title": "Invalid phone number format for customerPhone",
       "body": { "mtn[customerPhone]": "invalid_number"},
       "expectedStatus": 500,
-      "expectedMessage": "Failed to process the payment"
+      "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
     {
       "title": "Invalid phone number for merchantMobile",
       "body": { "mtn[merchantMobileNo]": "invalid_number"},
       "expectedStatus": 500,
-      "expectedMessage": "Failed to process the payment"
+      "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
   {
     "title": "Exceeding maximum transaction limit",
     "body": {"mtn[amount]": 1000000000000000000000000000000.0 },
     "expectedStatus": 500,
-    "expectedMessage": "Failed to process the payment"
+    "expectedMessage": "Unsupported transaction type: PAYMENT"
   },
     {
       "title": "Empty phone number for customerPhone",
       "body": { "mtn[customerPhone]": " "},
       "expectedStatus": 500,
-      "expectedMessage": "Failed to process the payment"
+      "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
     {
       "title": "Empty phone number for merchantMobile",
       "body": { "mtn[merchantMobileNo]": " "},
       "expectedStatus": 500,
-      "expectedMessage": "Failed to process the payment"
+      "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
   {
     "title": "Empty amount field",
@@ -147,7 +147,43 @@
     "title": "AccountHolderActivePartyCodeServiceUnavailable",
     "transactionId": "585c07a4-2c80-42f7-9e73-e586b36dee68"
   }
-]
-
-
+],
+  "refundTestData": [
+    {
+      "payer": "94713579067",
+      "merchant": "94760000000"
+    }
+  ],
+  "invalidRefundData": [
+    {
+      "title": "Invalid transactionId",
+      "body": { "mtn[transactionId]": "INVALID_TRANSACTION_ID"},
+      "expectedStatus":500,
+      "expectedMessage": "Transaction not found for refund"
+    },
+    {
+      "title": "Empty payment Type",
+      "body": { "mtn[paymentMethod]": " "},
+      "expectedStatus":400,
+      "expectedMessage": "Unsupported payment method"
+    },
+    {
+      "title": "Empty transactionId",
+      "body": { "mtn[transactionId]": " "},
+      "expectedStatus":500,
+      "expectedMessage": "Transaction not found for refund"
+    }
+  ],
+  "requestPayer": [
+    {
+      "title": "Ongoing payment request",
+      "payer": "46733123453",
+      "merchant": "94760000000"
+    },
+    {
+      "title": "delayed payment request",
+      "payer": "46733123454",
+      "merchant": "94760000000"
+    }
+  ]
 }
