@@ -806,10 +806,7 @@ export class OrangePaymentService {
         status: refundResponse.data.status,
         currency,
         customerPhone,
-        paymentProviderResponse: {
-          refund: refundResponse.data,
-          merchantPayment: merchantPayResponse.data
-        },
+        refundMpResponse: merchantPayResponse.data,
         transactionType: 'REFUND',
         metaData: {
           ...metaData,
@@ -877,7 +874,7 @@ export class OrangePaymentService {
         status: 'FAILED',
         currency,
         customerPhone,
-        paymentProviderResponse: {
+        refundMpResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
           timestamp: Math.floor(Date.now() / 1000)

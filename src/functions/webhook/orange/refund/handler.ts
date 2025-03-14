@@ -26,8 +26,9 @@ interface WebhookEvent {
 }
 
 interface PaymentRecordUpdate {
-  status: string;
-  paymentProviderResponse: {
+  status?: string;
+  refundMpGetResponse?: PaymentResponse['data'];
+  paymentProviderResponse?: {
     status: string;
     inittxnstatus?: string;
     confirmtxnstatus?: string;
@@ -194,6 +195,12 @@ export class OrangeRefundWebhookService {
       // Get payment status from Orange API
       const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
 
+      const refundMpGetResponsePayload: PaymentRecordUpdate = {
+        refundMpGetResponse: paymentStatus.data
+      };
+
+      await this.updatePaymentRecord(transaction.transactionId, refundMpGetResponsePayload);
+
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
 
@@ -218,11 +225,6 @@ export class OrangeRefundWebhookService {
       // Update transaction record
       await this.updatePaymentRecord(transaction.transactionId, {
         status: refundStatus,
-        paymentProviderResponse: {
-          status: paymentStatus.data.status,
-          inittxnstatus: paymentStatus.data.inittxnstatus,
-          confirmtxnstatus: paymentStatus.data.confirmtxnstatus ?? undefined
-        }
       });
 
       return {

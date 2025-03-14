@@ -44,12 +44,12 @@ export interface CreatePaymentRecord {
 
 export interface UpdatePaymentRecord {
   orderId?: string;
-  amount: number;
+  amount?: number;
   currency?: string;
-  paymentMethod: string;
+  paymentMethod?: string;
   customerPhone?: string;
   destinationId?: string;
-  status: string;
+  status?: string;
   paymentProviderResponse?:
   | Stripe.PaymentIntent
   | Stripe.Refund
@@ -66,8 +66,8 @@ export interface UpdatePaymentRecord {
   merchantRefundId?: string;
   settlementDate?: number;
   transactionType?: string;
-  GSI1SK: number;
-  GSI2SK: number;
+  GSI1SK?: number;
+  GSI2SK?: number;
   exchangeRate?: string;
   processingFee?: string;
   netAmount?: string;
