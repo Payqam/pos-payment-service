@@ -1,0 +1,92 @@
+{
+  "testData": [
+    {
+      "payer": "94713579028",
+      "merchant": "94760000000"
+    }
+  ],
+
+  "invalidId": [
+    {
+      "title": "Invalid transactionId",
+      "transactionId": "5ceRbaa7-8Ed0-a9-b1-8eb9ecc7bA",
+      "expectedStatus": 400
+    }
+  ],
+  "invalidData": [
+    {
+      "title": "Invalid phone number format for customerPhone",
+      "body": { "orange[customerPhone]": "invalid_number"},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Invalid format for currency",
+      "body": { "orange[currency]": "invalid_currency"},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Invalid phone number for merchantMobile",
+      "body": { "orange[merchantMobileNo]": "invalid_number"},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Exceeding maximum transaction limit",
+      "body": {"orange[amount]": 1000000000000000000000000000000.0 },
+      "expectedStatus": 500,
+      "expectedMessage": "MAX_SAFE_INTEGER"
+    },
+    {
+      "title": "Minimum transaction limit",
+      "body": {"orange[amount]": 0.001 },
+      "expectedStatus": 500,
+      "expectedMessage": "Request failed with status"
+    },
+    {
+      "title": "Negative transaction",
+      "body": {"orange[amount]": -10 },
+      "expectedStatus": 500,
+      "expectedMessage": "Request failed with status"
+    },
+    {
+      "title": "Invalid amount",
+      "body": { "orange[amount]": "ABC"},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+
+    },
+    {
+      "title": "Empty phone number for customerPhone",
+      "body": { "orange[customerPhone]": " "},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Empty phone number for merchantMobile",
+      "body": { "orange[merchantMobileNo]": " "},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Empty amount field",
+      "body": { "orange[amount]": " " },
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Empty currency field",
+      "body": { "orange[currency]": " "},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+    },
+    {
+      "title": "Missed MerchantId",
+      "body": { "orange[merchantId]": " "},
+      "expectedStatus": 400,
+      "expectedMessage": "Invalid request body"
+
+    }
+  ]
+}
