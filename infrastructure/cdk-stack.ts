@@ -313,26 +313,6 @@ export class CDKStack extends cdk.Stack {
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
 
-    // Create Orange webhook Lambda
-    const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
-      name: `OrangeWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.ORANGE_WEBHOOK}/handler.ts`,
-      vpc: vpcConstruct.vpc,
-      environment: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-        ORANGE_API_SECRET: orangeSecret.secretName,
-      },
-    });
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
-    orangeWebhookLambda.lambda.addToRolePolicy(
-      iamConstruct.secretsManagerPolicy
-    );
-    orangeSecret.grantRead(orangeWebhookLambda.lambda);
-    createLambdaLogGroup(this, orangeWebhookLambda.lambda);
-
     // Create Orange charge webhook Lambda
     const orangeChargeWebhookLambda = new PAYQAMLambda(this, 'OrangeChargeWebhookLambda', {
       name: `OrangeChargeWebhook-${props.envName}${props.namespace}`,
@@ -526,7 +506,6 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeChargeWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(orangeRefundWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnPaymentWebhookLambda.lambda);
@@ -565,7 +544,6 @@ export class CDKStack extends cdk.Stack {
       mtnDisbursementWebhookLambda.lambda,
       stripeWebhookLambda.lambda,
       transactionsProcessLambda.lambda,
-      orangeWebhookLambda.lambda,
       orangeChargeWebhookLambda.lambda,
       orangeRefundWebhookLambda.lambda,
     ];
@@ -727,40 +705,6 @@ export class CDKStack extends cdk.Stack {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
               received: { type: apigateway.JsonSchemaType.BOOLEAN },
-            },
-          },
-        },
-      },
-      {
-        path: 'webhooks/orange',
-        method: 'POST',
-        lambda: orangeWebhookLambda.lambda,
-        apiKeyRequired: false,
-        requestModel: {
-          modelName: 'OrangeWebhookRequestModel',
-          schema: {
-            type: apigateway.JsonSchemaType.OBJECT,
-            properties: {
-              type: { type: apigateway.JsonSchemaType.STRING },
-              data: {
-                type: apigateway.JsonSchemaType.OBJECT,
-                properties: {
-                  transactionId: { type: apigateway.JsonSchemaType.STRING },
-                  payToken: { type: apigateway.JsonSchemaType.STRING },
-                  status: { type: apigateway.JsonSchemaType.STRING },
-                  amount: { type: apigateway.JsonSchemaType.STRING },
-                  currency: { type: apigateway.JsonSchemaType.STRING },
-                },
-              },
-            },
-          },
-        },
-        responseModel: {
-          modelName: 'OrangeWebhookResponseModel',
-          schema: {
-            type: apigateway.JsonSchemaType.OBJECT,
-            properties: {
-              message: { type: apigateway.JsonSchemaType.STRING },
             },
           },
         },
@@ -1070,7 +1014,6 @@ export class CDKStack extends cdk.Stack {
       transactionsProcessLambda.lambda.functionName,
       stripeWebhookLambda.lambda.functionName,
       mtnDisbursementWebhookLambda.lambda.functionName,
-      orangeWebhookLambda.lambda.functionName,
       orangeChargeWebhookLambda.lambda.functionName,
       orangeRefundWebhookLambda.lambda.functionName,
       mtnPaymentWebhookLambda.lambda.functionName,
