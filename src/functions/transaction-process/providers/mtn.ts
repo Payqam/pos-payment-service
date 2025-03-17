@@ -511,9 +511,45 @@ export class MtnPaymentService {
           throw new Error('Transaction not found for refund');
         }
 
+        // Determine the refund amount - use the provided amount if specified, otherwise use the original transaction amount
+        let refundAmount = transactionRecord.Item.amount;
+
+        // If amount is provided in the request, validate and use it
+        if (amount !== undefined && amount !== null) {
+          this.logger.info('Using provided refund amount', {
+            providedAmount: amount,
+            originalAmount: transactionRecord.Item.amount,
+          });
+
+          // Validate that the refund amount doesn't exceed the original transaction amount
+          if (amount > transactionRecord.Item.amount) {
+            this.logger.error(
+              'Refund amount exceeds original transaction amount',
+              {
+                providedAmount: amount,
+                originalAmount: transactionRecord.Item.amount,
+                transactionId,
+              }
+            );
+            throw new EnhancedError(
+              'INVALID_REFUND_AMOUNT',
+              ErrorCategory.VALIDATION_ERROR,
+              `Refund amount (${amount}) exceeds the original transaction amount (${transactionRecord.Item.amount})`
+            );
+          }
+
+          // Use the provided amount for the refund
+          refundAmount = amount;
+        } else {
+          this.logger.info('Using original transaction amount for refund', {
+            amount: refundAmount,
+            transactionId,
+          });
+        }
+
         // Call the disbursement transfer API to transfer money to the customer
         const customerRefundId = await this.initiateTransfer(
-          transactionRecord.Item.amount,
+          refundAmount,
           transactionRecord.Item.mobileNo,
           transactionRecord.Item.currency,
           TransactionType.CUSTOMER_REFUND
@@ -522,6 +558,7 @@ export class MtnPaymentService {
         const updateData = {
           status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
           customerRefundId: customerRefundId,
+          customerRefundAmount: refundAmount, // Store the actual refund amount in the record
         };
         await this.dbService.updatePaymentRecord({ transactionId }, updateData);
         // Send to SalesForce
@@ -531,6 +568,7 @@ export class MtnPaymentService {
             transactionId: transactionRecord.Item.transactionId,
             status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
             type: 'UPDATE',
+            customerRefundAmount: refundAmount, // Include refund amount in the SNS message
           }
         );
 
@@ -541,14 +579,14 @@ export class MtnPaymentService {
             {
               financialTransactionId: uuidv4(),
               externalId: customerRefundId,
-              amount: transactionRecord.Item.amount as unknown as string,
+              amount: refundAmount as unknown as string,
               currency: transactionRecord.Item.currency,
               payee: {
                 partyIdType: 'MSISDN',
-                partyId: mobileNo,
+                partyId: transactionRecord.Item.mobileNo,
               },
               payeeNote: `Refund is processed for the transaction ${transactionRecord.Item.transactionId}`,
-              payerMessage: 'YOur refund is processing. Thank you.',
+              payerMessage: 'Your refund is processing. Thank you.',
               reason: undefined,
               status: 'SUCCESSFUL',
             },
