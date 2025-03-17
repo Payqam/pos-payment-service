@@ -1,23 +1,23 @@
 import testData from '../../cypress/fixtures/mtn_test_data.json';
 
-let transactionId, accessToken, uniqueId, accesstoken, externalId;
+let transactionId, accessToken, uniqueId, authtoken, externalId;
 describe('MTN Payment Processing Tests', () => {
   testData.testData.forEach((test) => {
     describe('Validate Successful Payment Processing', () => {
       it('should process a payment', () => {
         cy.request({
           method: 'POST',
-          url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
+          url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
           headers: {
-            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'x-api-key': `${Cypress.env('MTNApiKey')}`,
             'Content-Type': 'application/json',
           },
           body: {
             merchantId: 'MERCHANT_123',
             merchantMobileNo: test.merchant,
-            amount: 100.12,
+            amount: 100,
             customerPhone: test.payer,
-            transactionType: 'PAYMENT',
+            transactionType: 'CHARGE',
             paymentMethod: 'MTN',
             currency: 'EUR',
             metaData: {
@@ -36,7 +36,7 @@ describe('MTN Payment Processing Tests', () => {
           expect(response.body.transactionDetails).to.have.property(
             'transactionId'
           );
-          expect(['SUCCESSFUL', 'PENDING']).to.include(
+          expect('PAYMENT_REQUEST_CREATED').to.include(
             response.body.transactionDetails.status
           );
 
@@ -50,9 +50,9 @@ describe('MTN Payment Processing Tests', () => {
       it('should get transaction status', () => {
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('ServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+          url: `${Cypress.env('MTNServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
           headers: {
-            'x-api-key': `${Cypress.env('xApiKey')}`,
+            'x-api-key': `${Cypress.env('MTNApiKey')}`,
             'Content-Type': 'application/json',
           },
         }).then((response) => {
@@ -64,11 +64,15 @@ describe('MTN Payment Processing Tests', () => {
           );
           expect(response.body.transaction.Item).to.have.property(
             'status',
-            'PENDING'
+            'DISBURSEMENT_SUCCESSFUL'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
+          externalId =
+            response.body.transaction.Item.paymentResponse.externalId;
+          cy.task('log', ` ${externalId}`);
+          Cypress.env('externalId', externalId);
           cy.task('log', response.body);
         });
       });
@@ -78,11 +82,11 @@ describe('MTN Payment Processing Tests', () => {
           method: 'POST',
           url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
           headers: {
-            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNCollectionSubscriptionKey')}`,
             Authorization:
               'Basic ' +
               btoa(
-                `${Cypress.env('MTN_COLLECTION_API_USER')}:${Cypress.env('MTN_COLLECTION_API_KEY')}`
+                `${Cypress.env('MTNCollectionApiUser')}:${Cypress.env('MTNCollectionApiKey')}`
               ),
           },
         }).then((response) => {
@@ -100,19 +104,12 @@ describe('MTN Payment Processing Tests', () => {
           headers: {
             'X-Target-Environment': 'sandbox',
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
-            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_COLLECTION_SUBSCRIPTION_KEY')}`,
+            'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNCollectionSubscriptionKey')}`,
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
           cy.task('log', response.body);
-          expect(response.body).to.have.property(
-            'payerMessage',
-            'PayQAM payment request'
-          );
           expect(response.body).to.have.property('status', 'SUCCESSFUL');
-          externalId = response.body.externalId;
-          cy.task('log', externalId);
-          Cypress.env('externalId', externalId);
         });
       });
 
@@ -122,19 +119,37 @@ describe('MTN Payment Processing Tests', () => {
             method: 'POST',
             url: 'https://sandbox.momodeveloper.mtn.com/disbursement/token/',
             headers: {
-              'Ocp-Apim-Subscription-Key': `${Cypress.env('MTN_DISBURSEMENT_SUBSCRIPTION_KEY')}`,
+              'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNDisbursementSubscriptionKey')}`,
               Authorization:
                 'Basic ' +
                 btoa(
-                  `${Cypress.env('MTN_DISBURSEMENT_API_USER')}:${Cypress.env('MTN_DISBURSEMENT_API_KEY')}`
+                  `${Cypress.env('MTNDisbursementApiUser')}:${Cypress.env('MTNDisbursementApiKey')}`
                 ),
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
             cy.task('log', response.body);
-            accesstoken = response.body.access_token;
-            cy.task('log', accesstoken);
-            Cypress.env('accesstoken', accesstoken);
+            authtoken = response.body.access_token;
+            cy.task('log', authtoken);
+            Cypress.env('authtoken', authtoken);
+          });
+        });
+
+        it('Check Disbursement Status', () => {
+          cy.request({
+            method: 'GET',
+            url: `https://sandbox.momodeveloper.mtn.com/disbursement/v1_0/transfer/${Cypress.env('uniqueId')}`,
+            headers: {
+              'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNDisbursementSubscriptionKey')}`,
+              'X-Target-Environment': `${Cypress.env('MTNTargetEnvironment')}`,
+              Authorization: `Bearer ${Cypress.env('authtoken')}`,
+              'Content-Type': 'application/json',
+            },
+          }).then((response) => {
+            expect(response.status).to.eq(200);
+            cy.task('log', response.body);
+            expect(response.body).to.have.property('status', 'SUCCESSFUL');
+            expect(response.body).to.have.property('amount', '97.5');
           });
         });
       });
@@ -146,7 +161,7 @@ describe('Validate Request with Invalid API Token', () => {
   it('should return 403 for invalid API token', () => {
     cy.request({
       method: 'POST',
-      url: `${Cypress.env('ServiceEndpoint')}/transaction/process/charge`,
+      url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
       headers: {
         'x-api-key': `${Cypress.env('InvalidXApiKey')}`,
         'Content-Type': 'application/json',
