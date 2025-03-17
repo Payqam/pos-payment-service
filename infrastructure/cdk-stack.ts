@@ -106,9 +106,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        apiKey: process.env.STRIPE_API_SECRET || 'stripe_test_key',
-        signingSecret:
-          process.env.STRIPE_SIGNING_SECRET || 'stripe_test_signing_secret',
+        apiKey: process.env.STRIPE_API_SECRET as string,
+        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
       },
     };
 
@@ -118,26 +117,18 @@ export class CDKStack extends cdk.Stack {
       description: 'Stores MTN Mobile Money API keys and endpoint',
       secretValues: {
         collection: {
-          subscriptionKey:
-            process.env.MTN_COLLECTION_SUBSCRIPTION_KEY ||
-            'mtn_test_collection_key',
-          apiUser:
-            process.env.MTN_COLLECTION_API_USER || 'mtn_test_collection_user',
-          apiKey:
-            process.env.MTN_COLLECTION_API_KEY || 'mtn_test_collection_api_key',
+          subscriptionKey: process.env
+            .MTN_COLLECTION_SUBSCRIPTION_KEY as string,
+          apiUser: process.env.MTN_COLLECTION_API_USER as string,
+          apiKey: process.env.MTN_COLLECTION_API_KEY as string,
         },
         disbursement: {
-          subscriptionKey:
-            process.env.MTN_DISBURSEMENT_SUBSCRIPTION_KEY ||
-            'mtn_test_disbursement_key',
-          apiUser:
-            process.env.MTN_DISBURSEMENT_API_USER ||
-            'mtn_test_disbursement_user',
-          apiKey:
-            process.env.MTN_DISBURSEMENT_API_KEY ||
-            'mtn_test_disbursement_api_key',
+          subscriptionKey: process.env
+            .MTN_DISBURSEMENT_SUBSCRIPTION_KEY as string,
+          apiUser: process.env.MTN_DISBURSEMENT_API_USER as string,
+          apiKey: process.env.MTN_DISBURSEMENT_API_KEY as string,
         },
-        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
+        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT as string,
       },
     };
 

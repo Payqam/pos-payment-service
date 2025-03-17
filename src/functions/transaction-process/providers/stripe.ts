@@ -34,6 +34,7 @@ export class CardPaymentService {
     cardData: CardData,
     transactionType: string,
     merchantId: string,
+    currency: string,
     customerPhone?: string,
     metaData?: Record<string, string>
   ): Promise<{ transactionId: string; status: string }> {
@@ -47,6 +48,7 @@ export class CardPaymentService {
       process.env.STRIPE_API_SECRET as string
     );
     const stripeClient = new stripe(stripeSecret.apiKey);
+    const dateTime = new Date().toISOString();
 
     switch (transactionType) {
       case 'CHARGE': {
@@ -66,7 +68,7 @@ export class CardPaymentService {
           try {
             paymentIntent = await stripeClient.paymentIntents.create({
               amount,
-              currency: cardData.currency as string,
+              currency: currency,
               payment_method: cardData.paymentMethodId,
               confirm: true,
               transfer_data: {
@@ -96,12 +98,12 @@ export class CardPaymentService {
                 metaData,
                 fee: feeAmount,
                 uniqueId: paymentError.payment_intent?.id as string,
-                GSI1SK: Math.floor(Date.now() / 1000),
-                GSI2SK: Math.floor(Date.now() / 1000),
-                exchangeRate: 'N/A',
-                processingFee: 'N/A',
-                netAmount: 'N/A',
-                externalTransactionId: 'N/A',
+                GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
+                GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
+                // exchangeRate: 'N/A',
+                // processingFee: 'N/A',
+                // netAmount: 'N/A',
+                // externalTransactionId: 'N/A',
               };
               this.logger.info(
                 'Failed payment record created in DynamoDB',
@@ -119,13 +121,13 @@ export class CardPaymentService {
                   transactionType: 'CHARGE',
                   metaData,
                   fee: feeAmount,
-                  createdOn: Math.floor(Date.now() / 1000),
+                  createdOn: dateTime,
                   customerPhone,
-                  currency: cardData.currency,
-                  exchangeRate: 'exchangeRate',
-                  processingFee: 'processingFee',
-                  netAmount: 'netAmount',
-                  externalTransactionId: 'externalTransactionId',
+                  currency: currency,
+                  // exchangeRate: 'exchangeRate',
+                  // processingFee: 'processingFee',
+                  // netAmount: 'netAmount',
+                  // externalTransactionId: 'externalTransactionId',
                 }
               );
               await this.dbService.createPaymentRecord(failedRecord);
@@ -150,12 +152,12 @@ export class CardPaymentService {
             metaData,
             fee: feeAmount,
             uniqueId: paymentIntent?.id as string,
-            GSI1SK: Math.floor(Date.now() / 1000),
-            GSI2SK: Math.floor(Date.now() / 1000),
-            exchangeRate: 'exchangeRate',
-            processingFee: 'processingFee',
-            netAmount: 'netAmount',
-            externalTransactionId: 'externalTransactionId',
+            GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
+            GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
+            // exchangeRate: 'exchangeRate',
+            // processingFee: 'processingFee',
+            // netAmount: 'netAmount',
+            // externalTransactionId: 'externalTransactionId',
           };
           await this.dbService.createPaymentRecord(record);
           this.logger.info('Payment record created in DynamoDB', record);
@@ -177,13 +179,13 @@ export class CardPaymentService {
               transactionType: 'CHARGE',
               metaData,
               fee: feeAmount,
-              createdOn: Math.floor(Date.now() / 1000),
+              createdOn: dateTime,
               customerPhone,
-              currency: cardData.currency,
-              exchangeRate: 'exchangeRate',
-              processingFee: 'processingFee',
-              netAmount: 'netAmount',
-              externalTransactionId: 'externalTransactionId',
+              currency: currency,
+              // exchangeRate: 'exchangeRate',
+              // processingFee: 'processingFee',
+              // netAmount: 'netAmount',
+              // externalTransactionId: 'externalTransactionId',
             }
           );
 
@@ -216,24 +218,24 @@ export class CardPaymentService {
                 transactionId: transactionId,
               },
             });
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-expect-error
-          } catch (refundError: never) {
-            this.logger.error('Error creating refund', refundError);
-            await this.snsService.publish(
-              process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-              {
-                transactionId,
-                status: 'FAILED',
-                type: 'CREATE',
-                amount,
-                merchantId,
-                transactionType: 'REFUND',
-                metaData,
-              }
-            );
+          } catch (refundError: unknown) {
+            if (refundError instanceof stripe.errors.StripeError) {
+              this.logger.error('Error creating refund', refundError);
+              await this.snsService.publish(
+                process.env.TRANSACTION_STATUS_TOPIC_ARN!,
+                {
+                  transactionId,
+                  status: 'FAILED',
+                  type: 'CREATE',
+                  amount,
+                  merchantId,
+                  transactionType: 'REFUND',
+                  metaData,
+                }
+              );
 
-            throw refundError;
+              throw refundError;
+            }
           }
 
           this.logger.info('Refund processed', refund);
@@ -242,7 +244,7 @@ export class CardPaymentService {
             {
               paymentMethod: 'Stripe',
               transactionId: transactionId,
-              status: refund.status,
+              status: refund?.status as string,
               type: 'UPDATE',
               amount,
               merchantId,
@@ -253,7 +255,7 @@ export class CardPaymentService {
 
           return {
             transactionId: transactionId,
-            status: refund.status as string,
+            status: refund?.status as string,
           };
         } catch (error) {
           this.logger.error('Unexpected error processing refund', error);
