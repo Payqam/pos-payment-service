@@ -147,12 +147,6 @@ export class MtnPaymentService {
       headers['X-Callback-Url'] = process.env
         .MTN_MERCHANT_REFUND_WEBHOOK_URL as string;
     }
-    this.logger.info('Generated headers for MTN request', {
-      type,
-      headers,
-      hasCallbackUrl: !!headers['X-Callback-Url'],
-    });
-
     return headers;
   }
 

@@ -313,7 +313,7 @@ export class SalesforceSyncService {
       // Create a new error record in Salesforce
       try {
         const createRecordResponse = await axios.post(
-          `${urlHost}/services/data/v63.0/sobjects/Transaction_Error__c/`,
+          `${urlHost}/services/apexrest/PayQam/Streaming`,
           recordPayload,
           {
             headers: {
