@@ -11,6 +11,10 @@ registerRedactFilter(sensitiveFields);
 interface SalesforceCredentials {
   clientSecret: string;
   clientId: string;
+  username: string;
+  password: string;
+  host: string;
+  ownerId: string;
 }
 interface SNSMessage {
   transactionId: string;
@@ -70,30 +74,6 @@ export class SalesforceSyncService {
     }
   }
 
-  // private async getAccessToken(
-  //   credentials: SalesforceCredentials
-  // ): Promise<string> {
-  //   try {
-  //     const urlHost = process.env.SALESFORCE_URL_HOST as string;
-  //     const authResponse = await axios.post(
-  //       `${urlHost}/services/oauth2/token`,
-  //       new URLSearchParams({
-  //         grant_type: 'client_credentials',
-  //         client_id: credentials.clientId,
-  //         client_secret: credentials.clientSecret,
-  //       }),
-  //       {
-  //         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  //       }
-  //     );
-  //
-  //     this.logger.info('Successfully retrieved Salesforce auth token');
-  //     return authResponse.data.access_token;
-  //   } catch (error) {
-  //     this.logger.error('Error fetching Salesforce auth token', { error });
-  //     throw new Error('Failed to fetch Salesforce auth token');
-  //   }
-  // }
   private async getAccessToken(
     credentials: SalesforceCredentials
   ): Promise<string> {
@@ -105,8 +85,8 @@ export class SalesforceSyncService {
           grant_type: 'password',
           client_id: credentials.clientId,
           client_secret: credentials.clientSecret,
-          username: 'kokiladev@qriomatrix.com',
-          password: 'qr!0Matrixs18oDSyszN2oca8x5SY8qyFz',
+          username: credentials.username,
+          password: credentials.password,
         }),
         {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -128,7 +108,7 @@ export class SalesforceSyncService {
     try {
       this.logger.info('Handling payment status update', { message });
       const accessToken = await this.getAccessToken(credentials);
-      const urlHost = process.env.SALESFORCE_URL_HOST as string;
+      const urlHost = credentials.host as string;
 
       // Fetch existing record
       const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`;
@@ -165,8 +145,8 @@ export class SalesforceSyncService {
         }),
       };
 
-      await axios.patch(
-        `${urlHost}/services/data/v60.0/sobjects/Transaction__c/${recordId}`,
+      await axios.post(
+        `${urlHost}/services/apexrest/PayQam/Streaming`,
         recordPayload,
         {
           headers: {
@@ -193,10 +173,8 @@ export class SalesforceSyncService {
       const accessToken = await this.getAccessToken(credentials);
       const urlHost = process.env.SALESFORCE_URL_HOST as string;
 
-      // todo: fix date issue
-      // todo: add merchant phone number
       const recordPayload = {
-        OwnerId: process.env.SALESFORCE_OWNER_ID,
+        OwnerId: credentials.ownerId,
         ServiceType__c: message.paymentMethod,
         transactionId__c: message.transactionId,
         status__c: message.status,
@@ -204,21 +182,21 @@ export class SalesforceSyncService {
         merchantId__c: message.merchantId,
         Transaction_Type__c: message.transactionType,
         metaData__C: JSON.stringify(message.metaData),
-        fee__c: message.fee,
+        fee__c: message.fee.toString(),
         Device_id__c: message.metaData.deviceId,
         Transaction_Date_Time__c: message.createdOn,
         Customer_Phone__c: message.customerPhone,
         Currency__c: message.currency,
         Exchange_Rate__c: message.exchangeRate,
         Processing_Fee__c: message.processingFee,
-        Net_Amount__c: message.amount,
+        Net_Amount__c: message.amount.toString(),
         ExternalTransactionId__c: message.externalTransactionId,
       };
 
       this.logger.info('Creating Salesforce Payment record', { recordPayload });
 
       const createRecordResponse = await axios.post(
-        `${urlHost}/services/data/v63.0/sobjects/Transaction__c/`,
+        `${urlHost}/services/apexrest/PayQam/Streaming`,
         recordPayload,
         {
           headers: {
