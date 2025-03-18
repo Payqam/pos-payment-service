@@ -99,6 +99,10 @@ export class CDKStack extends cdk.Stack {
       secretValues: {
         clientId: process.env.SALESFORCE_CLIENT_ID as string,
         clientSecret: process.env.SALESFORCE_CLIENT_SECRET as string,
+        username: process.env.SALESFORCE_USERNAME as string,
+        password: process.env.SALESFORCE_PASSWORD as string,
+        ownerId: process.env.SALESFORCE_OWNER_ID as string,
+        host: process.env.SALESFORCE_URL_HOST as string,
       },
     };
 
@@ -208,8 +212,6 @@ export class CDKStack extends cdk.Stack {
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           SALESFORCE_SECRET: salesForceSecret.secretName,
-          SALESFORCE_URL_HOST: process.env.SALESFORCE_URL_HOST as string,
-          SALESFORCE_OWNER_ID: process.env.SALESFORCE_OWNER_ID as string,
         },
       }
     );
