@@ -31,6 +31,14 @@ import { DynamoDBDashboard } from './cloudwatch-dashboards/dynamoDB-dashboard';
 import { SNSDashboard } from './cloudwatch-dashboards/sns-dashboard';
 import { ApiGatewayDashboard } from './cloudwatch-dashboards/apiGateway-dashboard';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import {
+  BlockPublicAccess,
+  Bucket
+} from 'aws-cdk-lib/aws-s3';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -966,6 +974,38 @@ export class CDKStack extends cdk.Stack {
       envName: props.envName,
       namespace: props.namespace,
       apiGatewayName: apiGateway.api.restApiName,
+    });
+
+    /**
+     * Swagger UI Deployment
+     */
+    const swaggerBucket = new Bucket(this, 'SwaggerUIBucket', {
+      bucketName: `payqam-api-documentation-host-${props.envName}${props.namespace}`.toLowerCase(),
+      websiteIndexDocument: 'index.html',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ACLS,
+    });
+
+    swaggerBucket.addToResourcePolicy(
+      new PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`${swaggerBucket.bucketArn}/*`],
+        principals: [new iam.AnyPrincipal()],
+      })
+    );
+    const cloudFrontDistribution = new cloudfront.Distribution(this, 'SwaggerUICloudFront', {
+      defaultRootObject: 'index.html',
+      defaultBehavior: {
+        origin: new origins.S3StaticWebsiteOrigin(swaggerBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+    });
+
+    new s3deploy.BucketDeployment(this, 'DeploySwaggerUI', {
+      sources: [s3deploy.Source.asset('./swagger-ui-dist')],
+      destinationBucket: swaggerBucket,
+      distribution: cloudFrontDistribution,
+      distributionPaths: ['/*'],
     });
 
     // Add stack outputs
