@@ -207,6 +207,26 @@ export class MTNPaymentWebhookService {
 
       const transaction = result?.Items?.[0] ?? null;
 
+      // Verify the transaction hasn't already been processed
+      if (
+        transaction?.status ===
+          String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL) ||
+        transaction?.status === String(MTNPaymentStatus.MERCHANT_REFUND_FAILED)
+      ) {
+        this.logger.warn('Merchant refund already processed', {
+          transactionId: transaction.transactionId,
+          currentStatus: transaction.status,
+          externalId,
+        });
+        return {
+          statusCode: 200,
+          headers: API.DEFAULT_HEADERS,
+          body: JSON.stringify({
+            message: 'Webhook already processed for this transaction',
+          }),
+        };
+      }
+
       const transactionStatus: WebhookEvent =
         await this.mtnService.checkTransactionStatus(
           externalId,

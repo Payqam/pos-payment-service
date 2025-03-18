@@ -253,6 +253,48 @@ export class MTNDisbursementWebhookService {
 
       // Initiate merchant refund if customer refund is successful
       if (transactionStatus.status === 'SUCCESSFUL') {
+        // Check if the transaction status allows for merchant refund (must be after CUSTOMER_REFUND_REQUEST_CREATED)
+        if (
+          transaction.status <= MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED
+        ) {
+          this.logger.warn(
+            'Cannot initiate merchant refund: Customer refund not yet processed',
+            {
+              transactionId: transaction.transactionId,
+              currentStatus: transaction.status,
+            }
+          );
+          return {
+            statusCode: 200,
+            headers: API.DEFAULT_HEADERS,
+            body: JSON.stringify({
+              message:
+                'Webhook processed successfully, merchant refund not initiated due to invalid status',
+            }),
+          };
+        }
+
+        // Check if merchant refund has already been initiated
+        if (
+          transaction.status ===
+            MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED ||
+          transaction.status === MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL ||
+          transaction.status === MTNPaymentStatus.MERCHANT_REFUND_FAILED
+        ) {
+          this.logger.warn('Merchant refund already initiated or completed', {
+            transactionId: transaction.transactionId,
+            currentStatus: transaction.status,
+          });
+          return {
+            statusCode: 200,
+            headers: API.DEFAULT_HEADERS,
+            body: JSON.stringify({
+              message:
+                'Webhook processed successfully, merchant refund already in progress or completed',
+            }),
+          };
+        }
+
         const merchantRefundId = uuidv4();
 
         const axiosInstance = await this.mtnService.createAxiosInstance(
