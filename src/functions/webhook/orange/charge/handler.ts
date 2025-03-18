@@ -4,14 +4,17 @@ import {
   APIGatewayProxyResult,
 } from 'aws-lambda';
 import { Logger, LoggerService } from '@mu-ts/logger';
-import { OrangePaymentService } from '../../transaction-process/providers';
+import { OrangePaymentService } from '../../../transaction-process/providers';
 import {
   DynamoDBService,
   TransactionRecord,
-} from '../../../services/dynamodbService';
-import { SNSService } from '../../../services/snsService';
-import { PaymentResponse } from '../../transaction-process/interfaces/orange';
-import { SecretsManagerService } from '../../../services/secretsManagerService';
+} from '../../../../services/dynamodbService';
+import { SNSService } from '../../../../services/snsService';
+import { PaymentResponse } from '../../../transaction-process/interfaces/orange';
+import { SecretsManagerService } from '../../../../services/secretsManagerService';
+import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
+import { PAYMENT_SCENARIOS, PaymentScenario } from 'configurations/sandbox/orange/scenarios';
+import { OrangePaymentStatus } from 'src/types/orange';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -22,8 +25,10 @@ interface WebhookEvent {
 }
 
 interface PaymentRecordUpdate {
-  status: string;
-  paymentResponse: {
+  status?: string;
+  chargeMpGetResponse?: PaymentResponse['data'];
+  settlementCashInResponse?: PaymentResponse['data'];
+  paymentProviderResponse?: {
     status: string;
     inittxnstatus?: string;
     confirmtxnstatus?: string;
@@ -49,7 +54,7 @@ class WebhookError extends Error {
   }
 }
 
-export class OrangeWebhookService {
+export class OrangeChargeWebhookService {
   private readonly logger: Logger;
 
   private readonly dbService: DynamoDBService;
@@ -135,21 +140,21 @@ export class OrangeWebhookService {
     });
 
     // If the payment is still pending, keep it as pending
-    if (status === 'PENDING' && initStatus === '200' && !confirmStatus) {
-      return 'PENDING';
+    if (status === 'PENDING') {
+      return OrangePaymentStatus.PAYMENT_PENDING;
     }
 
     // If we have a successful confirmation, mark as success
-    if (confirmStatus === '200') {
-      return 'SUCCESS';
+    if (status === 'SUCCESSFULL') {
+      return OrangePaymentStatus.PAYMENT_SUCCESSFUL;
     }
 
     // If init failed or confirmation failed, mark as failed
-    if (initStatus !== '200' || (confirmStatus && confirmStatus !== '200')) {
-      return 'FAILED';
+    if (status === 'FAILED') {
+      return OrangePaymentStatus.PAYMENT_FAILED;
     }
 
-    return status || 'FAILED'; // Default to failed if status is unclear
+    return status || OrangePaymentStatus.PAYMENT_FAILED; // Default to failed if status is unclear
   }
 
   /**
@@ -276,14 +281,14 @@ export class OrangeWebhookService {
       ).toString();
 
       // Initialize disbursement
-      const initResponse = await this.orangeService.initDisbursement();
+      const initResponse = await this.orangeService.initiateCashinTransaction();
 
       if (!initResponse.data?.payToken) {
         throw new Error('Failed to get payToken for disbursement');
       }
 
       // Execute disbursement
-      const disbursementResponse = await this.orangeService.executeDisbursement(
+      const disbursementResponse = await this.orangeService.executeCashinPayment(
         {
           channelUserMsisdn: credentials.merchantPhone,
           amount: disbursementAmount,
@@ -293,6 +298,12 @@ export class OrangeWebhookService {
           payToken: initResponse.data.payToken,
         }
       );
+
+      const disbursementResponsePayload: PaymentRecordUpdate = {
+        settlementCashInResponse: disbursementResponse.data
+      };
+
+      await this.updatePaymentRecord(transaction.transactionId, disbursementResponsePayload);
 
       const result = {
         status: disbursementResponse.data.status,
@@ -333,61 +344,86 @@ export class OrangeWebhookService {
       const paymentResponse =
         await this.orangeService.getPaymentStatus(payToken);
 
+        const getpaymentResponsePayload: PaymentRecordUpdate = {
+          chargeMpGetResponse: paymentResponse.data
+        };
+
+        await this.updatePaymentRecord(transaction.transactionId, getpaymentResponsePayload);
+
+      // Get Orange credentials
+      const credentials = await this.getOrangeCredentials();
+
+      // Check if we're in sandbox environment
+      if (credentials.targetEnvironment === 'sandbox') {
+        const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
+
+        // Override payment status based on test phone numbers
+        const scenarioKey = Object.entries(TEST_NUMBERS.PAYMENT_SCENARIOS)
+          .find(([_, number]) => number === subscriberMsisdn)?.[0];
+
+        if (scenarioKey && scenarioKey in PAYMENT_SCENARIOS) {
+          const scenario = PAYMENT_SCENARIOS[scenarioKey as keyof typeof PAYMENT_SCENARIOS];
+          paymentResponse.data.status = scenario.status;
+          paymentResponse.data.inittxnstatus = scenario.txnStatus;
+          paymentResponse.data.inittxnmessage = scenario.message;
+        }
+      }
+
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
-      // // Don't process disbursement for pending payments
-      // if (status === 'PENDING') {
-      //   const updatePayload: PaymentRecordUpdate = {
-      //     status,
-      //     paymentProviderResponse: {
-      //       status,
-      //       inittxnstatus: paymentResponse.data.inittxnstatus || undefined
-      //     }
-      //   };
+      // Don't process disbursement for pending payments
+      if (status === OrangePaymentStatus.PAYMENT_PENDING) {
+        const updatePayload: PaymentRecordUpdate = {
+          status: OrangePaymentStatus.PAYMENT_PENDING,
+        };
 
-      //   await this.updatePaymentRecord(transaction.transactionId, updatePayload);
+        await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
-      //   return {
-      //     statusCode: 200,
-      //     body: JSON.stringify({ message: 'Payment is still pending' })
-      //   };
-      // }
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ message: 'Payment is still pending' })
+        };
+      }
 
       const updatePayload: PaymentRecordUpdate = {
-        status,
-        paymentResponse: {
-          status,
-          inittxnstatus: paymentResponse.data.inittxnstatus || undefined,
-          confirmtxnstatus: paymentResponse.data.confirmtxnstatus || undefined,
-        },
+        status: OrangePaymentStatus.PAYMENT_SUCCESSFUL,
       };
 
-      // TEMPORARY: Process disbursement for failed payments (testing only)
-      this.logger.info('SANDBOX: Processing disbursement for testing', {
-        status,
-      });
-      if (status === 'PENDING') {
+      // // TEMPORARY: Process disbursement for failed payments (testing only)
+      // this.logger.info('SANDBOX: Processing disbursement for testing', {
+      //   status,
+      // });
+      if (status === OrangePaymentStatus.PAYMENT_SUCCESSFUL) {
         const disbursementResult = await this.processDisbursement(
           transaction,
           transaction.amount.toString()
         );
 
-        // Only add disbursement data if we have valid results
-        // if (disbursementResult.status !== 'FAILED') {
-
-        Object.assign(updatePayload, {
-          settlementStatus: disbursementResult.status,
-          settlementPayToken: disbursementResult.payToken,
-          settlementResponse: {
-            status: disbursementResult.status,
-            orderId: disbursementResult.orderId,
-          },
-          settlementAmount: transaction.settlementAmount,
+        this.logger.debug('Checking disbursement result status', {
+          status: disbursementResult.status,
+          typeofStatus: typeof disbursementResult.status,
+          isSuccessful: disbursementResult.status === 'SUCCESSFULL'
         });
-        // } else {
-        //   updatePayload.disbursementStatus = 'FAILED';
-        // }
+
+        // Only add disbursement data if we have valid results
+        if (disbursementResult.status === 'SUCCESSFULL') {
+          this.logger.debug('Inside successful disbursement block');
+          Object.assign(updatePayload, {
+            settlementStatus: OrangePaymentStatus.DISBURSEMENT_SUCCESSFUL,
+            settlementPayToken: disbursementResult.payToken,
+            settlementResponse: {
+              status: disbursementResult.status,
+              orderId: disbursementResult.orderId,
+            },
+            settlementAmount: transaction.settlementAmount,
+          });
+        } else {
+          this.logger.debug('Inside failed disbursement block', {
+            status: disbursementResult.status
+          });
+          updatePayload.settlementStatus = OrangePaymentStatus.DISBURSEMENT_FAILED;
+        }
       }
 
       // Update the transaction record
@@ -429,7 +465,7 @@ export class OrangeWebhookService {
   }
 }
 
-const service = new OrangeWebhookService();
+const service = new OrangeChargeWebhookService();
 
 export const handler: APIGatewayProxyHandler = async (
   event: APIGatewayProxyEvent
