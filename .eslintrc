@@ -1,7 +1,7 @@
 {
   "root": true,
   "parser": "@typescript-eslint/parser",
-  "plugins": ["@typescript-eslint", "import", "prettier"],
+  "plugins": ["@typescript-eslint", "import", "prettier", "swagger-ui-dist"],
   "ignorePatterns": ["lib", "bin","cypress.config.ts"],
   "extends": [
     "eslint:recommended",

@@ -11,10 +11,10 @@ export interface CreatePaymentRecord {
   destinationId?: string;
   status: string;
   paymentResponse?:
-    | Stripe.PaymentIntent
-    | Stripe.Refund
-    | OrangePaymentResponse['data']
-    | Record<string, any>; // For other providers or error responses
+  | Stripe.PaymentIntent
+  | Stripe.Refund
+  | OrangePaymentResponse['data']
+  | Record<string, any>; // For other providers or error responses
   metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
@@ -23,6 +23,7 @@ export interface CreatePaymentRecord {
   settlementAmount?: number;
   settlementStatus?: string;
   uniqueId?: string;
+  merchantRefundId?: string;
   settlementDate?: number;
   transactionType?: string;
   GSI1SK: number;
@@ -31,4 +32,52 @@ export interface CreatePaymentRecord {
   processingFee?: string;
   netAmount?: string;
   externalTransactionId?: string;
+  chargeMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  chargeMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  settlementCashInResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  settlementCashInGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundCashinResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundCashinGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+}
+
+export interface UpdatePaymentRecord {
+  orderId?: string;
+  amount?: number;
+  currency?: string;
+  paymentMethod?: string;
+  customerPhone?: string;
+  destinationId?: string;
+  status?: string;
+  paymentProviderResponse?:
+  | Stripe.PaymentIntent
+  | Stripe.Refund
+  | OrangePaymentResponse['data']
+  | Record<string, any>; // For other providers or error responses
+  metaData?: Record<string, string> | undefined;
+  mobileNo?: string;
+  merchantId?: string;
+  merchantMobileNo?: string;
+  fee?: number;
+  settlementAmount?: number;
+  settlementStatus?: string;
+  uniqueId?: string;
+  merchantRefundId?: string;
+  settlementDate?: number;
+  transactionType?: string;
+  GSI1SK?: number;
+  GSI2SK?: number;
+  exchangeRate?: string;
+  processingFee?: string;
+  netAmount?: string;
+  externalTransactionId?: string;
+  chargeMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  chargeMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  settlementCashInResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  settlementCashInGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundCashinResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundCashinGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  refundMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
 }

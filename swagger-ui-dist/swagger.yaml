@@ -1,0 +1,844 @@
+openapi: 3.0.3
+info:
+  title: PayQam POS Payment Service API
+  description: |-
+    PayQam POS Payment Service API provides endpoints for processing payments
+    through various payment providers including MTN, Orange Money and Stripe.
+
+    ## Features
+    - Payment processing and status tracking
+    - Webhook handling for payment providers
+
+    ## Authentication
+    All API endpoints require authentication using API keys. Webhook endpoints require signature verification.
+
+    For more details about our payment integration, visit [PayQam Documentation](https://docs.payqam.com)
+  termsOfService: https://payqam.com/terms/
+  contact:
+    name: PayQam Support
+    email: support@payqam.com
+    url: https://payqam.com/support
+  license:
+    name: Proprietary
+  version: 1.0.0
+
+servers:
+  - url: https://api.payqam.com/v1
+    description: Production server
+  - url: https://ohdgm566qg.execute-api.us-east-1.amazonaws.com/SQA
+    description: Staging server
+  - url: https://bu2y2wsw08.execute-api.us-east-1.amazonaws.com/DEV
+    description: Local development
+
+tags:
+  - name: Payments
+    description: Payment processing endpoints
+  - name: Webhooks
+    description: Payment provider webhook endpoints
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Transaction:
+      type: object
+      required:
+        - amount
+        - currency
+        - paymentProvider
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        amount:
+          type: number
+          format: float
+          example: 1000.00
+        currency:
+          type: string
+          enum: [EUR, XOF, USD]
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PROCESSING
+            - SUCCESS
+            - FAILED
+            - REFUNDED
+            - REFUND_FAILED
+        paymentProvider:
+          type: string
+          enum:
+            - ORANGE
+            - STRIPE
+            - MTN
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: "PAYMENT_FAILED"
+        message:
+          type: string
+          example: "Payment processing failed"
+        details:
+          type: object
+          description: Additional error details
+
+    ChargeRequest:
+      type: object
+      required:
+        - merchantId
+        - amount
+        - paymentMethod
+        - customerPhone
+        - currency
+      properties:
+        merchantId:
+          type: string
+          example: "691654524"
+        amount:
+          type: number
+          example: 100000
+        transactionType:
+          type: string
+          example: "CHARGE"
+        paymentMethod:
+          type: string
+          enum:
+            - ORANGE
+            - CARD
+            - MTN
+        customerPhone:
+          type: string
+          example: "691654524"
+        currency:
+          type: string
+          example: "eur"
+        cardData:
+          type: object
+          properties:
+            paymentMethodId:
+              type: string
+            cardName:
+              type: string
+            destinationId:
+              type: string
+        metaData:
+          type: object
+          properties:
+            deviceId:
+              type: string
+              example: "deviceID"
+            location:
+              type: string
+              example: "transaction_location"
+            timestamp:
+              type: string
+              example: "transaction_timestamp"
+        merchantMobileNo:
+          type: string
+          example: "691654524"
+
+    ChargeResponse:
+      type: object
+      required:
+        - message
+        - transactionDetails
+      properties:
+        message:
+          type: string
+          example: "Payment processed successfully"
+        transactionDetails:
+          type: object
+          required:
+            - transactionId
+            - status
+          properties:
+            transactionId:
+              type: string
+              format: uuid
+              example: "b78dcc7b-6616-4e60-9688-8f1357bc5c4d"
+            status:
+              type: string
+              enum:
+                - PENDING
+                - PROCESSING
+                - SUCCESS
+                - FAILED
+
+    TransactionStatusResponse:
+      type: object
+      required:
+        - message
+        - transaction
+      properties:
+        message:
+          type: string
+          example: "Transaction retrieved successfully"
+        transaction:
+          type: object
+          properties:
+            $metadata:
+              type: object
+              properties:
+                httpStatusCode:
+                  type: integer
+                  example: 200
+                requestId:
+                  type: string
+                  example: "PCFTNBL3PN4UR53V67SM8B20ERVV4KQNSO5AEMVJF66Q9ASUAAJG"
+                attempts:
+                  type: integer
+                  example: 1
+                totalRetryDelay:
+                  type: integer
+                  example: 0
+            Item:
+              type: object
+              properties:
+                merchantMobileNo:
+                  type: string
+                  example: "691654524"
+                currency:
+                  type: string
+                  enum: [EUR, XOF, USD]
+                updatedOn:
+                  type: integer
+                  example: 1741326282
+                orderId:
+                  type: string
+                  example: "OM202503073065"
+                status:
+                  type: string
+                  enum:
+                    - PENDING
+                    - PROCESSING
+                    - SUCCESS
+                    - FAILED
+                processingFee:
+                  type: string
+                  example: "2000"
+                netAmount:
+                  type: string
+                  example: "98000"
+                transactionType:
+                  type: string
+                  example: "CHARGE"
+                paymentProviderResponse:
+                  type: object
+                  properties:
+                    inittxnstatus:
+                      type: string
+                      example: "200"
+                    status:
+                      type: string
+                      example: "PENDING"
+                exchangeRate:
+                  type: string
+                  example: "N/A"
+                fee:
+                  type: integer
+                  example: 2000
+                settlementAmount:
+                  type: integer
+                  example: 98000
+                settlementStatus:
+                  type: string
+                  example: "SUCCESSFULL"
+                settlementPayToken:
+                  type: string
+                  example: "CI2503078492DA5C32723214DEE4"
+                transactionId:
+                  type: string
+                  format: uuid
+                  example: "30615d25-c54d-4e19-a989-2528391976b7"
+                customerPhone:
+                  type: string
+                  example: "691654524"
+                metaData:
+                  type: object
+                  properties:
+                    location:
+                      type: string
+                      example: "transaction_location"
+                    deviceId:
+                      type: string
+                      example: "deviceID"
+                    timestamp:
+                      type: string
+                      example: "transaction_timestamp"
+                    payToken:
+                      type: string
+                      example: "MP25030753EA65689904A6CC9DA3"
+                    txnid:
+                      type: string
+                      example: "MP250307.0643.B31514"
+                settlementResponse:
+                  type: object
+                  properties:
+                    orderId:
+                      type: string
+                      example: "OM202503073065"
+                    status:
+                      type: string
+                      example: "SUCCESSFULL"
+                externalTransactionId:
+                  type: string
+                  example: "OM202503073065"
+                amount:
+                  type: integer
+                  example: 100000
+                paymentMethod:
+                  type: string
+                  enum:
+                    - ORANGE
+                    - STRIPE
+                    - MTN
+                uniqueId:
+                  type: string
+                  example: "MP25030753EA65689904A6CC9DA3"
+                merchantId:
+                  type: string
+                  example: "691654524"
+
+    RefundRequest:
+      type: object
+      required:
+        - merchantId
+        - amount
+        - transactionType
+        - paymentMethod
+        - customerPhone
+      properties:
+        merchantId:
+          type: string
+          example: "unique_merchant_identifier"
+          description: Unique identifier for the merchant
+        amount:
+          type: number
+          example: 333
+          description: Amount to refund
+        transactionType:
+          type: string
+          enum: [REFUND]
+          example: "REFUND"
+        paymentMethod:
+          type: string
+          enum:
+            - CARD
+            - ORANGE
+            - MTN
+          example: "CARD"
+        customerPhone:
+          type: string
+          example: "3333"
+        cardData:
+          type: object
+          properties:
+            paymentIntentId:
+              type: string
+              example: "pi_3QsOx9LS3EJLWOAq1D1Vo6Va"
+              description: Payment intent ID for card refunds
+            reason:
+              type: string
+              example: "duplicate"
+              enum:
+                - duplicate
+                - fraudulent
+                - requested_by_customer
+            reverseTransfer:
+              type: boolean
+              example: true
+        metaData:
+          type: object
+          properties:
+            deviceId:
+              type: string
+              example: "device_identifier"
+            location:
+              type: string
+              example: "transaction_location"
+            timestamp:
+              type: string
+              example: "transaction_timestamp"
+
+    RefundResponse:
+      type: object
+      required:
+        - message
+        - transactionDetails
+      properties:
+        message:
+          type: string
+          example: "Refund processed successfully"
+        transactionDetails:
+          type: object
+          properties:
+            transactionId:
+              type: string
+              format: uuid
+              example: "b78dcc7b-6616-4e60-9688-8f1357bc5c4d"
+            status:
+              type: string
+              enum:
+                - PENDING
+                - PROCESSING
+                - SUCCESS
+                - FAILED
+              example: "PENDING"
+
+    OrangeWebhookRequest:
+      type: object
+      required:
+        - type
+        - data
+      properties:
+        type:
+          type: string
+          enum: [payment_notification]
+          example: "payment_notification"
+          description: Type of the webhook notification
+        data:
+          type: object
+          required:
+            - payToken
+          properties:
+            payToken:
+              type: string
+              example: "MP2503075A4AEB51989EF1A664B4"
+              description: Payment token from Orange Money
+
+    OrangeWebhookResponse:
+      type: object
+      required:
+        - message
+        - status
+        - transactionId
+      properties:
+        message:
+          type: string
+          example: "Webhook processed successfully"
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PROCESSING
+            - SUCCESS
+            - FAILED
+          example: "SUCCESS"
+        transactionId:
+          type: string
+          format: uuid
+          example: "30615d25-c54d-4e19-a989-2528391976b7"
+
+    MTNWebhookPaymentRequest:
+      type: object
+      required:
+        - financialTransactionId
+        - externalId
+        - amount
+        - currency
+        - payer
+        - status
+      properties:
+        financialTransactionId:
+          type: string
+          example: "1588053490"
+        externalId:
+          type: string
+          format: uuid
+          example: "49a43f30-3d88-4ee2-bfd4-64a5ef03d4df"
+        amount:
+          type: string
+          example: "100"
+        currency:
+          type: string
+          enum: [EUR, XOF]
+          example: "EUR"
+        payer:
+          type: object
+          required:
+            - partyIdType
+            - partyId
+          properties:
+            partyIdType:
+              type: string
+              enum: [MSISDN]
+              example: "MSISDN"
+            partyId:
+              type: string
+              example: "94712358689"
+        payeeNote:
+          type: string
+          example: "Thank you for your payment"
+        status:
+          type: string
+          enum: [PENDING, SUCCESSFUL, FAILED]
+          example: "SUCCESSFUL"
+
+    MTNWebhookDisbursementRequest:
+      type: object
+      required:
+        - financialTransactionId
+        - externalId
+        - amount
+        - currency
+        - payee
+        - status
+      properties:
+        financialTransactionId:
+          type: string
+          example: "153693879"
+        externalId:
+          type: string
+          format: uuid
+          example: "9192cac2-018a-4dbe-aab5-fdd4fd3d03d7"
+        amount:
+          type: string
+          example: "97.5"
+        currency:
+          type: string
+          enum: [EUR, XOF]
+          example: "EUR"
+        payee:
+          type: object
+          required:
+            - partyIdType
+            - partyId
+          properties:
+            partyIdType:
+              type: string
+              enum: [MSISDN]
+              example: "MSISDN"
+            partyId:
+              type: string
+              example: "94713579023"
+        payeeNote:
+          type: string
+          example: "Payment from your customer"
+        status:
+          type: string
+          enum: [PENDING, SUCCESSFUL, FAILED]
+          example: "SUCCESSFUL"
+
+    MTNWebhookResponse:
+      type: object
+      required:
+        - message
+        - status
+        - transactionId
+      properties:
+        message:
+          type: string
+          example: "Webhook processed successfully"
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PROCESSING
+            - SUCCESS
+            - FAILED
+          example: "SUCCESS"
+        transactionId:
+          type: string
+          format: uuid
+          example: "49a43f30-3d88-4ee2-bfd4-64a5ef03d4df"
+
+paths:
+  /transaction/process/charge:
+    post:
+      tags:
+        - Payments
+      summary: Process a payment charge
+      description: Process a payment charge through various payment providers (MTN, Orange Money, Stripe)
+      operationId: processCharge
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargeRequest'
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transaction/status:
+    get:
+      tags:
+        - Payments
+      summary: Get transaction status
+      description: Retrieve the current status of a transaction by its ID
+      operationId: getTransactionStatus
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: transactionId
+          in: query
+          required: true
+          description: ID of the transaction to check
+          schema:
+            type: string
+            format: uuid
+          example: "30615d25-c54d-4e19-a989-2528391976b7"
+      responses:
+        '200':
+          description: Transaction status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionStatusResponse'
+        '400':
+          description: Invalid transaction ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /transaction/process/refund:
+    post:
+      tags:
+        - Payments
+      summary: Process a refund
+      description: Process a refund for a previous transaction
+      operationId: processRefund
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+      responses:
+        '200':
+          description: Refund processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Original transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /webhooks/orange:
+    post:
+      tags:
+        - Webhooks
+      summary: Orange Money payment webhook
+      description: Webhook endpoint for receiving payment notifications from Orange Money
+      operationId: orangeWebhook
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrangeWebhookRequest'
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrangeWebhookResponse'
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /webhooks/mtn/payment:
+    post:
+      tags:
+        - Webhooks
+      summary: MTN Money payment webhook
+      description: Webhook endpoint for receiving payment notifications from MTN Money
+      operationId: mtnPaymentWebhook
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              $ref: '#/components/schemas/MTNWebhookPaymentRequest'
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MTNWebhookResponse'
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /webhooks/mtn/disbursement:
+    post:
+      tags:
+        - Webhooks
+      summary: MTN Money disbursement webhook
+      description: Webhook endpoint for receiving disbursement notifications from MTN Money
+      operationId: mtnDisbursementWebhook
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              $ref: '#/components/schemas/MTNWebhookDisbursementRequest'
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MTNWebhookResponse'
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+security:
+  - ApiKeyAuth: []

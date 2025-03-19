@@ -114,7 +114,9 @@ export class TransactionProcessService {
       statusCode: 200,
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify({
-        message: 'Payment processed successfully',
+        message: transactionType === 'REFUND' 
+          ? ('Refund processed successfully')
+          : 'Payment processed successfully',
         transactionDetails: transactionResult,
       }),
     };
