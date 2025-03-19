@@ -499,8 +499,11 @@ export class MtnPaymentService {
         }
 
         // Check if the transaction status allows for refund (must be after PAYMENT_SUCCESSFUL)
+        const status = Number(transactionRecord.Item.status);
         if (
-          transactionRecord.Item.status <= MTNPaymentStatus.PAYMENT_SUCCESSFUL
+          status <= MTNPaymentStatus.PAYMENT_SUCCESSFUL ||
+          (status >= MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED &&
+            status <= MTNPaymentStatus.MERCHANT_REFUND_FAILED)
         ) {
           throw new EnhancedError(
             'TRANSACTION_NOT_REFUNDABLE',
