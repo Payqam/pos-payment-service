@@ -147,12 +147,6 @@ export class MtnPaymentService {
       headers['X-Callback-Url'] = process.env
         .MTN_MERCHANT_REFUND_WEBHOOK_URL as string;
     }
-    this.logger.info('Generated headers for MTN request', {
-      type,
-      headers,
-      hasCallbackUrl: !!headers['X-Callback-Url'],
-    });
-
     return headers;
   }
 
@@ -391,7 +385,7 @@ export class MtnPaymentService {
             amount,
             currency,
             paymentMethod: 'MTN',
-            status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+            status: String(MTNPaymentStatus.PAYMENT_REQUEST_CREATED),
             mobileNo,
             merchantId,
             merchantMobileNo,
@@ -409,11 +403,12 @@ export class MtnPaymentService {
             {
               transactionId,
               paymentMethod: 'MTN MOMO',
-              status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+              status: String(MTNPaymentStatus.PAYMENT_REQUEST_CREATED),
               type: 'CREATE',
               amount,
               settlementAmount,
               merchantId,
+              merchantMobileNo,
               transactionType: 'CHARGE',
               metaData,
               fee: fee,
@@ -429,7 +424,7 @@ export class MtnPaymentService {
 
           this.logger.info('Payment request created successfully', {
             transactionId,
-            status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+            status: String(MTNPaymentStatus.PAYMENT_REQUEST_CREATED),
             amount,
             settlementAmount,
           });
@@ -458,7 +453,7 @@ export class MtnPaymentService {
 
           return {
             transactionId,
-            status: MTNPaymentStatus.PAYMENT_REQUEST_CREATED,
+            status: String(MTNPaymentStatus.PAYMENT_REQUEST_CREATED),
           };
         } catch (error) {
           this.logger.error('Failed to process payment', {
@@ -471,7 +466,7 @@ export class MtnPaymentService {
             {
               transactionId,
               paymentMethod: 'MTN MOMO',
-              status: MTNPaymentStatus.PAYMENT_FAILED,
+              status: String(MTNPaymentStatus.PAYMENT_FAILED),
               type: 'CREATE',
               amount,
               merchantId,
@@ -494,20 +489,59 @@ export class MtnPaymentService {
       }
 
       case 'REFUND': {
-        if (!transactionId) {
-          throw new EnhancedError(
-            'MISSING_TRANSACTION_ID',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing transaction id for the refund'
-          );
-        }
-        // Get record from DB using transactionId
+        // Get the transaction record from DynamoDB
         const transactionRecord = await this.dbService.getItem({
           transactionId,
         });
 
         if (!transactionRecord?.Item) {
           throw new Error('Transaction not found for refund');
+        }
+
+        // Check if the transaction status allows for refund (must be after PAYMENT_SUCCESSFUL)
+        const status = Number(transactionRecord.Item.status);
+        if (
+          status <= MTNPaymentStatus.PAYMENT_SUCCESSFUL ||
+          (status >= MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED &&
+            status <= MTNPaymentStatus.MERCHANT_REFUND_FAILED)
+        ) {
+          throw new EnhancedError(
+            'TRANSACTION_NOT_REFUNDABLE',
+            ErrorCategory.VALIDATION_ERROR,
+            'Transaction cannot be refunded: Payment not yet successful',
+            {
+              retryable: false,
+              suggestedAction:
+                'Ensure the payment is successful before initiating a refund.',
+            }
+          );
+        }
+
+        // Check if the transaction has already been refunded
+        if (
+          transactionRecord.Item.status ===
+            String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED) ||
+          transactionRecord.Item.status ===
+            String(MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL) ||
+          transactionRecord.Item.status ===
+            String(MTNPaymentStatus.CUSTOMER_REFUND_FAILED) ||
+          transactionRecord.Item.status ===
+            String(MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED) ||
+          transactionRecord.Item.status ===
+            String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL) ||
+          transactionRecord.Item.status ===
+            String(MTNPaymentStatus.MERCHANT_REFUND_FAILED)
+        ) {
+          throw new EnhancedError(
+            'TRANSACTION_ALREADY_REFUNDED',
+            ErrorCategory.VALIDATION_ERROR,
+            'Transaction has already been refunded or refund is in progress',
+            {
+              retryable: false,
+              suggestedAction:
+                'Verify the transaction status before attempting another refund.',
+            }
+          );
         }
 
         // Call the disbursement transfer API to transfer money to the customer
@@ -519,7 +553,7 @@ export class MtnPaymentService {
         );
 
         const updateData = {
-          status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
+          status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
           customerRefundId: customerRefundId,
         };
         await this.dbService.updatePaymentRecord({ transactionId }, updateData);
@@ -528,7 +562,7 @@ export class MtnPaymentService {
           process.env.TRANSACTION_STATUS_TOPIC_ARN!,
           {
             transactionId: transactionRecord.Item.transactionId,
-            status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
+            status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
             type: 'UPDATE',
           }
         );
@@ -547,7 +581,7 @@ export class MtnPaymentService {
                 partyId: mobileNo,
               },
               payeeNote: `Refund is processed for the transaction ${transactionRecord.Item.transactionId}`,
-              payerMessage: 'YOur refund is processing. Thank you.',
+              payerMessage: 'Your refund is processing. Thank you.',
               reason: undefined,
               status: 'SUCCESSFUL',
             },
@@ -557,7 +591,7 @@ export class MtnPaymentService {
 
         return {
           transactionId,
-          status: MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
+          status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
         };
       }
 

@@ -31,6 +31,14 @@ import { DynamoDBDashboard } from './cloudwatch-dashboards/dynamoDB-dashboard';
 import { SNSDashboard } from './cloudwatch-dashboards/sns-dashboard';
 import { ApiGatewayDashboard } from './cloudwatch-dashboards/apiGateway-dashboard';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import {
+  BlockPublicAccess,
+  Bucket
+} from 'aws-cdk-lib/aws-s3';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -106,9 +114,8 @@ export class CDKStack extends cdk.Stack {
       secretName: `STRIPE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Stripe API keys and endpoint',
       secretValues: {
-        apiKey: process.env.STRIPE_API_SECRET || 'stripe_test_key',
-        signingSecret:
-          process.env.STRIPE_SIGNING_SECRET || 'stripe_test_signing_secret',
+        apiKey: process.env.STRIPE_API_SECRET as string,
+        signingSecret: process.env.STRIPE_SIGNING_SECRET as string,
       },
     };
 
@@ -118,26 +125,18 @@ export class CDKStack extends cdk.Stack {
       description: 'Stores MTN Mobile Money API keys and endpoint',
       secretValues: {
         collection: {
-          subscriptionKey:
-            process.env.MTN_COLLECTION_SUBSCRIPTION_KEY ||
-            'mtn_test_collection_key',
-          apiUser:
-            process.env.MTN_COLLECTION_API_USER || 'mtn_test_collection_user',
-          apiKey:
-            process.env.MTN_COLLECTION_API_KEY || 'mtn_test_collection_api_key',
+          subscriptionKey: process.env
+            .MTN_COLLECTION_SUBSCRIPTION_KEY as string,
+          apiUser: process.env.MTN_COLLECTION_API_USER as string,
+          apiKey: process.env.MTN_COLLECTION_API_KEY as string,
         },
         disbursement: {
-          subscriptionKey:
-            process.env.MTN_DISBURSEMENT_SUBSCRIPTION_KEY ||
-            'mtn_test_disbursement_key',
-          apiUser:
-            process.env.MTN_DISBURSEMENT_API_USER ||
-            'mtn_test_disbursement_user',
-          apiKey:
-            process.env.MTN_DISBURSEMENT_API_KEY ||
-            'mtn_test_disbursement_api_key',
+          subscriptionKey: process.env
+            .MTN_DISBURSEMENT_SUBSCRIPTION_KEY as string,
+          apiUser: process.env.MTN_DISBURSEMENT_API_USER as string,
+          apiKey: process.env.MTN_DISBURSEMENT_API_KEY as string,
         },
-        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT || 'sandbox',
+        targetEnvironment: process.env.MTN_TARGET_ENVIRONMENT as string,
       },
     };
 
@@ -146,13 +145,16 @@ export class CDKStack extends cdk.Stack {
       secretName: `ORANGE_API_SECRET-${props.envName}${props.namespace}`,
       description: 'Stores Orange Money API keys and endpoint',
       secretValues: {
-        baseUrl: process.env.ORANGE_API_BASE_URL || '',
-        tokenUrl: process.env.ORANGE_API_TOKEN_URL || '',
-        clientId: process.env.ORANGE_CLIENT_ID || '',
-        xAuthToken: process.env.ORANGE_X_AUTH_TOKEN || '',
-        notifyUrl: process.env.ORANGE_NOTIFY_URL || '',
-        merchantPhone: process.env.ORANGE_PAYQAM_MERCHANT_PHONE || '',
-        merchantPin: process.env.ORANGE_PAYQAM_PIN || '',
+        targetEnvironment: process.env.ORANGE_TARGET_ENVIRONMENT || 'sandbox',
+        baseUrl: process.env.ORANGE_API_BASE_URL as string,
+        tokenUrl: process.env.ORANGE_API_TOKEN_URL as string,
+        clientId: process.env.ORANGE_CLIENT_ID as string,
+        xAuthToken: process.env.ORANGE_X_AUTH_TOKEN as string,
+        notifyUrl: process.env.ORANGE_NOTIFY_URL as string,
+        merchantPhone: process.env.ORANGE_PAYQAM_MERCHANT_PHONE as string,
+        merchantPin: process.env.ORANGE_PAYQAM_PIN as string,
+        chargeWebhookUrl: process.env.ORANGE_CHARGE_WEBHOOK_URL as string,
+        refundWebhookUrl: process.env.ORANGE_REFUND_WEBHOOK_URL as string,
       },
     };
 
@@ -310,10 +312,10 @@ export class CDKStack extends cdk.Stack {
     stripeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
 
-    // Create Orange webhook Lambda
-    const orangeWebhookLambda = new PAYQAMLambda(this, 'OrangeWebhookLambda', {
-      name: `OrangeWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.ORANGE_WEBHOOK}/handler.ts`,
+    // Create Orange charge webhook Lambda
+    const orangeChargeWebhookLambda = new PAYQAMLambda(this, 'OrangeChargeWebhookLambda', {
+      name: `OrangeChargeWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.ORANGE_CHARGE_WEBHOOK}/handler.ts`,
       vpc: vpcConstruct.vpc,
       environment: {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
@@ -322,13 +324,33 @@ export class CDKStack extends cdk.Stack {
         ORANGE_API_SECRET: orangeSecret.secretName,
       },
     });
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
-    orangeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
-    orangeWebhookLambda.lambda.addToRolePolicy(
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
     );
-    orangeSecret.grantRead(orangeWebhookLambda.lambda);
-    createLambdaLogGroup(this, orangeWebhookLambda.lambda);
+    orangeSecret.grantRead(orangeChargeWebhookLambda.lambda);
+    createLambdaLogGroup(this, orangeChargeWebhookLambda.lambda);
+
+    // Create Orange refund webhook Lambda
+    const orangeRefundWebhookLambda = new PAYQAMLambda(this, 'OrangeRefundWebhookLambda', {
+      name: `OrangeRefundWebhook-${props.envName}${props.namespace}`,
+      path: `${PATHS.FUNCTIONS.ORANGE_REFUND_WEBHOOK}/handler.ts`,
+      vpc: vpcConstruct.vpc,
+      environment: {
+        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+        ORANGE_API_SECRET: orangeSecret.secretName,
+      },
+    });
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.secretsManagerPolicy
+    );
+    orangeSecret.grantRead(orangeRefundWebhookLambda.lambda);
+    createLambdaLogGroup(this, orangeRefundWebhookLambda.lambda);
 
     // Add secrets policy to transactions process Lambda
     orangeSecret.grantRead(transactionsProcessLambda.lambda);
@@ -483,7 +505,8 @@ export class CDKStack extends cdk.Stack {
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(transactionsProcessLambda.lambda);
     dynamoDBConstruct.grantReadWrite(stripeWebhookLambda.lambda);
-    dynamoDBConstruct.grantReadWrite(orangeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(orangeChargeWebhookLambda.lambda);
+    dynamoDBConstruct.grantReadWrite(orangeRefundWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnPaymentWebhookLambda.lambda);
     dynamoDBConstruct.grantReadWrite(mtnDisbursementWebhookLambda.lambda);
     // dynamoDBConstruct.grantReadWrite(disbursementLambda.lambda);
@@ -520,7 +543,8 @@ export class CDKStack extends cdk.Stack {
       mtnDisbursementWebhookLambda.lambda,
       stripeWebhookLambda.lambda,
       transactionsProcessLambda.lambda,
-      orangeWebhookLambda.lambda,
+      orangeChargeWebhookLambda.lambda,
+      orangeRefundWebhookLambda.lambda,
     ];
     monitoredLambdas.forEach((logGroupName: IFunction) => {
       const subscriptionFilter = new logs.SubscriptionFilter(
@@ -685,12 +709,12 @@ export class CDKStack extends cdk.Stack {
         },
       },
       {
-        path: 'webhooks/orange',
+        path: 'webhooks/orange/charge',
         method: 'POST',
-        lambda: orangeWebhookLambda.lambda,
+        lambda: orangeChargeWebhookLambda.lambda,
         apiKeyRequired: false,
         requestModel: {
-          modelName: 'OrangeWebhookRequestModel',
+          modelName: 'OrangeChargeWebhookRequestModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
@@ -698,22 +722,60 @@ export class CDKStack extends cdk.Stack {
               data: {
                 type: apigateway.JsonSchemaType.OBJECT,
                 properties: {
-                  transactionId: { type: apigateway.JsonSchemaType.STRING },
                   payToken: { type: apigateway.JsonSchemaType.STRING },
                   status: { type: apigateway.JsonSchemaType.STRING },
-                  amount: { type: apigateway.JsonSchemaType.STRING },
-                  currency: { type: apigateway.JsonSchemaType.STRING },
+                  inittxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                  confirmtxnstatus: { type: apigateway.JsonSchemaType.STRING },
                 },
+                required: ['payToken'],
               },
             },
+            required: ['type', 'data'],
           },
         },
         responseModel: {
-          modelName: 'OrangeWebhookResponseModel',
+          modelName: 'OrangeChargeWebhookResponseModel',
           schema: {
             type: apigateway.JsonSchemaType.OBJECT,
             properties: {
               message: { type: apigateway.JsonSchemaType.STRING },
+              payToken: { type: apigateway.JsonSchemaType.STRING },
+            },
+          },
+        },
+      },
+      {
+        path: 'webhooks/orange/refund',
+        method: 'POST',
+        lambda: orangeRefundWebhookLambda.lambda,
+        apiKeyRequired: false,
+        requestModel: {
+          modelName: 'OrangeRefundWebhookRequestModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              type: { type: apigateway.JsonSchemaType.STRING },
+              data: {
+                type: apigateway.JsonSchemaType.OBJECT,
+                properties: {
+                  payToken: { type: apigateway.JsonSchemaType.STRING },
+                  status: { type: apigateway.JsonSchemaType.STRING },
+                  inittxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                  confirmtxnstatus: { type: apigateway.JsonSchemaType.STRING },
+                },
+                required: ['payToken'],
+              },
+            },
+            required: ['type', 'data'],
+          },
+        },
+        responseModel: {
+          modelName: 'OrangeRefundWebhookResponseModel',
+          schema: {
+            type: apigateway.JsonSchemaType.OBJECT,
+            properties: {
+              message: { type: apigateway.JsonSchemaType.STRING },
+              payToken: { type: apigateway.JsonSchemaType.STRING },
             },
           },
         },
@@ -951,7 +1013,8 @@ export class CDKStack extends cdk.Stack {
       transactionsProcessLambda.lambda.functionName,
       stripeWebhookLambda.lambda.functionName,
       mtnDisbursementWebhookLambda.lambda.functionName,
-      orangeWebhookLambda.lambda.functionName,
+      orangeChargeWebhookLambda.lambda.functionName,
+      orangeRefundWebhookLambda.lambda.functionName,
       mtnPaymentWebhookLambda.lambda.functionName,
       slackNotifierLambda.lambda.functionName,
       salesforceSyncLambda.lambda.functionName,
@@ -975,6 +1038,38 @@ export class CDKStack extends cdk.Stack {
       envName: props.envName,
       namespace: props.namespace,
       apiGatewayName: apiGateway.api.restApiName,
+    });
+
+    /**
+     * Swagger UI Deployment
+     */
+    const swaggerBucket = new Bucket(this, 'SwaggerUIBucket', {
+      bucketName: `payqam-api-documentation-host-${props.envName}${props.namespace}`.toLowerCase(),
+      websiteIndexDocument: 'index.html',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ACLS,
+    });
+
+    swaggerBucket.addToResourcePolicy(
+      new PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`${swaggerBucket.bucketArn}/*`],
+        principals: [new iam.AnyPrincipal()],
+      })
+    );
+    const cloudFrontDistribution = new cloudfront.Distribution(this, 'SwaggerUICloudFront', {
+      defaultRootObject: 'index.html',
+      defaultBehavior: {
+        origin: new origins.S3StaticWebsiteOrigin(swaggerBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+    });
+
+    new s3deploy.BucketDeployment(this, 'DeploySwaggerUI', {
+      sources: [s3deploy.Source.asset('./swagger-ui-dist')],
+      destinationBucket: swaggerBucket,
+      distribution: cloudFrontDistribution,
+      distributionPaths: ['/*'],
     });
 
     // Add stack outputs

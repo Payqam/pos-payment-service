@@ -108,6 +108,7 @@ export class PaymentService {
           merchantId,
           merchantMobileNo,
           transactionType,
+          transactionId,
         });
         return this.orangePaymentService.processPayment(
           amount as number,
@@ -116,7 +117,8 @@ export class PaymentService {
           merchantMobileNo,
           metaData,
           transactionType || 'CHARGE',
-          cardData?.currency || 'EUR'
+          cardData?.currency || 'EUR',
+          transactionId
         );
 
       default:

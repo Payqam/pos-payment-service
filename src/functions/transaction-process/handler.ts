@@ -23,14 +23,14 @@ export class TransactionProcessService {
 
   private readonly paymentService: PaymentService;
 
-  private readonly kmsService: KmsService;
+  // private readonly kmsService: KmsService;
 
   private readonly dbService: DynamoDBService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
-    this.kmsService = new KmsService();
+    // this.kmsService = new KmsService();
     this.dbService = new DynamoDBService();
     this.logger.info('init()');
   }
@@ -114,7 +114,9 @@ export class TransactionProcessService {
       statusCode: 200,
       headers: API.DEFAULT_HEADERS,
       body: JSON.stringify({
-        message: 'Payment processed successfully',
+        message: transactionType === 'REFUND' 
+          ? ('Refund processed successfully')
+          : 'Payment processed successfully',
         transactionDetails: transactionResult,
       }),
     };
