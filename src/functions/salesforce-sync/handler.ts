@@ -17,6 +17,7 @@ interface SNSMessage {
   status: string;
   amount: string;
   merchantId: string;
+  merchantMobileNo: string;
   transactionType: string;
   metaData: { deviceId: string };
   fee: string;
@@ -202,6 +203,7 @@ export class SalesforceSyncService {
         status__c: message.status,
         amount__c: message.settlementAmount,
         merchantId__c: message.merchantId,
+        Merchant_Phone__c: message.merchantMobileNo,
         Transaction_Type__c: message.transactionType,
         metaData__C: JSON.stringify(message.metaData),
         fee__c: message.fee,
