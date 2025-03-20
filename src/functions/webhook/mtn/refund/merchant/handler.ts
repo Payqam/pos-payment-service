@@ -98,9 +98,9 @@ export class MTNPaymentWebhookService {
       });
       // Send to SalesForce
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-        transactionId,
+        transactionId: webhookEvent.externalId,
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
-        type: 'UPDATE',
+        type: 'CREATE',
       });
       this.logger.info('[debug]sent to sns', {
         updateData,
@@ -141,9 +141,9 @@ export class MTNPaymentWebhookService {
       );
       // Send to SalesForce
       await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
-        transactionId,
+        transactionId: transactionStatus.externalId,
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
-        type: 'FAILED',
+        type: 'CREATE',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
           ErrorMessage: errorReason,
@@ -223,37 +223,26 @@ export class MTNPaymentWebhookService {
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
 
-      const result = await this.dbService.queryByGSI(
-        {
-          merchantRefundId: externalId,
-        },
-        'GSI5'
-      );
-      if (!result || result.Items?.length === 0) {
+      // Get temporary reference item from DB
+      const result = await this.dbService.getItem<{
+        transactionId: string;
+      }>({
+        transactionId: externalId,
+      });
+
+      if (!result.Item) {
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
-      const transaction = result?.Items?.[0] ?? null;
-
-      // Verify the transaction hasn't already been processed
-      if (
-        transaction?.status ===
-          String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL) ||
-        transaction?.status === String(MTNPaymentStatus.MERCHANT_REFUND_FAILED)
-      ) {
-        this.logger.warn('Merchant refund already processed', {
-          transactionId: transaction.transactionId,
-          currentStatus: transaction.status,
-          externalId,
-        });
-        return {
-          statusCode: 200,
-          headers: API.DEFAULT_HEADERS,
-          body: JSON.stringify({
-            message: 'Webhook already processed for this transaction',
-          }),
-        };
-      }
+      const transactionItem = await this.dbService.getItem<{
+        transactionId: string;
+      }>({
+        transactionId: result.Item.originalTransactionId,
+      });
+      const transaction: Record<string, any> = transactionItem.Item as Record<
+        string,
+        any
+      >;
 
       const transactionStatus: WebhookEvent =
         await this.mtnService.checkTransactionStatus(

@@ -590,6 +590,11 @@ export class MtnPaymentService {
           transactionRecord.Item.currency,
           TransactionType.CUSTOMER_REFUND
         );
+        // Create a temporary record to associate the transaction with the refund ID
+        await this.dbService.createPaymentRecord({
+          transactionId: customerRefundId,
+          originalTransactionId: transactionRecord.Item.transactionId,
+        });
 
         const updateData = {
           status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),

@@ -8,7 +8,7 @@ import {
   QueryCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBDocClient } from '../dynamodbClient';
-import { CreatePaymentRecord } from '../model';
+import { CreatePaymentRecord, CreateRefundReferenceRecord } from '../model';
 import { buildUpdateExpression } from '../../utils/updateUtils';
 import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
@@ -104,9 +104,11 @@ export class DynamoDBService {
   /**
    * Creates a payment record in the DynamoDB table.
    *
-   * @param record - A plain object representing the payment record.
+   * @param record - A plain object representing the payment record or refund reference record.
    */
-  public async createPaymentRecord(record: CreatePaymentRecord): Promise<void> {
+  public async createPaymentRecord(
+    record: CreatePaymentRecord | CreateRefundReferenceRecord
+  ): Promise<void> {
     const params = {
       TableName: this.tableName,
       Item: record,
