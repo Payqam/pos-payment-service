@@ -53,6 +53,10 @@ export class PAYQAMLambda extends Construct {
       tracing: Tracing.ACTIVE,
       securityGroups: props.securityGroup ? [props.securityGroup] : [],
       bundling: {
+        nodeModules:[
+          'failure-lambda',
+          'aws-sdk'
+        ],
         externalModules: [
           'cache-manager',
           'class-validator',

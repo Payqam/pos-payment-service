@@ -6,6 +6,7 @@ import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
 import { KmsService } from '../../services/kmsService';
 import { DynamoDBService } from '../../services/dynamodbService';
+const failureLambda = require('failure-lambda')
 
 // Configure sensitive field redaction in logs
 const sensitiveFields = [
@@ -25,12 +26,15 @@ export class TransactionProcessService {
 
   // private readonly kmsService: KmsService;
 
+  private readonly failureLambda: any
+
   private readonly dbService: DynamoDBService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
     // this.kmsService = new KmsService();
+    this.failureLambda = new failureLambda()
     this.dbService = new DynamoDBService();
     this.logger.info('init()');
   }
@@ -151,9 +155,16 @@ export class TransactionProcessService {
   }
 }
 
-export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
-  const service = new TransactionProcessService();
-  return service.processTransaction(event);
-};
+export const handler = failureLambda(
+    async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+      const service = new TransactionProcessService();
+      return service.processTransaction(event);
+    },
+    {
+      isEnabled: true,  // Ensure failure injection is enabled
+      failureMode: 'latency',  // Introduce artificial delay
+      rate: 1,  // Apply latency to 100% of requests
+      minLatency: 10000,  // Minimum delay (3 seconds)
+      maxLatency: 15000,  // Maximum delay (5 seconds)
+    }
+);
