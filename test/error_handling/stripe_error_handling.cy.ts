@@ -85,11 +85,11 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: 'visa',
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -162,7 +162,7 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
         });
       });
@@ -247,11 +247,11 @@ describe('Decline Card Payment', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.title,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -341,11 +341,11 @@ describe('Fraud Prevention Card Payment', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -406,11 +406,11 @@ describe('Fraud Prevention Card Payment', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -470,11 +470,11 @@ describe('Fraud Prevention Card Payment', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -600,11 +600,11 @@ describe('Fraud Prevention Card Payment', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -656,6 +656,116 @@ describe('Fraud Prevention Card Payment', () => {
           cy.task('log', response.body);
         });
       });
+    });
+  });
+});
+
+
+describe(`Verify error for already completed payment`, () => {
+  it('Create a Payment Method', () => {
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+      headers: {
+        Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+      },
+      form: true,
+      body: {
+        type: 'card',
+        'card[number]': '4242424242424242',
+        'card[exp_month]': '12',
+        'card[exp_year]': '2025',
+        'card[cvc]': '123',
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(200);
+      expect(response.body).to.have.property('id');
+      paymentMethodId = response.body.id;
+      cy.task('log', `Payment Method ID: ${paymentMethodId}`);
+      Cypress.env('paymentMethodId', paymentMethodId);
+    });
+  });
+
+  it(`Process a Payment Charge in`, () => {
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': `${Cypress.env('x-api-key')}`,
+      },
+      body: {
+        merchantId: 'unique_merchant_identifier',
+        amount: 100000,
+        transactionType: 'CHARGE',
+        paymentMethod: 'CARD',
+        customerPhone: '3333',
+        currency: 'USD',
+        cardData: {
+          paymentMethodId: Cypress.env('paymentMethodId'),
+          cardName: 'visa',
+          destinationId: 'acct_1QmXUNPsBq4jlflt',
+        },
+        metaData: {
+          deviceId: 'device_identifier',
+          location: 'transaction_location',
+          timestamp: 'transaction_timestamp',
+        },
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(200);
+      cy.task('log', response.body);
+      expect(response.body).to.have.property(
+        'message',
+        'Payment processed successfully'
+      );
+      expect(response.body.transactionDetails).to.have.property(
+        'transactionId'
+      );
+      expect(response.body.transactionDetails).to.have.property(
+        'status',
+        'succeeded'
+      );
+      transactionId = response.body.transactionDetails.transactionId;
+      Cypress.env('transactionId', transactionId);
+    });
+  });
+
+  it(`Verify 500 for process a Payment Charge already processed payment`, () => {
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': `${Cypress.env('x-api-key')}`,
+      },
+      body: {
+        merchantId: 'unique_merchant_identifier',
+        amount: 100000,
+        transactionType: 'CHARGE',
+        paymentMethod: 'CARD',
+        customerPhone: '3333',
+        currency: 'USD',
+        cardData: {
+          paymentMethodId: Cypress.env('paymentMethodId'),
+          cardName: 'visa',
+          destinationId: 'acct_1QmXUNPsBq4jlflt',
+        },
+        metaData: {
+          deviceId: 'device_identifier',
+          location: 'transaction_location',
+          timestamp: 'transaction_timestamp',
+        },
+      },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(500);
+      cy.task('log', response.body);
+      expect(response.body).to.have.property(
+        'message',
+        'The provided PaymentMethod was previously used with a PaymentIntent without Customer attachment, shared with a connected account without Customer attachment, or was detached from a Customer. It may not be used again. To use a PaymentMethod multiple times, you must attach it to a Customer first.'
+      );
+      expect(response.body).to.have.property('error', 'SYSTEM_ERROR');
     });
   });
 });
