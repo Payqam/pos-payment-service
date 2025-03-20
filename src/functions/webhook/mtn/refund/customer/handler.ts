@@ -89,17 +89,32 @@ export class MTNDisbursementWebhookService {
         },
       });
 
+      // Get existing transaction to retrieve current customerRefundResponse array
+      const existingTransaction = await this.dbService.getItem({
+        transactionId,
+      });
+      const existingResponses =
+        existingTransaction?.Item?.customerRefundResponse || [];
+
+      // Ensure existingResponses is treated as an array
+      const responseArray = Array.isArray(existingResponses)
+        ? existingResponses
+        : [];
+
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
-        customerRefundResponse: {
-          ...transactionStatus,
-          errorMessage: enhancedError.message,
-          reason: transactionStatus.reason as string,
-          retryable: errorMapping.retryable,
-          suggestedAction: errorMapping.suggestedAction,
-          httpStatus: errorMapping.statusCode,
-          errorCategory: enhancedError.category,
-        },
+        customerRefundResponse: [
+          ...responseArray,
+          {
+            ...transactionStatus,
+            errorMessage: enhancedError.message,
+            reason: transactionStatus.reason as string,
+            retryable: errorMapping.retryable,
+            suggestedAction: errorMapping.suggestedAction,
+            httpStatus: errorMapping.statusCode,
+            errorCategory: enhancedError.category,
+          },
+        ],
       };
     } catch (error) {
       this.logger.error('Failed to handle the failed customer refund');
@@ -123,9 +138,21 @@ export class MTNDisbursementWebhookService {
         type: 'UPDATE',
       });
 
+      // Get existing transaction to retrieve current customerRefundResponse array
+      const existingTransaction = await this.dbService.getItem({
+        transactionId,
+      });
+      const existingResponses =
+        existingTransaction?.Item?.customerRefundResponse || [];
+
+      // Ensure existingResponses is treated as an array
+      const responseArray = Array.isArray(existingResponses)
+        ? existingResponses
+        : [];
+
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
-        customerRefundResponse: transactionStatus,
+        customerRefundResponse: [...responseArray, transactionStatus],
       };
     } catch (error) {
       this.logger.error('Failed to handle the successful customer refund');

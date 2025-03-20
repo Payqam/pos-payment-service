@@ -18,8 +18,8 @@ interface AdditionalTransactionFields {
   paymentMethod?: string;
   paymentResponse?: Record<string, unknown>;
   disbursementResponse?: Record<string, unknown>;
-  customerRefundResponse?: Record<string, unknown>;
-  merchantRefundResponse?: Record<string, unknown>;
+  customerRefundResponse?: Record<string, unknown>[];
+  merchantRefundResponse?: Record<string, unknown>[];
   uniqueId?: string;
   settlementDate?: number;
   fee?: number;

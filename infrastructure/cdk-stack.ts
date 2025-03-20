@@ -35,10 +35,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import {
-  BlockPublicAccess,
-  Bucket
-} from 'aws-cdk-lib/aws-s3';
+import { BlockPublicAccess, Bucket } from 'aws-cdk-lib/aws-s3';
 
 const logger: Logger = LoggerService.named('cdk-stack');
 
@@ -313,18 +310,24 @@ export class CDKStack extends cdk.Stack {
     createLambdaLogGroup(this, stripeWebhookLambda.lambda);
 
     // Create Orange charge webhook Lambda
-    const orangeChargeWebhookLambda = new PAYQAMLambda(this, 'OrangeChargeWebhookLambda', {
-      name: `OrangeChargeWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.ORANGE_CHARGE_WEBHOOK}/handler.ts`,
-      vpc: vpcConstruct.vpc,
-      environment: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-        ORANGE_API_SECRET: orangeSecret.secretName,
-      },
-    });
-    orangeChargeWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    const orangeChargeWebhookLambda = new PAYQAMLambda(
+      this,
+      'OrangeChargeWebhookLambda',
+      {
+        name: `OrangeChargeWebhook-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.ORANGE_CHARGE_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          ORANGE_API_SECRET: orangeSecret.secretName,
+        },
+      }
+    );
+    orangeChargeWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
     orangeChargeWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     orangeChargeWebhookLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
@@ -333,18 +336,24 @@ export class CDKStack extends cdk.Stack {
     createLambdaLogGroup(this, orangeChargeWebhookLambda.lambda);
 
     // Create Orange refund webhook Lambda
-    const orangeRefundWebhookLambda = new PAYQAMLambda(this, 'OrangeRefundWebhookLambda', {
-      name: `OrangeRefundWebhook-${props.envName}${props.namespace}`,
-      path: `${PATHS.FUNCTIONS.ORANGE_REFUND_WEBHOOK}/handler.ts`,
-      vpc: vpcConstruct.vpc,
-      environment: {
-        LOG_LEVEL: props.envConfigs.LOG_LEVEL,
-        TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
-        TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
-        ORANGE_API_SECRET: orangeSecret.secretName,
-      },
-    });
-    orangeRefundWebhookLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    const orangeRefundWebhookLambda = new PAYQAMLambda(
+      this,
+      'OrangeRefundWebhookLambda',
+      {
+        name: `OrangeRefundWebhook-${props.envName}${props.namespace}`,
+        path: `${PATHS.FUNCTIONS.ORANGE_REFUND_WEBHOOK}/handler.ts`,
+        vpc: vpcConstruct.vpc,
+        environment: {
+          LOG_LEVEL: props.envConfigs.LOG_LEVEL,
+          TRANSACTIONS_TABLE: dynamoDBConstruct.table.tableName,
+          TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
+          ORANGE_API_SECRET: orangeSecret.secretName,
+        },
+      }
+    );
+    orangeRefundWebhookLambda.lambda.addToRolePolicy(
+      iamConstruct.dynamoDBPolicy
+    );
     orangeRefundWebhookLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     orangeRefundWebhookLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
@@ -1044,7 +1053,8 @@ export class CDKStack extends cdk.Stack {
      * Swagger UI Deployment
      */
     const swaggerBucket = new Bucket(this, 'SwaggerUIBucket', {
-      bucketName: `payqam-api-documentation-host-${props.envName}${props.namespace}`.toLowerCase(),
+      bucketName:
+        `payqam-api-documentation-host-${props.envName}${props.namespace}`.toLowerCase(),
       websiteIndexDocument: 'index.html',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       blockPublicAccess: BlockPublicAccess.BLOCK_ACLS,
@@ -1057,13 +1067,18 @@ export class CDKStack extends cdk.Stack {
         principals: [new iam.AnyPrincipal()],
       })
     );
-    const cloudFrontDistribution = new cloudfront.Distribution(this, 'SwaggerUICloudFront', {
-      defaultRootObject: 'index.html',
-      defaultBehavior: {
-        origin: new origins.S3StaticWebsiteOrigin(swaggerBucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-      },
-    });
+    const cloudFrontDistribution = new cloudfront.Distribution(
+      this,
+      'SwaggerUICloudFront',
+      {
+        defaultRootObject: 'index.html',
+        defaultBehavior: {
+          origin: new origins.S3StaticWebsiteOrigin(swaggerBucket),
+          viewerProtocolPolicy:
+            cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        },
+      }
+    );
 
     new s3deploy.BucketDeployment(this, 'DeploySwaggerUI', {
       sources: [s3deploy.Source.asset('./swagger-ui-dist')],

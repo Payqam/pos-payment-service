@@ -77,9 +77,21 @@ export class MTNPaymentWebhookService {
     webhookEvent: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
+      // Get existing transaction to retrieve current merchantRefundResponse array
+      const existingTransaction = await this.dbService.getItem({
+        transactionId,
+      });
+      const existingResponses =
+        existingTransaction?.Item?.merchantRefundResponse || [];
+
+      // Ensure existingResponses is treated as an array
+      const responseArray = Array.isArray(existingResponses)
+        ? existingResponses
+        : [];
+
       const updateData: Record<string, unknown> = {
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
-        merchantRefundResponse: webhookEvent,
+        merchantRefundResponse: [...responseArray, webhookEvent],
       };
       this.logger.info('[debug]update data', {
         updateData,
@@ -140,17 +152,33 @@ export class MTNPaymentWebhookService {
         },
       });
       this.logger.info('[debug]sent failed to sns', {});
+
+      // Get existing transaction to retrieve current merchantRefundResponse array
+      const existingTransaction = await this.dbService.getItem({
+        transactionId,
+      });
+      const existingResponses =
+        existingTransaction?.Item?.merchantRefundResponse || [];
+
+      // Ensure existingResponses is treated as an array
+      const responseArray = Array.isArray(existingResponses)
+        ? existingResponses
+        : [];
+
       return {
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
-        merchantRefundResponse: {
-          ...transactionStatus,
-          errorMessage: enhancedError.message,
-          reason: transactionStatus.reason as string,
-          retryable: errorMapping.retryable,
-          suggestedAction: errorMapping.suggestedAction,
-          httpStatus: errorMapping.statusCode,
-          errorCategory: enhancedError.category,
-        },
+        merchantRefundResponse: [
+          ...responseArray,
+          {
+            ...transactionStatus,
+            errorMessage: enhancedError.message,
+            reason: transactionStatus.reason as string,
+            retryable: errorMapping.retryable,
+            suggestedAction: errorMapping.suggestedAction,
+            httpStatus: errorMapping.statusCode,
+            errorCategory: enhancedError.category,
+          },
+        ],
       };
     } catch (error) {
       this.logger.error('Failed to handle the failed payment');
