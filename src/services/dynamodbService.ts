@@ -20,6 +20,8 @@ interface AdditionalTransactionFields {
   disbursementResponse?: Record<string, unknown>;
   customerRefundResponse?: Record<string, unknown>[];
   merchantRefundResponse?: Record<string, unknown>[];
+  totalCustomerRefundAmount?: number;
+  totalMerchantRefundAmount?: number;
   uniqueId?: string;
   settlementDate?: number;
   fee?: number;
@@ -89,7 +91,7 @@ export class DynamoDBService {
       merchantMobileNo: item.merchantMobileNo,
       paymentMethod: item.paymentMethod,
       paymentResponse: item.paymentResponse,
-      disbursementRespons: item.isbursementResponse,
+      disbursementResponse: item.disbursementResponse,
       customerRefundResponse: item.customerRefundResponse,
       merchantRefundResponse: item.merchantRefundResponse,
       uniqueId: item.uniqueId,

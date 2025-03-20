@@ -123,8 +123,8 @@ export class MTNDisbursementWebhookService {
   }
 
   /**
-   * Handles successful payment processing
-   * @throws WebhookError if processing is successful
+   * Handles successful transfer processing
+   * @throws WebhookError if processing fails
    */
   private async handleSuccessfulTransfer(
     transactionId: string,
