@@ -32,6 +32,7 @@ export interface ErrorMetadata {
   suggestedAction?: string;
   originalError?: unknown;
   httpStatus?: number;
+  transactionId?: string;
 }
 
 /**
@@ -50,6 +51,8 @@ export class EnhancedError extends Error {
 
   public readonly httpStatus?: number;
 
+  public readonly transactionId?: string;
+
   constructor(
     errorCode: string,
     category: ErrorCategory,
@@ -64,6 +67,7 @@ export class EnhancedError extends Error {
     this.suggestedAction = metadata?.suggestedAction;
     this.originalError = metadata?.originalError;
     this.httpStatus = metadata?.httpStatus;
+    this.transactionId = metadata?.transactionId;
   }
 }
 
@@ -99,6 +103,11 @@ export class ErrorHandler {
     message: string,
     metadata?: ErrorMetadata
   ): APIGatewayProxyResult {
+    const details: Record<string, unknown> = {};
+
+    if (metadata?.transactionId) {
+      details.transactionId = metadata.transactionId; // Explicitly assign transactionId
+    }
     const errorResponse: ErrorResponse = {
       errorCode,
       error,
@@ -106,6 +115,7 @@ export class ErrorHandler {
       retryable: metadata?.retryable ?? false,
       suggestedAction: metadata?.suggestedAction,
       httpStatus: metadata?.httpStatus,
+      details: Object.keys(details).length > 0 ? details : undefined, // Only include details if it has content
     };
 
     return {
@@ -128,6 +138,7 @@ export class ErrorHandler {
         retryable: error.retryable,
         suggestedAction: error.suggestedAction,
         httpStatus: error.httpStatus,
+        transactionId: error.transactionId,
         stack: error.stack,
       };
     }
@@ -159,6 +170,7 @@ export class ErrorHandler {
           retryable: error.retryable,
           suggestedAction: error.suggestedAction,
           httpStatus: error.httpStatus,
+          transactionId: error.transactionId, // Ensure this is included
         }
       );
     }
