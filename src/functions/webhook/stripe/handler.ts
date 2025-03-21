@@ -6,7 +6,7 @@ import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
 import { Readable } from 'stream';
-import {SNSMessage } from '../../../model';
+import { SNSMessage } from '../../../model';
 
 export class StripeWebhookService {
   private readonly logger: Logger;
@@ -95,7 +95,7 @@ export class StripeWebhookService {
         }
       }
 
-      await this.snsService.publish( {
+      await this.snsService.publish({
         transactionId,
         status,
         type: isFailedStatus ? 'FAILED' : 'UPDATE',

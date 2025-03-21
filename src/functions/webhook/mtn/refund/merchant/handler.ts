@@ -97,7 +97,7 @@ export class MTNPaymentWebhookService {
         updateData,
       });
       // Send to SalesForce
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId: webhookEvent.externalId,
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
         type: 'CREATE',
@@ -140,7 +140,7 @@ export class MTNPaymentWebhookService {
         }
       );
       // Send to SalesForce
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish( {
         transactionId: transactionStatus.externalId,
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
         type: 'CREATE',

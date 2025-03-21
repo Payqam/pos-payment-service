@@ -77,7 +77,7 @@ export class MTNDisbursementWebhookService {
         }
       );
       // Send to SalesForce
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish( {
         transactionId: transactionStatus.externalId,
         status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
         type: 'CREATE',
@@ -132,7 +132,7 @@ export class MTNDisbursementWebhookService {
   ): Promise<Record<string, unknown>> {
     try {
       // Send to SalesForce
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId: transactionStatus.externalId,
         status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
         type: 'CREATE',
@@ -198,7 +198,7 @@ export class MTNDisbursementWebhookService {
     currency: string
   ): Promise<void> {
     try {
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId,
         uniqueId,
         status,
@@ -336,7 +336,6 @@ export class MTNDisbursementWebhookService {
         );
         // Send to SalesForce
         await this.snsService.publish(
-          process.env.TRANSACTION_STATUS_TOPIC_ARN!,
           {
             transactionId: transaction.transactionId,
             status: MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
