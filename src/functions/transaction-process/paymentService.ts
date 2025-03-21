@@ -56,6 +56,7 @@ export class PaymentService {
           transactionType as string,
           merchantId as string,
           currency as string,
+          merchantMobileNo as string,
           customerPhone,
           metaData
         );

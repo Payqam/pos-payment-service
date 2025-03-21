@@ -9,7 +9,6 @@ export interface SalesforceCredentials {
 export interface SNSMessage {
   transactionId: string;
   status: string;
-  amount?: string;
   merchantId?: string;
   merchantMobileNo?: string;
   transactionType?: 'CHARGE' | 'REFUND';
@@ -20,6 +19,7 @@ export interface SNSMessage {
   currency?: string;
   exchangeRate?: string;
   processingFee?: string;
+  netAmount?: string;
   settlementAmount?: string;
   externalTransactionId?: string;
   paymentMethod?: string;
