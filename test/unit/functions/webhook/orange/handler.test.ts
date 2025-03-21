@@ -1,13 +1,13 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { OrangeWebhookService } from '../../../../../src/functions/webhook/orange/handler';
+import { OrangeChargeWebhookService } from '../../../../../src/functions/webhook/orange/charge/handler';
 import { expect } from '@jest/globals';
 
 describe('OrangeWebhookService', () => {
-  let service: OrangeWebhookService;
+  let service: OrangeChargeWebhookService;
   let mockEvent: APIGatewayProxyEvent;
 
   beforeEach(() => {
-    service = new OrangeWebhookService();
+    service = new OrangeChargeWebhookService();
   });
 
   test('should return 200 for a valid webhook event', async () => {
