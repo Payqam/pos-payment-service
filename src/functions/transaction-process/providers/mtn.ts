@@ -399,7 +399,6 @@ export class MtnPaymentService {
           await this.dbService.createPaymentRecord(paymentRecord);
 
           await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
               transactionId,
               paymentMethod: 'MTN MOMO',
@@ -462,7 +461,6 @@ export class MtnPaymentService {
           });
 
           await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
             {
               transactionId,
               paymentMethod: 'MTN MOMO',
@@ -559,7 +557,6 @@ export class MtnPaymentService {
         await this.dbService.updatePaymentRecord({ transactionId }, updateData);
         // Send to SalesForce
         await this.snsService.publish(
-          process.env.TRANSACTION_STATUS_TOPIC_ARN!,
           {
             transactionId: transactionRecord.Item.transactionId,
             status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
