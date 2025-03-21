@@ -214,35 +214,6 @@ export class MTNDisbursementWebhookService {
   }
 
   /**
-   * Publishes settlement status update to SNS
-   * @throws WebhookError if publish fails
-   */
-  private async publishStatusUpdate(
-    transactionId: string,
-    uniqueId: string, // Disbursement Settlement ID for MTN
-    status: string,
-    amount: string,
-    currency: string
-  ): Promise<void> {
-    try {
-      await this.snsService.publish({
-        transactionId,
-        uniqueId,
-        status,
-        type: 'SETTLEMENT',
-        amount,
-        currency,
-      });
-    } catch (error) {
-      throw new WebhookError('Failed to publish status update', 500, {
-        error,
-        transactionId,
-        uniqueId,
-      });
-    }
-  }
-
-  /**
    * Validates and parses the webhook event
    * @throws WebhookError if validation fails
    */
