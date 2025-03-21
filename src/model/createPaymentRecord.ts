@@ -1,4 +1,4 @@
-import { PaymentResponse as OrangePaymentResponse } from '../functions/transaction-process/interfaces/orange';
+import { PaymentResponse as OrangePaymentResponse } from './orange';
 import Stripe from 'stripe';
 
 export interface CreatePaymentRecord {

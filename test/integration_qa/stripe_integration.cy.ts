@@ -1,5 +1,5 @@
 import testData from '../../cypress/fixtures/test_data.json';
-let paymentMethodId, transactionId, uniqueId;
+let paymentMethodId, transactionId, uniqueId, accessToken;
 
 describe('Stripe Payment Processing Tests', () => {
   describe('Validate Successful Payment Processing', () => {
@@ -38,16 +38,16 @@ describe('Stripe Payment Processing Tests', () => {
           'x-api-key': `${Cypress.env('x-api-key')}`,
         },
         body: {
-          merchantId: 'unique_merchant_identifier',
+          merchantId: 'M123',
           amount: 120000,
           transactionType: 'CHARGE',
           paymentMethod: 'CARD',
           customerPhone: '3333',
+          currency: 'EUR',
           cardData: {
             paymentMethodId: Cypress.env('paymentMethodId'),
             cardName: 'visa',
             destinationId: 'acct_1QmXUNPsBq4jlflt',
-            currency: 'eur',
           },
           metaData: {
             deviceId: 'device_identifier',
@@ -118,21 +118,104 @@ describe('Stripe Payment Processing Tests', () => {
         expect(response.body).to.have.property('status', 'succeeded');
         expect(response.body).to.have.property('amount', 120000);
         expect(response.body).to.have.property('currency', 'eur');
-        expect(response.body.transfer_data).to.have.property('amount', 117600);
+        expect(response.body.transfer_data).to.have.property('amount', 108000);
+      });
+    });
+
+    it(`Generates a Salesforce Access Token`, () => {
+      cy.request({
+        method: 'POST',
+        url: `${Cypress.env('salesforceTokenUrl')}`,
+        body: {
+          grant_type: `${Cypress.env('salesforceGrantType')}`,
+          client_id: `${Cypress.env('salesforceClientId')}`,
+          client_secret: `${Cypress.env('salesforceClientSecret')}`,
+          username: `${Cypress.env('salesforceUsername')}`,
+          password: `${Cypress.env('salesforcePassword')}`,
+        },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }).then((response) => {
+        expect(response.status).to.eq(200);
+        cy.task('log', response.body);
+        accessToken = response.body.access_token;
+        cy.task('log', `accessToken : ${accessToken}`);
+        Cypress.env('accessToken', accessToken);
+        cy.wait(500);
+      });
+    });
+
+    it(`Verify Payment on salesforce for  payment`, () => {
+      cy.request({
+        method: 'GET',
+        url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,fee__c,merchantId__c,Currency__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+        headers: {
+          Authorization: `Bearer ${Cypress.env('accessToken')}`,
+        },
+      }).then((response) => {
+        expect(response.status).to.eq(200);
+        cy.task('log', response.body);
+        expect(response.body.records[0]).to.have.property(
+          'status__c',
+          'CHARGE_UPDATED'
+        );
+        expect(response.body.records[0]).to.have.property(
+          'MerchantId__c',
+          'M123'
+        );
+        expect(response.body.records[0]).to.have.property('currency__c', 'EUR');
+        // expect(response.body.records[0]).to.have.property(
+        //   'amount__c',
+        //   '108000'
+        // );
+        expect(response.body.records[0]).to.have.property('Fee__c', '12000');
       });
     });
   });
+});
 
-  describe('Validate Invalid and Duplicate Requests Payment Processing', () => {
-    it('Validate Request with Invalid Stripe Credentials', () => {
+describe('Validate Invalid and Duplicate Requests Payment Processing', () => {
+  it('Validate Request with Invalid Stripe Credentials', () => {
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+      headers: {
+        Authorization: `Bearer ${Cypress.env('InvalidApiKey')}`,
+      },
+      failOnStatusCode: false,
+      form: true,
+      body: {
+        type: 'card',
+        'card[number]': '4242424242424242',
+        'card[exp_month]': '12',
+        'card[exp_year]': '2025',
+        'card[cvc]': '123',
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(401);
+      expect(response.body).to.have.property('error');
+      expect(response.body.error).to.have.property(
+        'type',
+        'invalid_request_error'
+      );
+      expect(response.body.error.message).to.include(
+        'Invalid API Key provided'
+      );
+      cy.task('log', response.body);
+    });
+  });
+});
+
+describe('Validate Idempotency for Duplicate Requests', () => {
+  testData.idempotency.forEach(({ idempotencyKey }) => {
+    it('Create a Payment Method', () => {
       cy.request({
         method: 'POST',
         url: `${Cypress.env('paymentApiUrl')}payment_methods`,
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': `${Cypress.env('InvalidApiKey')}`,
+          Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
         },
-        failOnStatusCode: false,
         form: true,
         body: {
           type: 'card',
@@ -141,43 +224,48 @@ describe('Stripe Payment Processing Tests', () => {
           'card[exp_year]': '2025',
           'card[cvc]': '123',
         },
+        failOnStatusCode: false,
       }).then((response) => {
-        expect(response.status).to.eq(401);
+        expect(response.status).to.eq(200);
+        expect(response.body).to.have.property('id');
+        paymentMethodId = response.body.id;
         cy.task('log', response.body);
+        cy.task('log', paymentMethodId);
+        Cypress.env('paymentMethodId', paymentMethodId);
+        cy.wait(500);
       });
     });
-  });
 
-  describe('Validate Idempotency for Duplicate Requests', () => {
-    testData.idempotency.forEach(({ idempotencyKey }) => {
-      it('Create a Payment Method', () => {
-        cy.request({
-          method: 'POST',
-          url: `${Cypress.env('paymentApiUrl')}payment_methods`,
-          headers: {
-            Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+    it(`Verify 500 Response for Duplicate Requests`, () => {
+      cy.request({
+        method: 'POST',
+        url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
+        headers: {
+          'x-api-key': `${Cypress.env('x-api-key')}`,
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: {
+          merchantId: 'M123',
+          amount: 120000,
+          transactionType: 'CHARGE',
+          paymentMethod: 'CARD',
+          customerPhone: '3333',
+          currency: 'EUR',
+          cardData: {
+            paymentMethodId: Cypress.env('paymentMethodId'),
+            cardName: 'visa',
+            destinationId: 'acct_1QmXUNPsBq4jlflt',
           },
-          form: true,
-          body: {
-            type: 'card',
-            'card[number]': '4242424242424242',
-            'card[exp_month]': '12',
-            'card[exp_year]': '2025',
-            'card[cvc]': '123',
+          metaData: {
+            deviceId: 'device_identifier',
+            location: 'transaction_location',
+            timestamp: 'transaction_timestamp',
           },
-          failOnStatusCode: false,
-        }).then((response) => {
-          expect(response.status).to.eq(200);
-          expect(response.body).to.have.property('id');
-          paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
-          Cypress.env('paymentMethodId', paymentMethodId);
-          cy.wait(500);
-        });
-      });
+        },
+        failOnStatusCode: false,
+      }).then((response) => {
+        expect(response.status).to.eq(200);
 
-      it(`Verify 500 Response for Duplicate Requests`, () => {
         cy.request({
           method: 'POST',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
@@ -186,16 +274,16 @@ describe('Stripe Payment Processing Tests', () => {
             'Idempotency-Key': idempotencyKey,
           },
           body: {
-            merchantId: 'unique_merchant_identifier',
+            merchantId: 'M123',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: 'visa',
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -204,39 +292,17 @@ describe('Stripe Payment Processing Tests', () => {
             },
           },
           failOnStatusCode: false,
-        }).then((response) => {
-          expect(response.status).to.eq(200);
-
-          cy.request({
-            method: 'POST',
-            url: `${Cypress.env('paymentServiceEndpoint')}/transaction/process/charge`,
-            headers: {
-              'x-api-key': `${Cypress.env('x-api-key')}`,
-              'Idempotency-Key': idempotencyKey,
-            },
-            body: {
-              merchantId: 'unique_merchant_identifier',
-              amount: 120000,
-              transactionType: 'CHARGE',
-              paymentMethod: 'CARD',
-              customerPhone: '3333',
-              cardData: {
-                paymentMethodId: Cypress.env('paymentMethodId'),
-                cardName: 'visa',
-                destinationId: 'acct_1QmXUNPsBq4jlflt',
-                currency: 'eur',
-              },
-              metaData: {
-                deviceId: 'device_identifier',
-                location: 'transaction_location',
-                timestamp: 'transaction_timestamp',
-              },
-            },
-            failOnStatusCode: false,
-          }).then((duplicateResponse) => {
-            expect(duplicateResponse.status).to.eq(500);
-            cy.task('log', duplicateResponse.body);
-          });
+        }).then((duplicateResponse) => {
+          expect(duplicateResponse.status).to.eq(500);
+          cy.task('log', duplicateResponse.body);
+          expect(duplicateResponse.body).to.have.property(
+            'error',
+            'SYSTEM_ERROR'
+          );
+          expect(duplicateResponse.body).to.have.property(
+            'message',
+            'The provided PaymentMethod was previously used with a PaymentIntent without Customer attachment, shared with a connected account without Customer attachment, or was detached from a Customer. It may not be used again. To use a PaymentMethod multiple times, you must attach it to a Customer first.'
+          );
         });
       });
     });

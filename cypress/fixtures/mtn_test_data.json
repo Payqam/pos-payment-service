@@ -185,5 +185,18 @@
       "payer": "46733123454",
       "merchant": "94760000000"
     }
+  ],
+
+  "errortest": [
+    {
+      "title": "failed payment request",
+      "payer": "46733123450",
+      "reason":"INTERNAL_PROCESSING_ERROR"
+    },
+    {
+      "title": "rejected payment request",
+      "payer": "46733123451",
+      "reason":"APPROVAL_REJECTED"
+    }
   ]
 }

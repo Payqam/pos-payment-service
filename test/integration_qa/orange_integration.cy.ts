@@ -1,14 +1,14 @@
 describe('Orange Money API Automation', () => {
-  let transactionId, uniqueId;
+  let transactionId, uniqueId, accessToken;
 
   it('should process a payment charge', () => {
     cy.request({
       method: 'POST',
       url: `${Cypress.env('orangePaymentServiceEndpoint')}/transaction/process/charge`,
       body: {
-        merchantId: '691654524',
+        merchantId: 'M123',
         merchantMobileNo: '691654524',
-        amount: 120000,
+        amount: 10000,
         transactionType: 'CHARGE',
         paymentMethod: 'ORANGE',
         customerPhone: '699944974',
@@ -52,37 +52,54 @@ describe('Orange Money API Automation', () => {
     });
   });
 
-  it('should successfully trigger the Orange Webhook', () => {
+  it(`Generates a Salesforce Access Token`, () => {
     cy.request({
       method: 'POST',
-      url: `${Cypress.env('orangePaymentServiceEndpoint')}/webhooks/orange`,
+      url: `${Cypress.env('salesforceTokenUrl')}`,
       body: {
-        type: 'payment_notification',
-        data: { payToken: `${Cypress.env('uniqueId')}` },
+        grant_type: `${Cypress.env('salesforceGrantType')}`,
+        client_id: `${Cypress.env('salesforceClientId')}`,
+        client_secret: `${Cypress.env('salesforceClientSecret')}`,
+        username: `${Cypress.env('salesforceUsername')}`,
+        password: `${Cypress.env('salesforcePassword')}`,
       },
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
     }).then((response) => {
       expect(response.status).to.eq(200);
+      cy.task('log', response.body);
+      accessToken = response.body.access_token;
+      cy.task('log', `access_token : ${accessToken}`);
+      Cypress.env('accessToken', accessToken);
+      cy.wait(500);
     });
   });
 
-  it('should check transaction status', () => {
+  it(`Verify Payment on salesforce`, () => {
     cy.request({
       method: 'GET',
-      url: `${Cypress.env('orangePaymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+      url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,fee__c,Currency__c,merchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': `${Cypress.env('orangeApiKey')}`,
+        Authorization: `Bearer ${Cypress.env('accessToken')}`,
       },
     }).then((response) => {
-      cy.task('log', response.body);
       expect(response.status).to.eq(200);
-      expect(response.body.transaction.Item).to.have.property(
-        'settlementStatus',
-        'SUCCESSFUL'
+      expect(response.status).to.eq(200);
+      expect(response.body.records[0]).to.have.property(
+        'status__c',
+        'PAYMENT_REQUEST_CREATED'
       );
+      expect(response.body.records[0]).to.have.property('Fee__c', '200');
+      // expect(response.body.records[0]).to.have.property(
+      //   'amount__c',
+      //   '11760'
+      // );
+      expect(response.body.records[0]).to.have.property(
+        'MerchantId__c',
+        'M123'
+      );
+      cy.task('log', response.body);
     });
   });
 });

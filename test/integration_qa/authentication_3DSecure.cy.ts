@@ -1,5 +1,5 @@
 import testData from 'cypress/fixtures/test_data.json';
-let paymentMethodId, transactionId, uniqueId;
+let paymentMethodId, transactionId, uniqueId, accessToken;
 
 describe('Authentication and 3D Secure', () => {
   testData.Authentication_3DSecure.forEach((card) => {
@@ -44,11 +44,11 @@ describe('Authentication and 3D Secure', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'eur',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -68,7 +68,7 @@ describe('Authentication and 3D Secure', () => {
           );
           expect(response.body.transactionDetails).to.have.property(
             'status',
-            'requires_action'
+            card.outcome
           );
 
           transactionId = response.body.transactionDetails.transactionId;
@@ -79,7 +79,7 @@ describe('Authentication and 3D Secure', () => {
       });
 
       it(`Should retrieve transaction status with ${card.type}`, () => {
-        cy.wait(3700);
+        cy.wait(4000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('paymentServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
@@ -120,8 +120,50 @@ describe('Authentication and 3D Secure', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
+        });
+      });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce for ${card.type} payment`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,merchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'requires_action'
+          );
+          expect(response.body.records[0]).to.have.property('Fee__c', '12000');
+          cy.task('log', response.body);
         });
       });
     });
@@ -169,11 +211,11 @@ describe('Authentication and 3D Secure', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'eur',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -245,8 +287,50 @@ describe('Authentication and 3D Secure', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
+        });
+      });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce for ${card.type} payment`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,merchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'CHARGE_UPDATED'
+          );
+          expect(response.body.records[0]).to.have.property('Fee__c', '12000');
+          cy.task('log', response.body);
         });
       });
     });

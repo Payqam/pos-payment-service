@@ -63,11 +63,11 @@ describe('Security Tests - API Response Verification', () => {
           transactionType: 'CHARGE',
           paymentMethod: 'CARD',
           customerPhone: '3333',
+          currency: 'EUR',
           cardData: {
             paymentMethodId: 'random_payment_method_id',
             cardName: 'Visa',
             destinationId: 'acct_1QmXUNPsBq4jlflt',
-            currency: 'eur',
           },
           metaData: {
             deviceId: 'device_identifier',

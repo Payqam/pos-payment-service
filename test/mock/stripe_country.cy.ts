@@ -1,5 +1,5 @@
 import testData from 'cypress/fixtures/test_data.json';
-let paymentMethodId, transactionId, uniqueId;
+let paymentMethodId, transactionId, uniqueId, accessToken;
 
 describe('Successful Payment -  Cards by Country-Americas', () => {
   testData.testCardsbyAmericas.forEach((card) => {
@@ -39,16 +39,16 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             'x-api-key': `${Cypress.env('x-api-key')}`,
           },
           body: {
-            merchantId: 'unique_merchant_identifier',
+            merchantId: 'M123',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -121,8 +121,57 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
+        });
+      });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.wait(1500);
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce`, () => {
+        cy.wait(500);
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'CHARGE_UPDATED'
+          );
+          expect(response.body.records[0]).to.have.property('Fee__c', '12000');
+          // expect(response.body.records[0]).to.have.property('amount__c', '97.5');
+          expect(response.body.records[0]).to.have.property(
+            'MerchantId__c',
+            'M123'
+          );
+          cy.task('log', response.body);
         });
       });
     });
@@ -167,16 +216,16 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
             'x-api-key': `${Cypress.env('x-api-key')}`,
           },
           body: {
-            merchantId: 'unique_merchant_identifier',
+            merchantId: 'M123',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -249,8 +298,57 @@ describe('Successful Payment -  Cards by Country-Europe & MiddleEast', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
+        });
+      });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.wait(1500);
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce`, () => {
+        cy.wait(500);
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'CHARGE_UPDATED'
+          );
+          expect(response.body.records[0]).to.have.property('Fee__c', '12000');
+          // expect(response.body.records[0]).to.have.property('amount__c', '97.5');
+          expect(response.body.records[0]).to.have.property(
+            'MerchantId__c',
+            'M123'
+          );
+          cy.task('log', response.body);
         });
       });
     });
@@ -295,16 +393,16 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
             'x-api-key': `${Cypress.env('x-api-key')}`,
           },
           body: {
-            merchantId: 'unique_merchant_identifier',
+            merchantId: 'M123',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -378,8 +476,57 @@ describe('Successful Payment -  Cards by Country-Asia Pacific', () => {
           expect(response.body).to.have.property('currency', 'eur');
           expect(response.body.transfer_data).to.have.property(
             'amount',
-            117600
+            108000
           );
+        });
+      });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.wait(1500);
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce`, () => {
+        cy.wait(500);
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'CHARGE_UPDATED'
+          );
+          expect(response.body.records[0]).to.have.property('Fee__c', '12000');
+          // expect(response.body.records[0]).to.have.property('amount__c', '97.5');
+          expect(response.body.records[0]).to.have.property(
+            'MerchantId__c',
+            'M123'
+          );
+          cy.task('log', response.body);
         });
       });
     });
@@ -424,16 +571,16 @@ describe('Successful Payment -  Cards by Brand', () => {
             'x-api-key': `${Cypress.env('x-api-key')}`,
           },
           body: {
-            merchantId: 'unique_merchant_identifier',
+            merchantId: 'M123',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: card.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',

@@ -44,11 +44,11 @@ describe('Dispute', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: dispute.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -215,11 +215,11 @@ describe('Dispute - Not Received', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: dispute.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -369,11 +369,11 @@ describe('Dispute - Inquiry', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: dispute.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
@@ -523,11 +523,11 @@ describe('Dispute - Warning', () => {
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
             customerPhone: '3333',
+            currency: 'EUR',
             cardData: {
               paymentMethodId: Cypress.env('paymentMethodId'),
               cardName: dispute.type,
               destinationId: 'acct_1QmXUNPsBq4jlflt',
-              currency: 'eur',
             },
             metaData: {
               deviceId: 'device_identifier',
