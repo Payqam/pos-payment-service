@@ -10,7 +10,7 @@ import {
   TransactionRecord,
 } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-import { PaymentResponse } from '../../../transaction-process/interfaces/orange';
+import { PaymentResponse } from '../../../../model';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { REFUND_SCENARIOS, PaymentScenario } from 'configurations/sandbox/orange/scenarios';

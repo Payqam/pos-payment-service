@@ -3,47 +3,12 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../services/secretsManagerService';
 import axios from 'axios';
 import { registerRedactFilter } from '../../../utils/redactUtil';
+import { SalesforceCredentials, SNSMessage } from "../../model/snsPublish";
 
 // Configure sensitive field redaction in logs
 const sensitiveFields = ['clientId', 'clientSecret', 'username', 'password'];
 registerRedactFilter(sensitiveFields);
 
-interface SalesforceCredentials {
-  clientSecret: string;
-  clientId: string;
-  username: string;
-  password: string;
-  host: string;
-  ownerId: string;
-}
-interface SNSMessage {
-  transactionId: string;
-  status: string;
-  amount: string;
-  merchantId: string;
-  transactionType: string;
-  metaData: { deviceId: string };
-  fee: string;
-  type: string;
-  customerPhone: string;
-  createdOn: number;
-  currency: string;
-  exchangeRate: string;
-  processingFee: string;
-  settlementAmount: string;
-  externalTransactionId: string;
-  paymentMethod: string;
-  partyIdType: string;
-  partyId: string;
-  payeeNote: string;
-  payerMessage: string;
-  TransactionError: {
-    ErrorCode: string;
-    ErrorMessage: string;
-    ErrorType: string;
-    ErrorSource: string;
-  };
-}
 
 export class SalesforceSyncService {
   private readonly logger: Logger;
@@ -180,6 +145,7 @@ export class SalesforceSyncService {
         status__c: message.status,
         amount__c: message.settlementAmount,
         merchantId__c: message.merchantId,
+        Merchant_Phone__c: message.merchantMobileNo,
         Transaction_Type__c: message.transactionType,
         metaData__C: JSON.stringify(message.metaData),
         fee__c: message.fee.toString(),

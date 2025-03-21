@@ -10,7 +10,7 @@ import {
   OrangeToken,
   PaymentInitResponse,
   PaymentResponse,
-} from '../interfaces/orange';
+} from '../../../model';
 import { config } from 'cypress/types/bluebird';
 import { OrangePaymentStatus } from 'src/types/orange';
 
@@ -424,7 +424,7 @@ export class OrangePaymentService {
   }) {
     const dateTime = new Date().toISOString();
     const timestamp = Math.floor(new Date(dateTime).getTime() / 1000);
-    await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+    await this.snsService.publish({
       transactionId: params.transactionId,
       paymentMethod: 'Orange',
       status: params.status,
@@ -914,18 +914,19 @@ export class OrangePaymentService {
   }
 
   /**
- * Processes a payment request from a customer.
- * Creates a payment request via Orange's API and stores the transaction in DynamoDB.
- *
- * @param amount - The payment amount
- * @param customerPhone - Customer's mobile number
- * @param merchantId - ID of the merchant receiving the payment
- * @param merchantMobileNo - Merchant's mobile number for disbursement
- * @param metaData - Optional metadata for the transaction
- * @param transactionType - Type of transaction (CHARGE/REFUND)
- * @param currency - Payment currency (default: EUR)
- * @returns The transaction ID and status
- */
+   * Processes a payment request from a customer.
+   * Creates a payment request via Orange's API and stores the transaction in DynamoDB.
+   *
+   * @param amount - The payment amount
+   * @param customerPhone - Customer's mobile number
+   * @param merchantId - ID of the merchant receiving the payment
+   * @param merchantMobileNo - Merchant's mobile number for disbursement
+   * @param metaData - Optional metadata for the transaction
+   * @param transactionType - Type of transaction (CHARGE/REFUND)
+   * @param currency - Payment currency (default: EUR)
+   * @param transactionId
+   * @returns The transaction ID and status
+   */
   public async processPayment(
     amount: number,
     customerPhone: string,

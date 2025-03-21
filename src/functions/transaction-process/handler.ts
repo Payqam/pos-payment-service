@@ -4,10 +4,8 @@ import { PaymentService } from './paymentService';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 import { ErrorHandler, ErrorCategory } from '../../../utils/errorHandler';
-import { KmsService } from '../../services/kmsService';
 import { DynamoDBService } from '../../services/dynamodbService';
 
-// Configure sensitive field redaction in logs
 const sensitiveFields = [
   'id',
   'destinationId',
@@ -23,14 +21,11 @@ export class TransactionProcessService {
 
   private readonly paymentService: PaymentService;
 
-  // private readonly kmsService: KmsService;
-
   private readonly dbService: DynamoDBService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
-    // this.kmsService = new KmsService();
     this.dbService = new DynamoDBService();
     this.logger.info('init()');
   }
@@ -56,6 +51,10 @@ export class TransactionProcessService {
     } catch (error: unknown) {
       return ErrorHandler.handleException(error, 'Failed to process request');
     }
+  }
+
+  private getDefaultResponseHeaders() {
+    return API.DEFAULT_HEADERS;
   }
 
   private async handlePost(
@@ -112,10 +111,10 @@ export class TransactionProcessService {
 
     return {
       statusCode: 200,
-      headers: API.DEFAULT_HEADERS,
+      headers: this.getDefaultResponseHeaders(),
       body: JSON.stringify({
         message: transactionType === 'REFUND' 
-          ? ('Refund processed successfully')
+          ? 'Refund processed successfully'
           : 'Payment processed successfully',
         transactionDetails: transactionResult,
       }),
@@ -142,7 +141,7 @@ export class TransactionProcessService {
     });
     return {
       statusCode: 200,
-      headers: API.DEFAULT_HEADERS,
+      headers: this.getDefaultResponseHeaders(),
       body: JSON.stringify({
         message: 'Transaction retrieved successfully',
         transaction: transactionDetails,

@@ -1,5 +1,5 @@
 import testData from '../../cypress/fixtures/mtn_test_data.json';
-let transactionId, uniqueId, accessToken;
+let transactionId, uniqueId, accessToken, Id;
 
 describe('MTN Payment Processing Tests', () => {
   testData.requestPayer.forEach((test) => {
@@ -13,7 +13,7 @@ describe('MTN Payment Processing Tests', () => {
             'Content-Type': 'application/json',
           },
           body: {
-            merchantId: 'MERCHANT_123',
+            merchantId: 'M123',
             merchantMobileNo: test.merchant,
             amount: 100,
             customerPhone: test.payer,
@@ -108,6 +108,57 @@ describe('MTN Payment Processing Tests', () => {
           expect(response.body).to.have.property('status', 'PENDING');
         });
       });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.wait(1500);
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'PAYMENT_REQUEST_CREATED'
+          );
+          expect(response.body.records[0]).to.have.property('Fee__c', '2.5');
+          expect(response.body.records[0]).to.have.property(
+            'amount__c',
+            '97.5'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'MerchantId__c',
+            'M123'
+          );
+          cy.task('log', response.body);
+        });
+      });
     });
   });
 });
@@ -124,7 +175,7 @@ testData.refundTestData.forEach((test) => {
             'Content-Type': 'application/json',
           },
           body: {
-            merchantId: 'MERCHANT_123',
+            merchantId: 'M123',
             merchantMobileNo: test.merchant,
             amount: 200,
             customerPhone: test.payer,
@@ -264,6 +315,51 @@ testData.refundTestData.forEach((test) => {
           expect(response.status).to.eq(200);
           cy.task('log', response.body);
           expect(response.body).to.have.property('status', 'SUCCESSFUL');
+        });
+      });
+
+      it(`Generates a Salesforce Access Token`, () => {
+        cy.wait(1500);
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('salesforceTokenUrl')}`,
+          body: {
+            grant_type: `${Cypress.env('salesforceGrantType')}`,
+            client_id: `${Cypress.env('salesforceClientId')}`,
+            client_secret: `${Cypress.env('salesforceClientSecret')}`,
+            username: `${Cypress.env('salesforceUsername')}`,
+            password: `${Cypress.env('salesforcePassword')}`,
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          accessToken = response.body.access_token;
+          cy.task('log', `access_token : ${accessToken}`);
+          Cypress.env('accessToken', accessToken);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify Payment on salesforce`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          headers: {
+            Authorization: `Bearer ${Cypress.env('accessToken')}`,
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          expect(response.body.records[0]).to.have.property(
+            'status__c',
+            'MERCHANT_REFUND_SUCCESSFUL'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'MerchantId__c',
+            'M123'
+          );
         });
       });
     });

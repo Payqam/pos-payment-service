@@ -111,37 +111,37 @@
   ],
 
   "Authentication_3DSecure": [
-  {
-    "type": "Authenticate unless set up",
-    "card_number": "4000002500003155",
-    "outcome": "INTENT_REQUIRES_ACTION"
-  },
-  {
-    "type": "Always authenticate",
-    "card_number": "4000002760003184",
-    "outcome": "INTENT_REQUIRES_ACTION"
-  },
-  {
-    "type": "Already set up",
-    "card_number": "4000003800000446",
-    "outcome": "INTENT_REQUIRES_ACTION"
-  },
-  {
-    "type": "Insufficient funds",
-    "card_number": "4000008260003178",
-    "outcome": "INTENT_REQUIRES_ACTION"
-  },
-  {
-    "type": "3DS Required Declined",
-    "card_number": "4000008400001629",
-    "outcome": "INTENT_REQUIRES_ACTION"
-  },
-  {
-    "type": "3DS Required Error",
-    "card_number": "4000008400001280",
-    "outcome": "INTENT_REQUIRES_ACTION"
-  }
-],
+    {
+      "type": "Authenticate unless set up",
+      "card_number": "4000002500003155",
+      "outcome": "requires_action"
+    },
+    {
+      "type": "Always authenticate",
+      "card_number": "4000002760003184",
+      "outcome": "requires_action"
+    },
+    {
+      "type": "Already set up",
+      "card_number": "4000003800000446",
+      "outcome": "requires_action"
+    },
+    {
+      "type": "Insufficient funds",
+      "card_number": "4000008260003178",
+      "outcome": "requires_action"
+    },
+    {
+      "type": "3DS Required Declined",
+      "card_number": "4000008400001629",
+      "outcome": "requires_action"
+    },
+    {
+      "type": "3DS Required Error",
+      "card_number": "4000008400001280",
+      "outcome": "requires_action"
+    }
+  ],
 
   "SecureSuccess": [
     {
@@ -166,7 +166,7 @@
     }
   ],
 
-"testCardsFraudulentAndDisputes": [
+  "testCardsFraudulentAndDisputes": [
     { "type": "Fraudulent", "number": "4000000000000259" },
     { "type": "Multiple disputes", "number": "4000000404000079" },
     { "type": "Visa Compelling Evidence 3.0", "number": "4000000404000038" }
@@ -200,169 +200,165 @@
   ],
 
   "emptyFieldTest":[
-  {
-    "title": "Empty expiry month",
-    "body": {
-      "card[exp_month]": " "
+    {
+      "title": "Empty expiry month",
+      "body": {
+        "card[exp_month]": " "
+      }
+    },
+    {
+      "title": "Empty expiry year",
+      "body": {
+        "card[exp_year]": " "
+      }
+    },
+    {
+      "title": "No data sent in request",
+      "body": {
+        "card[number]": "",
+        "card[cvc]": "",
+        "card[exp_month]": " ",
+        "card[exp_year]": " ",
+        "card[type]": ""
+      }
+    },
+    {
+      "title": "Unsupported payment type",
+      "body": {
+        "card[type]": "bitcoin"
+      }
     }
-  },
-  {
-    "title": "Empty expiry year",
-    "body": {
-      "card[exp_year]": " "
-    }
-  },
-  {
-    "title": "No data sent in request",
-    "body": {
-      "card[number]": "",
-      "card[cvc]": "",
-      "card[exp_month]": " ",
-      "card[exp_year]": " ",
-      "card[type]": ""
-    }
-  },
-  {
-    "title": "Unsupported payment type",
-    "body": {
-      "card[type]": "bitcoin"
-    }
-  }
-],
+  ],
 
 
-"invalidCardTests":[
-  {
-    "title": "Invalid card number",
-    "body": { "card[number]": "1234567890123456" },
-    "code": "incorrect_number",
-    "message": "Your card number is incorrect."
-  },
-  {
-    "title": "Empty card number",
-    "body": { "card[number]": " " },
-    "code": "invalid_number",
-    "message": "The card number is not a valid credit card number."
-  },
-  {
-    "title": "Short-length card number",
-    "body": { "card[number]": "424242" },
-    "code": "invalid_number",
-    "message": "The card number is not a valid credit card number."
-  },
-  {
-    "title": "Extra-long card number",
-    "body": { "card[number]": "42424242424242424242" },
-    "code": "incorrect_number",
-    "message": "Your card number is incorrect."
-  },
-  {
-    "title": "Alphanumeric card number",
-    "body": { "card[number]": "4242abcd4242abcd" },
-    "code": "incorrect_number",
-    "message": "Your card number is incorrect."
-  },
-  {
-    "title": "Invalid expiry month",
-    "body": { "card[exp_month]": "13" },
-    "code": "invalid_expiry_month",
-    "message": "Your card's expiration month is invalid."
-  },
-  {
-    "title": "Expiry year in the past",
-    "body": { "card[exp_year]": "2020" },
-    "code": "invalid_expiry_year",
-    "message": "Your card's expiration year is invalid."
-  },
-  {
-    "title": "Just-expired card",
-    "body": { "card[exp_month]": "10", "card[exp_year]": "2023" },
-    "code": "invalid_expiry_year",
-    "message": "Your card's expiration year is invalid."
-  },
-  {
-    "title": "Maximum valid expiry year",
-    "body": { "card[exp_year]": "2090" },
-    "code": "invalid_expiry_year",
-    "message": "Your card's expiration year is invalid."
-  },
-  {
-    "title": "Invalid CVC number",
-    "body": { "card[cvc]": "12a" },
-    "code": "invalid_cvc",
-    "message": "Your card's security code is invalid."
-  },
-  {
-    "title": "CVC longer than allowed",
-    "body": { "card[cvc]": "12345" },
-    "code": "invalid_cvc",
-    "message": "Your card's security code is invalid."
-  },
-  {
-    "title": "Empty CVC",
-    "body": { "card[cvc]": " " },
-    "code": "invalid_cvc",
-    "message": "Your card's security code is invalid."
-  },
-  {
-    "title": "CVC with letters/special characters",
-    "body": { "card[cvc]": "12$%" },
-    "code": "invalid_cvc",
-    "message": "Your card's security code is invalid."
-  },
+  "invalidCardTests":[
+    {
+      "title": "Invalid card number",
+      "body": { "card[number]": "1234567890123456" },
+      "code": "incorrect_number",
+      "message": "Your card number is incorrect."
+    },
+    {
+      "title": "Empty card number",
+      "body": { "card[number]": " " },
+      "code": "invalid_number",
+      "message": "The card number is not a valid credit card number."
+    },
+    {
+      "title": "Short-length card number",
+      "body": { "card[number]": "424242" },
+      "code": "invalid_number",
+      "message": "The card number is not a valid credit card number."
+    },
+    {
+      "title": "Extra-long card number",
+      "body": { "card[number]": "42424242424242424242" },
+      "code": "incorrect_number",
+      "message": "Your card number is incorrect."
+    },
+    {
+      "title": "Alphanumeric card number",
+      "body": { "card[number]": "4242abcd4242abcd" },
+      "code": "incorrect_number",
+      "message": "Your card number is incorrect."
+    },
+    {
+      "title": "Invalid expiry month",
+      "body": { "card[exp_month]": "13" },
+      "code": "invalid_expiry_month",
+      "message": "Your card's expiration month is invalid."
+    },
+    {
+      "title": "Expiry year in the past",
+      "body": { "card[exp_year]": "2020" },
+      "code": "invalid_expiry_year",
+      "message": "Your card's expiration year is invalid."
+    },
+    {
+      "title": "Just-expired card",
+      "body": { "card[exp_month]": "10", "card[exp_year]": "2023" },
+      "code": "invalid_expiry_year",
+      "message": "Your card's expiration year is invalid."
+    },
+    {
+      "title": "Maximum valid expiry year",
+      "body": { "card[exp_year]": "2090" },
+      "code": "invalid_expiry_year",
+      "message": "Your card's expiration year is invalid."
+    },
+    {
+      "title": "Invalid CVC number",
+      "body": { "card[cvc]": "12a" },
+      "code": "invalid_cvc",
+      "message": "Your card's security code is invalid."
+    },
+    {
+      "title": "CVC longer than allowed",
+      "body": { "card[cvc]": "12345" },
+      "code": "invalid_cvc",
+      "message": "Your card's security code is invalid."
+    },
+    {
+      "title": "Empty CVC",
+      "body": { "card[cvc]": " " },
+      "code": "invalid_cvc",
+      "message": "Your card's security code is invalid."
+    },
+    {
+      "title": "CVC with letters/special characters",
+      "body": { "card[cvc]": "12$%" },
+      "code": "invalid_cvc",
+      "message": "Your card's security code is invalid."
+    },
     {
       "title": "CVC with 2 characters",
       "body": { "card[cvc]": "12" },
       "code": "invalid_cvc",
       "message": "Your card's security code is invalid."
     }
-],
-
-
-
-
+  ],
   "declineCard":[
-  {
-    "title": "Generic decline",
-    "card_number": "4000000000000002",
-    "decline_reason": "Your card was declined."
-  },
-  {
-    "title": "Insufficient funds decline",
-    "card_number": "4000000000009995",
-    "decline_reason": "Your card has insufficient funds."
-  },
-  {
-    "title": "Lost card decline",
-    "card_number": "4000000000009987",
-    "decline_reason": "Your card was declined."
-  },
-  {
-    "title": "Stolen card decline",
-    "card_number": "4000000000009979",
-    "decline_reason": "Your card was declined."
-  },
-  {
-    "title": "Expired card decline",
-    "card_number": "4000000000000069",
-    "decline_reason": "Your card has expired."
-  },
-  {
-    "title": "Incorrect CVC decline",
-    "card_number": "4000000000000127",
-    "decline_reason": "Your card's security code is incorrect."
-  },
-  {
-    "title": "Processing error decline",
-    "card_number": "4000000000000119",
-    "decline_reason": "An error occurred while processing your card. Try again in a little bit."
-  },
+    {
+      "title": "Generic decline",
+      "card_number": "4000000000000002",
+      "decline_reason": "Your card was declined."
+    },
+    {
+      "title": "Insufficient funds decline",
+      "card_number": "4000000000009995",
+      "decline_reason": "Your card has insufficient funds."
+    },
+    {
+      "title": "Lost card decline",
+      "card_number": "4000000000009987",
+      "decline_reason": "Your card was declined."
+    },
+    {
+      "title": "Stolen card decline",
+      "card_number": "4000000000009979",
+      "decline_reason": "Your card was declined."
+    },
+    {
+      "title": "Expired card decline",
+      "card_number": "4000000000000069",
+      "decline_reason": "Your card has expired."
+    },
+    {
+      "title": "Incorrect CVC decline",
+      "card_number": "4000000000000127",
+      "decline_reason": "Your card's security code is incorrect."
+    },
+    {
+      "title": "Processing error decline",
+      "card_number": "4000000000000119",
+      "decline_reason": "An error occurred while processing your card. Try again in a little bit."
+    },
 
-  {
-    "title": "Exceeding velocity limit decline",
-    "card_number": "4000000000006975",
-    "decline_reason": "Your card was declined for making repeated attempts too frequently or exceeding its amount limit."
-  },
+    {
+      "title": "Exceeding velocity limit decline",
+      "card_number": "4000000000006975",
+      "decline_reason": "Your card was declined for making repeated attempts too frequently or exceeding its amount limit."
+    },
     {
       "title": "Decline after attaching",
       "card_number": "4000000000000341",
@@ -370,17 +366,17 @@
     }
   ],
   "declineCardIncorrectNumber":[
-{
-  "title": "Incorrect number decline",
-  "card_number": "4242424242424241",
-  "decline_reason": "The provided PaymentMethod was previously used with a PaymentIntent without Customer attachment, shared with a connected account without Customer attachment, or was detached from a Customer. It may not be used again. To use a PaymentMethod multiple times, you must attach it to a Customer first."
-}
-    ],
+    {
+      "title": "Incorrect number decline",
+      "card_number": "4242424242424241",
+      "decline_reason": "The provided PaymentMethod was previously used with a PaymentIntent without Customer attachment, shared with a connected account without Customer attachment, or was detached from a Customer. It may not be used again. To use a PaymentMethod multiple times, you must attach it to a Customer first."
+    }
+  ],
 
   "fraudPrevention": [
     {
       "type": "Always blocked - Highest risk",
-      "number": "4100000000000019",
+      "number": "410000000000019",
       "decline_details": "Your card was declined."
     },
     {
@@ -388,7 +384,7 @@
       "number": "4000000000004954",
       "decline_details": "Your card was declined."
     }
-    ],
+  ],
 
   "CVCCheckFails": [
     {
@@ -427,30 +423,89 @@
   ],
 
   "invalidPayloads":[
-  {
-    "testName": "SQL Injection",
-    "payload": {
-      "type": "card",
-      "card[number]": "' OR 1=1 --",
-      "card[exp_month]": "12",
-      "card[exp_year]": "2025",
-      "card[cvc]": "123"
+    {
+      "testName": "SQL Injection",
+      "payload": {
+        "type": "card",
+        "card[number]": "' OR 1=1 --",
+        "card[exp_month]": "12",
+        "card[exp_year]": "2025",
+        "card[cvc]": "123"
+      }
+    },
+    {
+      "testName": "Cross-Site Scripting (XSS)",
+      "payload": {
+        "type": "card",
+        "card[number]": "<script>alert('XSS')</script>",
+        "card[exp_month]": "12",
+        "card[exp_year]": "2025",
+        "card[cvc]": "123"
+      }
     }
-  },
-  {
-    "testName": "Cross-Site Scripting (XSS)",
-    "payload": {
-      "type": "card",
-      "card[number]": "<script>alert('XSS')</script>",
-      "card[exp_month]": "12",
-      "card[exp_year]": "2025",
-      "card[cvc]": "123"
-    }
-  }
-],
+  ],
   "idempotency":[
     {
       "idempotencyKey": "unique-key-123"
-    }]
+    }],
+
+  "PaymentMethodVerification":[
+    {
+      "title": "Invalid Payment Method",
+      "paymentMethod": "Invalid_Payment_Method",
+      "status": 400,
+      "message": "Unsupported payment method: Invalid_Payment_Method"
+    },
+    {
+      "title": "Empty Payment Method",
+      "paymentMethod": " ",
+      "status": 400,
+      "message":"Unsupported payment method:  "
+    }
+  ],
+  "PaymentMethodVerificationStripe":[
+    {
+      "title": "Invalid Payment Method",
+      "paymentMethod": "Invalid_Payment_Method",
+      "status": 500,
+      "message": "No such PaymentMethod: 'Invalid_Payment_Method"
+    },
+    {
+      "title": "Empty Payment Method",
+      "paymentMethod": " ",
+      "status": 500,
+      "message":"No such PaymentMethod: ' '"
+    }
+  ],
+  "currency":[
+  { "currency": "USD", "amount": 10000 },
+  { "currency": "EUR", "amount": 10000 },
+  { "currency": "GBP", "amount": 10000 },
+  { "currency": "JPY", "amount": 10000 },
+  { "currency": "CAD", "amount": 10000 },
+  { "currency": "AUD", "amount": 10000 },
+  { "currency": "CHF", "amount": 10000 },
+  { "currency": "INR", "amount": 10000 },
+  { "currency": "CNY", "amount": 10000 },
+  { "currency": "HKD", "amount": 10000 },
+  { "currency": "SGD", "amount": 10000 },
+  { "currency": "NZD", "amount": 10000 },
+  { "currency": "SEK", "amount": 10000 },
+  { "currency": "NOK", "amount": 10000 },
+  { "currency": "DKK", "amount": 10000 },
+  { "currency": "KRW", "amount": 10000 },
+  { "currency": "ZAR", "amount": 10000 },
+  { "currency": "BRL", "amount": 10000 },
+  { "currency": "MXN", "amount": 10000 },
+  { "currency": "RUB", "amount": 10000 },
+  { "currency": "THB", "amount": 10000 },
+  { "currency": "PHP", "amount": 10000 },
+  { "currency": "MYR", "amount": 10000 },
+  { "currency": "IDR", "amount": 100000000 },
+  { "currency": "PLN", "amount": 10000 },
+  { "currency": "CZK", "amount": 10000 },
+  { "currency": "HUF", "amount": 100000000 }
+]
+
 }
 
