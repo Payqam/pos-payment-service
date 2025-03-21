@@ -5,7 +5,7 @@ import { DynamoDBService } from '../../../services/dynamodbService';
 import { CardData, CreatePaymentRecord, SNSMessage } from '../../../model';
 import { SNSService } from '../../../services/snsService';
 import { v4 as uuidv4 } from 'uuid';
-import {EnhancedError, ErrorCategory} from "../../../../utils/errorHandler";
+import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 
 export class CardPaymentService {
   private readonly logger: Logger;
@@ -47,8 +47,8 @@ export class CardPaymentService {
 
     switch (transactionType) {
       case 'CHARGE': {
-          const transactionId = uuidv4();
-          try {
+        const transactionId = uuidv4();
+        try {
           const feePercentage = 0.1;
           const feeAmount = Math.floor(amount * feePercentage);
           const transferAmount = Math.max(amount - feeAmount, 0);
@@ -104,38 +104,36 @@ export class CardPaymentService {
                 'Failed payment record created in DynamoDB',
                 failedRecord
               );
-              await this.snsService.publish(
-                {
-                  transactionId,
-                  paymentMethod: 'Stripe',
-                  status: 'FAILED',
-                  type: 'CREATE',
-                  amount: amount || '',
-                  merchantId,
-                  transactionType: 'CHARGE',
-                  metaData,
-                  fee: feeAmount || '',
-                  createdOn: dateTime,
-                  customerPhone,
-                  currency: currency,
-                  exchangeRate: '',
-                  processingFee: '',
-                  netAmount: '',
-                  externalTransactionId: '',
-                  merchantMobileNo: '',
-                  payeeNote: '',
-                  partyId: '',
-                  partyIdType: '',
-                  payerMessage: '',
-                  settlementAmount: '',
-                  TransactionError: {
-                    ErrorCode: '',
-                    ErrorMessage: '',
-                    ErrorType: '',
-                    ErrorSource: '',
-                  }
-                } as SNSMessage
-              );
+              await this.snsService.publish({
+                transactionId,
+                paymentMethod: 'Stripe',
+                status: 'FAILED',
+                type: 'CREATE',
+                amount: amount || '',
+                merchantId,
+                transactionType: 'CHARGE',
+                metaData,
+                fee: feeAmount || '',
+                createdOn: dateTime,
+                customerPhone,
+                currency: currency,
+                exchangeRate: '',
+                processingFee: '',
+                netAmount: '',
+                externalTransactionId: '',
+                merchantMobileNo: '',
+                payeeNote: '',
+                partyId: '',
+                partyIdType: '',
+                payerMessage: '',
+                settlementAmount: '',
+                TransactionError: {
+                  ErrorCode: '',
+                  ErrorMessage: '',
+                  ErrorType: '',
+                  ErrorSource: '',
+                },
+              } as SNSMessage);
               await this.dbService.createPaymentRecord(failedRecord);
               this.logger.info(
                 'Failed payment record created in DynamoDB',
@@ -168,38 +166,36 @@ export class CardPaymentService {
           await this.dbService.createPaymentRecord(record);
           this.logger.info('Payment record created in DynamoDB', record);
 
-          await this.snsService.publish(
-            {
-              transactionId,
-              paymentMethod: 'Stripe',
-              status: paymentIntent?.status,
-              type: 'CREATE',
-              amount: amount || '',
-              merchantId,
-              transactionType: 'CHARGE',
-              metaData,
-              fee: feeAmount || '',
-              createdOn: dateTime,
-              customerPhone,
-              currency: currency,
-              exchangeRate: '',
-              processingFee: '',
-              netAmount: '',
-              externalTransactionId: '',
-              merchantMobileNo: '',
-              payeeNote: '',
-              partyId: '',
-              partyIdType: '',
-              payerMessage: '',
-              settlementAmount: '',
-              TransactionError: {
-                ErrorCode: '',
-                ErrorMessage: '',
-                ErrorType: '',
-                ErrorSource: '',
-              }
-            } as SNSMessage
-          );
+          await this.snsService.publish({
+            transactionId,
+            paymentMethod: 'Stripe',
+            status: paymentIntent?.status,
+            type: 'CREATE',
+            amount: amount || '',
+            merchantId,
+            transactionType: 'CHARGE',
+            metaData,
+            fee: feeAmount || '',
+            createdOn: dateTime,
+            customerPhone,
+            currency: currency,
+            exchangeRate: '',
+            processingFee: '',
+            netAmount: '',
+            externalTransactionId: '',
+            merchantMobileNo: '',
+            payeeNote: '',
+            partyId: '',
+            partyIdType: '',
+            payerMessage: '',
+            settlementAmount: '',
+            TransactionError: {
+              ErrorCode: '',
+              ErrorMessage: '',
+              ErrorType: '',
+              ErrorSource: '',
+            },
+          } as SNSMessage);
 
           return {
             transactionId,
@@ -207,15 +203,15 @@ export class CardPaymentService {
           };
         } catch (error: unknown) {
           this.logger.error('Error processing charge', error);
-              throw new EnhancedError(
-                  'STRIPE_ERROR',
-                  ErrorCategory.PROVIDER_ERROR,
-                  error instanceof Error ? error.message : String(error),
-                  {
-                      retryable: false,
-                      transactionId: transactionId
-                  }
-              );
+          throw new EnhancedError(
+            'STRIPE_ERROR',
+            ErrorCategory.PROVIDER_ERROR,
+            error instanceof Error ? error.message : String(error),
+            {
+              retryable: false,
+              transactionId: transactionId,
+            }
+          );
         }
       }
 
@@ -241,35 +237,31 @@ export class CardPaymentService {
           } catch (refundError: unknown) {
             if (refundError instanceof stripe.errors.StripeError) {
               this.logger.error('Error creating refund', refundError);
-              await this.snsService.publish(
-                {
-                  transactionId,
-                  status: 'FAILED',
-                  type: 'CREATE',
-                  amount,
-                  merchantId,
-                  transactionType: 'REFUND',
-                  metaData,
-                }
-              );
+              await this.snsService.publish({
+                transactionId,
+                status: 'FAILED',
+                type: 'CREATE',
+                amount,
+                merchantId,
+                transactionType: 'REFUND',
+                metaData,
+              });
 
               throw refundError;
             }
           }
 
           this.logger.info('Refund processed', refund);
-          await this.snsService.publish(
-            {
-              paymentMethod: 'Stripe',
-              transactionId: transactionId,
-              status: refund?.status as string,
-              type: 'UPDATE',
-              amount,
-              merchantId,
-              transactionType: 'REFUND',
-              metaData,
-            }
-          );
+          await this.snsService.publish({
+            paymentMethod: 'Stripe',
+            transactionId: transactionId,
+            status: refund?.status as string,
+            type: 'UPDATE',
+            amount,
+            merchantId,
+            transactionType: 'REFUND',
+            metaData,
+          });
 
           return {
             transactionId: transactionId,

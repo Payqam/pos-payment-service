@@ -13,8 +13,7 @@ import { SNSService } from '../../../../services/snsService';
 import { PaymentResponse } from '../../../../model';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
-import { REFUND_SCENARIOS, PaymentScenario } from 'configurations/sandbox/orange/scenarios';
-import { PAYMENT_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
+import { REFUND_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
 
 // Webhook event interface for Orange payment notifications
@@ -56,9 +55,13 @@ class WebhookError extends Error {
 
 export class OrangeRefundWebhookService {
   private readonly logger: Logger;
+
   private readonly dbService: DynamoDBService;
+
   private readonly snsService: SNSService;
+
   private readonly orangeService: OrangePaymentService;
+
   private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
@@ -183,7 +186,7 @@ export class OrangeRefundWebhookService {
 
       this.logger.info('Received refund webhook', {
         payToken,
-        eventType: webhookEvent.type
+        eventType: webhookEvent.type,
       });
 
       // Get transaction using merchantRefundId (GSI4)
@@ -196,10 +199,13 @@ export class OrangeRefundWebhookService {
       const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
 
       const refundMpGetResponsePayload: PaymentRecordUpdate = {
-        refundMpGetResponse: paymentStatus.data
+        refundMpGetResponse: paymentStatus.data,
       };
 
-      await this.updatePaymentRecord(transaction.transactionId, refundMpGetResponsePayload);
+      await this.updatePaymentRecord(
+        transaction.transactionId,
+        refundMpGetResponsePayload
+      );
 
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
@@ -209,11 +215,14 @@ export class OrangeRefundWebhookService {
         const subscriberMsisdn = transaction.customerPhone;
 
         // Override refund status based on test phone numbers
-        const scenarioKey = Object.entries(TEST_NUMBERS.REFUND_SCENARIOS)
-          .find(([_, number]) => number === subscriberMsisdn)?.[0];
+        const scenarioKey = Object.entries(TEST_NUMBERS.REFUND_SCENARIOS).find(
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          ([_, number]) => number === subscriberMsisdn
+        )?.[0];
 
         if (scenarioKey && scenarioKey in REFUND_SCENARIOS) {
-          const scenario = REFUND_SCENARIOS[scenarioKey as keyof typeof REFUND_SCENARIOS];
+          const scenario =
+            REFUND_SCENARIOS[scenarioKey as keyof typeof REFUND_SCENARIOS];
           paymentStatus.data.status = scenario.status;
           paymentStatus.data.inittxnstatus = scenario.txnStatus;
           paymentStatus.data.inittxnmessage = scenario.message;
@@ -232,7 +241,7 @@ export class OrangeRefundWebhookService {
         body: JSON.stringify({
           message: 'Refund webhook processed successfully',
           payToken,
-          status: refundStatus
+          status: refundStatus,
         }),
       };
     } catch (error) {

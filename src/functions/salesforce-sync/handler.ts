@@ -3,12 +3,11 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../services/secretsManagerService';
 import axios from 'axios';
 import { registerRedactFilter } from '../../../utils/redactUtil';
-import { SalesforceCredentials, SNSMessage } from "../../model/snsPublish";
+import { SalesforceCredentials, SNSMessage } from '../../model';
 
 // Configure sensitive field redaction in logs
 const sensitiveFields = ['clientId', 'clientSecret', 'username', 'password'];
 registerRedactFilter(sensitiveFields);
-
 
 export class SalesforceSyncService {
   private readonly logger: Logger;

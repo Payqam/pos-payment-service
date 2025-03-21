@@ -6,7 +6,9 @@ const logger: Logger = LoggerService.named('sns-service');
 
 export class SNSService {
   private static instance: SNSService;
+
   private snsClientWrapper: SNSClientWrapper;
+
   private readonly topicArn: string;
 
   private constructor() {
@@ -29,12 +31,12 @@ export class SNSService {
    * @throws Error if publishing fails
    */
   public async publish(
-      message: string | object,
-      messageAttributes?: Record<string, never>
+    message: string | object,
+    messageAttributes?: Record<string, never>
   ): Promise<string> {
     try {
       const messageString =
-          typeof message === 'string' ? message : JSON.stringify(message);
+        typeof message === 'string' ? message : JSON.stringify(message);
 
       const input: PublishCommandInput = {
         TopicArn: this.topicArn,
@@ -46,15 +48,15 @@ export class SNSService {
       const messageId = await this.snsClientWrapper.publishMessage(input);
 
       logger.info(
-          { messageId, topicArn: this.topicArn },
-          'Successfully published message to SNS'
+        { messageId, topicArn: this.topicArn },
+        'Successfully published message to SNS'
       );
 
       return messageId;
     } catch (error) {
       logger.error(
-          { error, topicArn: this.topicArn, message },
-          'Error publishing message to SNS'
+        { error, topicArn: this.topicArn, message },
+        'Error publishing message to SNS'
       );
       throw error;
     }
