@@ -76,19 +76,6 @@ export class MTNDisbursementWebhookService {
           originalError: transactionStatus.reason,
         }
       );
-      // Send to SalesForce
-      await this.snsService.publish( {
-        transactionId: transactionStatus.externalId,
-        status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
-        type: 'CREATE',
-        TransactionError: {
-          ErrorCode: errorMapping.statusCode,
-          ErrorMessage: errorReason,
-          ErrorType: errorMapping.label,
-          ErrorSource: 'pos',
-        },
-      });
-
       // Get existing transaction to retrieve current customerRefundResponse array
       const existingTransaction = await this.dbService.getItem({
         transactionId,
@@ -101,12 +88,35 @@ export class MTNDisbursementWebhookService {
         ? existingResponses
         : [];
 
+      // Send to SalesForce
+      const dateTime = new Date().toISOString();
+      await this.snsService.publish({
+        transactionId: transactionStatus.externalId,
+        paymentMethod: 'MTN MOMO',
+        status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
+        type: 'CREATE',
+        amount: transactionStatus.amount,
+        merchantId: existingTransaction.Item?.merchantId,
+        merchantMobileNo: existingTransaction.Item?.merchantMobileNo,
+        transactionType: 'REFUND',
+        createdOn: dateTime,
+        customerPhone: existingTransaction.Item?.mobileNo,
+        currency: existingTransaction.Item?.currency,
+        TransactionError: {
+          ErrorCode: errorMapping.statusCode,
+          ErrorMessage: errorReason,
+          ErrorType: errorMapping.label,
+          ErrorSource: 'pos',
+        },
+      });
+
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
         customerRefundResponse: [
           ...responseArray,
           {
             ...transactionStatus,
+            createdOn: dateTime,
             errorMessage: enhancedError.message,
             reason: transactionStatus.reason as string,
             retryable: errorMapping.retryable,
@@ -142,6 +152,20 @@ export class MTNDisbursementWebhookService {
       const existingTransaction = await this.dbService.getItem({
         transactionId,
       });
+      const dateTime = new Date().toISOString();
+      await this.snsService.publish({
+        transactionId,
+        paymentMethod: 'MTN MOMO',
+        status: String(MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL),
+        type: 'CREATE',
+        amount: transactionStatus.amount,
+        merchantId: existingTransaction.Item?.merchantId,
+        merchantMobileNo: existingTransaction.Item?.merchantMobileNo,
+        transactionType: 'REFUND',
+        createdOn: dateTime,
+        customerPhone: existingTransaction.Item?.customerPhone,
+        currency: existingTransaction.Item?.merchantId,
+      });
       const existingResponses =
         existingTransaction?.Item?.customerRefundResponse || [];
 
@@ -152,7 +176,10 @@ export class MTNDisbursementWebhookService {
 
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
-        customerRefundResponse: [...responseArray, transactionStatus],
+        customerRefundResponse: [
+          ...responseArray,
+          { ...transactionStatus, createdOn: dateTime },
+        ],
       };
     } catch (error) {
       this.logger.error('Failed to handle the successful customer refund');
@@ -327,6 +354,7 @@ export class MTNDisbursementWebhookService {
           payerMessage: `PayQAM refund request for the transaction ${transaction.transactionId}`,
           payeeNote: 'Thank you for your payment',
         });
+        // Update the payment record
         await this.dbService.updatePaymentRecord(
           { transactionId: transaction.transactionId },
           {
@@ -334,14 +362,17 @@ export class MTNDisbursementWebhookService {
             merchantRefundId,
           }
         );
+        // Create a temporary record to associate the transaction with the merchant refund ID
+        await this.dbService.createPaymentRecord({
+          transactionId: merchantRefundId,
+          originalTransactionId: transaction.transactionId,
+        });
         // Send to SalesForce
-        await this.snsService.publish(
-          {
-            transactionId: transaction.transactionId,
-            status: MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
-            type: 'UPDATE',
-          }
-        );
+        await this.snsService.publish({
+          transactionId: transaction.transactionId,
+          status: MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
+          type: 'UPDATE',
+        });
         // Call merchant refund webhook if in sandbox environment
         const environment = process.env.MTN_TARGET_ENVIRONMENT;
         const webhookUrl = process.env.MTN_MERCHANT_REFUND_WEBHOOK_URL;
@@ -366,7 +397,8 @@ export class MTNDisbursementWebhookService {
           );
         }
       }
-
+      // delete the previous temp item
+      await this.dbService.deletePaymentRecord({ transactionId: externalId });
       return {
         statusCode: 200,
         headers: API.DEFAULT_HEADERS,

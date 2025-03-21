@@ -88,10 +88,13 @@ export class MTNPaymentWebhookService {
       const responseArray = Array.isArray(existingResponses)
         ? existingResponses
         : [];
-
+      const dateTime = new Date().toISOString();
       const updateData: Record<string, unknown> = {
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
-        merchantRefundResponse: [...responseArray, webhookEvent],
+        merchantRefundResponse: [
+          ...responseArray,
+          { ...webhookEvent, createdOn: dateTime },
+        ],
       };
       this.logger.info('[debug]update data', {
         updateData,
@@ -102,6 +105,20 @@ export class MTNPaymentWebhookService {
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
         type: 'CREATE',
       });
+      await this.snsService.publish({
+        transactionId,
+        paymentMethod: 'MTN MOMO',
+        status: String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL),
+        type: 'CREATE',
+        amount: webhookEvent.amount,
+        merchantId: existingTransaction.Item?.merchantId,
+        merchantMobileNo: existingTransaction.Item?.merchantMobileNo,
+        transactionType: 'REFUND',
+        createdOn: dateTime,
+        customerPhone: existingTransaction.Item?.customerPhone,
+        currency: existingTransaction.Item?.merchantId,
+      });
+
       this.logger.info('[debug]sent to sns', {
         updateData,
       });
@@ -139,19 +156,6 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
-      // Send to SalesForce
-      await this.snsService.publish( {
-        transactionId: transactionStatus.externalId,
-        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
-        type: 'CREATE',
-        TransactionError: {
-          ErrorCode: errorMapping.statusCode,
-          ErrorMessage: errorReason,
-          ErrorType: errorMapping.label,
-          ErrorSource: 'pos',
-        },
-      });
-      this.logger.info('[debug]sent failed to sns', {});
 
       // Get existing transaction to retrieve current merchantRefundResponse array
       const existingTransaction = await this.dbService.getItem({
@@ -165,12 +169,34 @@ export class MTNPaymentWebhookService {
         ? existingResponses
         : [];
 
+      // Send to SalesForce
+      const dateTime = new Date().toISOString();
+      await this.snsService.publish({
+        transactionId: transactionStatus.externalId,
+        paymentMethod: 'MTN MOMO',
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'CREATE',
+        amount: transactionStatus.amount,
+        merchantId: existingTransaction.Item?.merchantId,
+        merchantMobileNo: existingTransaction.Item?.merchantMobileNo,
+        transactionType: 'REFUND',
+        createdOn: dateTime,
+        customerPhone: existingTransaction.Item?.mobileNo,
+        currency: existingTransaction.Item?.currency,
+        TransactionError: {
+          ErrorCode: errorMapping.statusCode,
+          ErrorMessage: errorReason,
+          ErrorType: errorMapping.label,
+          ErrorSource: 'pos',
+        },
+      });
       return {
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
         merchantRefundResponse: [
           ...responseArray,
           {
             ...transactionStatus,
+            createdOn: dateTime,
             errorMessage: enhancedError.message,
             reason: transactionStatus.reason as string,
             retryable: errorMapping.retryable,
@@ -265,10 +291,13 @@ export class MTNPaymentWebhookService {
       this.logger.info('[debug]update data', {
         updateData,
       });
+      // Update the payment record in DB
       await this.dbService.updatePaymentRecord(
         { transactionId: transaction?.transactionId },
         updateData
       );
+      // delete the previous temp item
+      await this.dbService.deletePaymentRecord({ transactionId: externalId });
 
       this.logger.info('Webhook processed successfully', {
         externalId,
