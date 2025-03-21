@@ -11,10 +11,10 @@ export interface CreatePaymentRecord {
   destinationId?: string;
   status: string;
   paymentResponse?:
-  | Stripe.PaymentIntent
-  | Stripe.Refund
-  | OrangePaymentResponse['data']
-  | Record<string, any>; // For other providers or error responses
+    | Stripe.PaymentIntent
+    | Stripe.Refund
+    | OrangePaymentResponse['data']
+    | Record<string, any>; // For other providers or error responses
   metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
@@ -34,8 +34,12 @@ export interface CreatePaymentRecord {
   externalTransactionId?: string;
   chargeMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
   chargeMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
-  settlementCashInResponse?: OrangePaymentResponse['data'] | Record<string, any>;
-  settlementCashInGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  settlementCashInResponse?:
+    | OrangePaymentResponse['data']
+    | Record<string, any>;
+  settlementCashInGetResponse?:
+    | OrangePaymentResponse['data']
+    | Record<string, any>;
   refundCashinResponse?: OrangePaymentResponse['data'] | Record<string, any>;
   refundCashinGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
   refundMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
@@ -51,10 +55,10 @@ export interface UpdatePaymentRecord {
   destinationId?: string;
   status?: string;
   paymentProviderResponse?:
-  | Stripe.PaymentIntent
-  | Stripe.Refund
-  | OrangePaymentResponse['data']
-  | Record<string, any>; // For other providers or error responses
+    | Stripe.PaymentIntent
+    | Stripe.Refund
+    | OrangePaymentResponse['data']
+    | Record<string, any>; // For other providers or error responses
   metaData?: Record<string, string> | undefined;
   mobileNo?: string;
   merchantId?: string;
@@ -74,8 +78,12 @@ export interface UpdatePaymentRecord {
   externalTransactionId?: string;
   chargeMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
   chargeMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
-  settlementCashInResponse?: OrangePaymentResponse['data'] | Record<string, any>;
-  settlementCashInGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
+  settlementCashInResponse?:
+    | OrangePaymentResponse['data']
+    | Record<string, any>;
+  settlementCashInGetResponse?:
+    | OrangePaymentResponse['data']
+    | Record<string, any>;
   refundCashinResponse?: OrangePaymentResponse['data'] | Record<string, any>;
   refundCashinGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
   refundMpResponse?: OrangePaymentResponse['data'] | Record<string, any>;
