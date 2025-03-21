@@ -9,26 +9,25 @@ export interface SalesforceCredentials {
 export interface SNSMessage {
   transactionId: string;
   status: string;
-  amount: string;
-  merchantId: string;
-  merchantMobileNo: string;
-  transactionType: string;
-  metaData: Record<string, string>;
-  fee: string;
-  type: string;
-  customerPhone: string;
-  createdOn: string;
-  currency: string;
-  exchangeRate: string;
-  processingFee: string;
-  settlementAmount: string;
-  externalTransactionId: string;
-  paymentMethod: string;
-  partyIdType: string;
-  partyId: string;
-  payeeNote: string;
-  payerMessage: string;
-  TransactionError: {
+  amount?: string;
+  merchantId?: string;
+  merchantMobileNo?: string;
+  transactionType?: 'CHARGE' | 'REFUND';
+  metaData?: Record<string, string>;
+  fee?: string;
+  customerPhone?: string;
+  createdOn?: string;
+  currency?: string;
+  exchangeRate?: string;
+  processingFee?: string;
+  settlementAmount?: string;
+  externalTransactionId?: string;
+  paymentMethod?: string;
+  partyIdType?: string;
+  partyId?: string;
+  payeeNote?: string;
+  payerMessage?: string;
+  TransactionError?: {
     ErrorCode: string;
     ErrorMessage: string;
     ErrorType: string;
