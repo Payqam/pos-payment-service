@@ -141,6 +141,8 @@ jobs:
           ORANGE_NOTIFY_URL=https: ${{ secrets.ORANGE_NOTIFY_URL }}
           ORANGE_PAYQAM_MERCHANT_PHONE: ${{ secrets.ORANGE_PAYQAM_MERCHANT_PHONE }}
           ORANGE_PAYQAM_PIN: ${{ secrets.ORANGE_PAYQAM_PIN }}
+          ORANGE_CHARGE_WEBHOOK_URL: ${{vars.ORANGE_CHARGE_WEBHOOK_URL}}
+          ORANGE_REFUND_WEBHOOK_URL: ${{vars.ORANGE_REFUND_WEBHOOK_URL}}
       - name: Integration tests
         if: ${{ vars.RUN_INTEGRATION_TESTS }}
         run: npm run test:integration
