@@ -19,7 +19,7 @@ export class DynamoDBDocClient {
   // Private constructor to enforce singleton usage.
   private constructor() {
     const client = new DynamoDBClient({
-      region: process.env.AWS_REGION || 'us-east-1',
+      region: process.env.AWS_REGION,
     });
     this.docClient = DynamoDBDocumentClient.from(client);
   }

@@ -81,27 +81,6 @@ export class PaymentService {
         );
 
       case 'ORANGE':
-        if (!customerPhone) {
-          throw new EnhancedError(
-            'MISSING_PHONE',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing customer phone number for Orange Money payment'
-          );
-        }
-        if (!merchantId) {
-          throw new EnhancedError(
-            'MISSING_MERCHANT_ID',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing merchant ID for Orange Money payment'
-          );
-        }
-        if (!merchantMobileNo) {
-          throw new EnhancedError(
-            'MISSING_MERCHANT_MOBILE',
-            ErrorCategory.VALIDATION_ERROR,
-            'Missing merchant mobile number for Orange Money payment'
-          );
-        }
         this.logger.info('Processing Orange Money payment', {
           amount,
           customerPhone,
@@ -112,12 +91,12 @@ export class PaymentService {
         });
         return this.orangePaymentService.processPayment(
           amount as number,
-          customerPhone,
-          merchantId,
-          merchantMobileNo,
+          customerPhone as string,
+          merchantId as string,
+          merchantMobileNo as string,
           metaData,
-          transactionType || 'CHARGE',
-          cardData?.currency || 'EUR',
+          transactionType,
+          currency,
           transactionId
         );
 
