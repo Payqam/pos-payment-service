@@ -398,28 +398,26 @@ export class MtnPaymentService {
 
           await this.dbService.createPaymentRecord(paymentRecord);
 
-          await this.snsService.publish(
-            {
-              transactionId,
-              paymentMethod: 'MTN MOMO',
-              status: String(MTNPaymentStatus.PAYMENT_REQUEST_CREATED),
-              type: 'CREATE',
-              amount,
-              settlementAmount,
-              merchantId,
-              merchantMobileNo,
-              transactionType: 'CHARGE',
-              metaData,
-              fee: fee,
-              createdOn: dateTime,
-              customerPhone: mobileNo,
-              currency: currency,
-              //exchangeRate: 'n/a',
-              //processingFee: 'n/a',
-              //netAmount: 'n/a',
-              //externalTransactionId: 'n/a',
-            }
-          );
+          await this.snsService.publish({
+            transactionId,
+            paymentMethod: 'MTN MOMO',
+            status: String(MTNPaymentStatus.PAYMENT_REQUEST_CREATED),
+            type: 'CREATE',
+            amount,
+            settlementAmount,
+            merchantId,
+            merchantMobileNo,
+            transactionType: 'CHARGE',
+            metaData,
+            fee: fee,
+            createdOn: dateTime,
+            customerPhone: mobileNo,
+            currency: currency,
+            //exchangeRate: 'n/a',
+            //processingFee: 'n/a',
+            //netAmount: 'n/a',
+            //externalTransactionId: 'n/a',
+          });
 
           this.logger.info('Payment request created successfully', {
             transactionId,
@@ -460,26 +458,24 @@ export class MtnPaymentService {
             transactionId,
           });
 
-          await this.snsService.publish(
-            {
-              transactionId,
-              paymentMethod: 'MTN MOMO',
-              status: String(MTNPaymentStatus.PAYMENT_FAILED),
-              type: 'CREATE',
-              amount,
-              merchantId,
-              transactionType: 'CHARGE',
-              metaData,
-              fee,
-              createdOn: dateTime,
-              customerPhone: mobileNo,
-              currency: currency,
-              //exchangeRate: 'n/a',
-              //processingFee: 'n/a',
-              //netAmount: 'n/a',
-              //externalTransactionId: 'n/a',
-            }
-          );
+          await this.snsService.publish({
+            transactionId,
+            paymentMethod: 'MTN MOMO',
+            status: String(MTNPaymentStatus.PAYMENT_FAILED),
+            type: 'CREATE',
+            amount,
+            merchantId,
+            transactionType: 'CHARGE',
+            metaData,
+            fee,
+            createdOn: dateTime,
+            customerPhone: mobileNo,
+            currency: currency,
+            //exchangeRate: 'n/a',
+            //processingFee: 'n/a',
+            //netAmount: 'n/a',
+            //externalTransactionId: 'n/a',
+          });
 
           // If not a mapped MTN error, throw the original error
           throw new Error('Failed to process the payment');
@@ -556,13 +552,11 @@ export class MtnPaymentService {
         };
         await this.dbService.updatePaymentRecord({ transactionId }, updateData);
         // Send to SalesForce
-        await this.snsService.publish(
-          {
-            transactionId: transactionRecord.Item.transactionId,
-            status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
-            type: 'UPDATE',
-          }
-        );
+        await this.snsService.publish({
+          transactionId: transactionRecord.Item.transactionId,
+          status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
+          type: 'UPDATE',
+        });
 
         // Check if we're in sandbox environment
         const targetEnvironment = process.env.MTN_TARGET_ENVIRONMENT;
