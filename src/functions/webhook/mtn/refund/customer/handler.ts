@@ -91,6 +91,11 @@ export class MTNDisbursementWebhookService {
       // Send to SalesForce
       const dateTime = new Date().toISOString();
       await this.snsService.publish({
+        transactionId,
+        status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
+        type: 'CREATE',
+      });
+      await this.snsService.publish({
         transactionId: transactionStatus.externalId,
         paymentMethod: 'MTN MOMO',
         status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
@@ -143,7 +148,7 @@ export class MTNDisbursementWebhookService {
     try {
       // Send to SalesForce
       await this.snsService.publish({
-        transactionId: transactionStatus.externalId,
+        transactionId,
         status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
         type: 'CREATE',
       });
@@ -154,7 +159,7 @@ export class MTNDisbursementWebhookService {
       });
       const dateTime = new Date().toISOString();
       await this.snsService.publish({
-        transactionId,
+        transactionId: transactionStatus.externalId,
         paymentMethod: 'MTN MOMO',
         status: String(MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL),
         type: 'CREATE',
@@ -165,6 +170,7 @@ export class MTNDisbursementWebhookService {
         createdOn: dateTime,
         customerPhone: existingTransaction.Item?.customerPhone,
         currency: existingTransaction.Item?.merchantId,
+        originalTransactionId: existingTransaction.Item?.transactionId,
       });
       const existingResponses =
         existingTransaction?.Item?.customerRefundResponse || [];
@@ -173,9 +179,12 @@ export class MTNDisbursementWebhookService {
       const responseArray = Array.isArray(existingResponses)
         ? existingResponses
         : [];
-
+      const totalCustomerRefundAmount =
+        existingTransaction.Item?.totalCustomerRefundAmount || 0;
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
+        totalCustomerRefundAmount:
+          totalCustomerRefundAmount + transactionStatus.amount,
         customerRefundResponse: [
           ...responseArray,
           { ...transactionStatus, createdOn: dateTime },
@@ -285,27 +294,6 @@ export class MTNDisbursementWebhookService {
 
       // Initiate merchant refund if customer refund is successful
       if (transactionStatus.status === 'SUCCESSFUL') {
-        // Check if the transaction status allows for merchant refund (must be after CUSTOMER_REFUND_REQUEST_CREATED)
-        if (
-          transaction.status <= MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED
-        ) {
-          this.logger.warn(
-            'Cannot initiate merchant refund: Customer refund not yet processed',
-            {
-              transactionId: transaction.transactionId,
-              currentStatus: transaction.status,
-            }
-          );
-          return {
-            statusCode: 200,
-            headers: API.DEFAULT_HEADERS,
-            body: JSON.stringify({
-              message:
-                'Webhook processed successfully, merchant refund not initiated due to invalid status',
-            }),
-          };
-        }
-
         const merchantRefundId = uuidv4();
 
         const axiosInstance = await this.mtnService.createAxiosInstance(
@@ -315,7 +303,7 @@ export class MTNDisbursementWebhookService {
 
         // Create payment request in MTN
         await axiosInstance.post('/collection/v1_0/requesttopay', {
-          amount: transaction.settlementAmount.toString(),
+          amount: transactionStatus.amount.toString(),
           currency: transaction.currency,
           externalId: merchantRefundId,
           payer: {
@@ -353,7 +341,7 @@ export class MTNDisbursementWebhookService {
             {
               financialTransactionId: uuidv4(),
               externalId: merchantRefundId,
-              amount: transaction.settlementAmount.toString(),
+              amount: transactionStatus.amount.toString(),
               currency: transaction.currency,
               payer: {
                 partyIdType: 'MSISDN',

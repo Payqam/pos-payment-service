@@ -83,7 +83,8 @@ export class MTNPaymentWebhookService {
       });
       const existingResponses =
         existingTransaction?.Item?.merchantRefundResponse || [];
-
+      const totalMerchantRefundAmount =
+        existingTransaction.Item?.totalMerchantRefundAmount || 0;
       // Ensure existingResponses is treated as an array
       const responseArray = Array.isArray(existingResponses)
         ? existingResponses
@@ -91,6 +92,8 @@ export class MTNPaymentWebhookService {
       const dateTime = new Date().toISOString();
       const updateData: Record<string, unknown> = {
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        totalMerchantRefundAmount:
+          totalMerchantRefundAmount + webhookEvent.amount,
         merchantRefundResponse: [
           ...responseArray,
           { ...webhookEvent, createdOn: dateTime },
@@ -101,12 +104,12 @@ export class MTNPaymentWebhookService {
       });
       // Send to SalesForce
       await this.snsService.publish({
-        transactionId: webhookEvent.externalId,
+        transactionId,
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
         type: 'CREATE',
       });
       await this.snsService.publish({
-        transactionId,
+        transactionId: webhookEvent.externalId,
         paymentMethod: 'MTN MOMO',
         status: String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL),
         type: 'CREATE',
@@ -171,6 +174,11 @@ export class MTNPaymentWebhookService {
 
       // Send to SalesForce
       const dateTime = new Date().toISOString();
+      await this.snsService.publish({
+        transactionId,
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'CREATE',
+      });
       await this.snsService.publish({
         transactionId: transactionStatus.externalId,
         paymentMethod: 'MTN MOMO',
