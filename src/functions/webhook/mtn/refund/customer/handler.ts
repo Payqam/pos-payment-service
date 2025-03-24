@@ -184,7 +184,7 @@ export class MTNDisbursementWebhookService {
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
         totalCustomerRefundAmount:
-          totalCustomerRefundAmount + transactionStatus.amount,
+          Number(totalCustomerRefundAmount) + Number(transactionStatus.amount),
         customerRefundResponse: [
           ...responseArray,
           { ...transactionStatus, createdOn: dateTime },

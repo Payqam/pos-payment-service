@@ -84,7 +84,7 @@ export class MTNPaymentWebhookService {
       const existingResponses =
         existingTransaction?.Item?.merchantRefundResponse || [];
       const totalMerchantRefundAmount =
-        existingTransaction.Item?.totalMerchantRefundAmount || 0;
+        Number(existingTransaction.Item?.totalMerchantRefundAmount) || 0;
       // Ensure existingResponses is treated as an array
       const responseArray = Array.isArray(existingResponses)
         ? existingResponses
@@ -93,7 +93,7 @@ export class MTNPaymentWebhookService {
       const updateData: Record<string, unknown> = {
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
         totalMerchantRefundAmount:
-          totalMerchantRefundAmount + webhookEvent.amount,
+          Number(totalMerchantRefundAmount) + Number(webhookEvent.amount),
         merchantRefundResponse: [
           ...responseArray,
           { ...webhookEvent, createdOn: dateTime },

@@ -558,12 +558,17 @@ export class MtnPaymentService {
 
         // Get the current total customer refund amount
         const totalCustomerRefundAmount =
-          transactionRecord.Item.totalCustomerRefundAmount || 0;
-
+          Number(transactionRecord.Item.totalCustomerRefundAmount) || 0;
+        this.logger.info('[debug]validations', {
+          transactionId,
+          totalCustomerRefundAmount,
+          refundAmount,
+          originalAmount: transactionRecord.Item.amount,
+        });
         // Validate that the refund amount doesn't exceed the original transaction amount
         if (
-          totalCustomerRefundAmount + refundAmount >
-          transactionRecord.Item.amount
+          Number(totalCustomerRefundAmount) + Number(refundAmount) >
+          Number(transactionRecord.Item.amount)
         ) {
           throw new EnhancedError(
             'REFUND_AMOUNT_EXCEEDS_ORIGINAL',
