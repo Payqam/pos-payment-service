@@ -197,6 +197,7 @@ export class CardPaymentService {
           );
           const currentRecord = queryResult.Items?.[0];
           const transactionId = currentRecord?.transactionId;
+          const refundId = uuidv4();
           let refund;
           try {
             refund = await stripeClient.refunds.create({
@@ -206,6 +207,7 @@ export class CardPaymentService {
               reverse_transfer: cardData.reverse_transfer,
               metadata: {
                 transactionId: transactionId,
+                refundId: refundId,
               },
             });
           } catch (refundError: unknown) {
