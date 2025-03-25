@@ -30,7 +30,7 @@ export class CardPaymentService {
     transactionType: string,
     merchantId: string,
     currency: string,
-    merchantMobileNo: string,
+    merchantMobileNo?: string,
     customerPhone?: string,
     metaData?: Record<string, string>
   ): Promise<{ transactionId: string; status: string }> {
