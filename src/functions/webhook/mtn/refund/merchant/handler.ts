@@ -107,6 +107,7 @@ export class MTNPaymentWebhookService {
         transactionId,
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
         type: 'CREATE',
+        createdOn: dateTime,
       });
       await this.snsService.publish({
         transactionId: webhookEvent.externalId,
@@ -120,6 +121,7 @@ export class MTNPaymentWebhookService {
         createdOn: dateTime,
         customerPhone: existingTransaction.Item?.customerPhone,
         currency: existingTransaction.Item?.merchantId,
+        originalTransactionId: existingTransaction.Item?.transactionId,
       });
 
       this.logger.info('[debug]sent to sns', {

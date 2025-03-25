@@ -66,7 +66,7 @@ export class MTNDisbursementWebhookService {
       await this.snsService.publish({
         transactionId,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
-        type: 'FAILED',
+        type: 'CREATE',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
           ErrorMessage: errorReason,

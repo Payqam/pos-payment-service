@@ -176,7 +176,7 @@ export class MTNPaymentWebhookService {
           await this.snsService.publish({
             transactionId: externalId,
             status: MTNPaymentStatus.DISBURSEMENT_FAILED,
-            type: 'FAILED',
+            type: 'CREATE',
             TransactionError: {
               ErrorCode: 'errorCode',
               ErrorMessage: 'errorReason',
@@ -224,7 +224,7 @@ export class MTNPaymentWebhookService {
       await this.snsService.publish({
         transactionId: externalId,
         status: MTNPaymentStatus.PAYMENT_FAILED,
-        type: 'FAILED',
+        type: 'CREATE',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
           ErrorMessage: errorReason,
