@@ -492,13 +492,9 @@ export class MtnPaymentService {
           throw new Error('Transaction not found for refund');
         }
 
-        // Check if the transaction status allows for refund (must be after PAYMENT_SUCCESSFUL)
-        const status = Number(transactionRecord.Item.status);
-        if (
-          status <= MTNPaymentStatus.PAYMENT_SUCCESSFUL ||
-          (status >= MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED &&
-            status <= MTNPaymentStatus.MERCHANT_REFUND_FAILED)
-        ) {
+        const status = transactionRecord.Item.status;
+        // Check if the transaction status allows for refund
+        if (status === MTNPaymentStatus.PAYMENT_REQUEST_CREATED) {
           throw new EnhancedError(
             'TRANSACTION_NOT_REFUNDABLE',
             ErrorCategory.VALIDATION_ERROR,
@@ -510,52 +506,106 @@ export class MtnPaymentService {
             }
           );
         }
-
-        // Check if the transaction has already been refunded
-        if (
-          transactionRecord.Item.status ===
-            String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED) ||
-          transactionRecord.Item.status ===
-            String(MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL) ||
-          transactionRecord.Item.status ===
-            String(MTNPaymentStatus.CUSTOMER_REFUND_FAILED) ||
-          transactionRecord.Item.status ===
-            String(MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED) ||
-          transactionRecord.Item.status ===
-            String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL) ||
-          transactionRecord.Item.status ===
-            String(MTNPaymentStatus.MERCHANT_REFUND_FAILED)
-        ) {
+        if (status === MTNPaymentStatus.PAYMENT_FAILED) {
           throw new EnhancedError(
-            'TRANSACTION_ALREADY_REFUNDED',
+            'TRANSACTION_NOT_REFUNDABLE',
             ErrorCategory.VALIDATION_ERROR,
-            'Transaction has already been refunded or refund is in progress',
+            'Transaction cannot be refunded: Payment was unsuccessful',
             {
               retryable: false,
               suggestedAction:
-                'Verify the transaction status before attempting another refund.',
+                'Ensure the payment is successful before initiating a refund.',
+            }
+          );
+        }
+        if (
+          !amount &&
+          status === MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED
+        ) {
+          throw new EnhancedError(
+            'TRANSACTION_NOT_REFUNDABLE',
+            ErrorCategory.VALIDATION_ERROR,
+            'Transaction cannot be refunded: Refund request already created',
+            {
+              retryable: false,
+              suggestedAction: 'No further actions are required.',
+            }
+          );
+        }
+        if (!amount && status === MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL) {
+          throw new EnhancedError(
+            'TRANSACTION_NOT_REFUNDABLE',
+            ErrorCategory.VALIDATION_ERROR,
+            'The transaction has already been refunded.',
+            {
+              retryable: false,
+              suggestedAction: 'No further actions are required.',
+            }
+          );
+        }
+
+        // Determine the refund amount
+        let refundAmount = amount;
+
+        // If no amount is specified, use the original transaction amount
+        if (!refundAmount) {
+          refundAmount = transactionRecord.Item.amount;
+          this.logger.info('Using original transaction amount for refund', {
+            transactionId,
+            originalAmount: refundAmount,
+          });
+        }
+
+        // Get the current total customer refund amount
+        const totalCustomerRefundAmount =
+          Number(transactionRecord.Item.totalCustomerRefundAmount) || 0;
+        this.logger.info('[debug]validations', {
+          transactionId,
+          totalCustomerRefundAmount,
+          refundAmount,
+          originalAmount: transactionRecord.Item.amount,
+        });
+        // Validate that the refund amount doesn't exceed the original transaction amount
+        if (
+          Number(totalCustomerRefundAmount) + Number(refundAmount) >
+          Number(transactionRecord.Item.amount)
+        ) {
+          throw new EnhancedError(
+            'REFUND_AMOUNT_EXCEEDS_ORIGINAL',
+            ErrorCategory.VALIDATION_ERROR,
+            'Refund amount exceeds the original transaction amount',
+            {
+              retryable: false,
+              suggestedAction:
+                'Reduce the refund amount to not exceed the original transaction amount.',
             }
           );
         }
 
         // Call the disbursement transfer API to transfer money to the customer
         const customerRefundId = await this.initiateTransfer(
-          transactionRecord.Item.amount,
+          refundAmount,
           transactionRecord.Item.mobileNo,
           transactionRecord.Item.currency,
           TransactionType.CUSTOMER_REFUND
         );
-
+        // Create a temporary record to associate the transaction with the refund ID
+        await this.dbService.createPaymentRecord({
+          transactionId: customerRefundId,
+          originalTransactionId: transactionRecord.Item.transactionId,
+        });
         const updateData = {
           status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
           customerRefundId: customerRefundId,
+          updatedOn: dateTime,
         };
         await this.dbService.updatePaymentRecord({ transactionId }, updateData);
         // Send to SalesForce
         await this.snsService.publish({
           transactionId: transactionRecord.Item.transactionId,
           status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
-          type: 'UPDATE',
+          type: 'CREATE',
+          createdOn: dateTime,
         });
 
         // Check if we're in sandbox environment
@@ -565,7 +615,7 @@ export class MtnPaymentService {
             {
               financialTransactionId: uuidv4(),
               externalId: customerRefundId,
-              amount: transactionRecord.Item.amount as unknown as string,
+              amount: refundAmount.toString(),
               currency: transactionRecord.Item.currency,
               payee: {
                 partyIdType: 'MSISDN',

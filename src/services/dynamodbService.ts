@@ -6,9 +6,11 @@ import {
   UpdateCommand,
   QueryCommand,
   QueryCommandOutput,
+  DeleteCommand,
+  DeleteCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBDocClient } from '../dynamodbClient';
-import { CreatePaymentRecord } from '../model';
+import { CreatePaymentRecord, CreateRefundReferenceRecord } from '../model';
 import { buildUpdateExpression } from '../../utils/updateUtils';
 import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
@@ -18,8 +20,10 @@ interface AdditionalTransactionFields {
   paymentMethod?: string;
   paymentResponse?: Record<string, unknown>;
   disbursementResponse?: Record<string, unknown>;
-  customerRefundResponse?: Record<string, unknown>;
-  merchantRefundResponse?: Record<string, unknown>;
+  customerRefundResponse?: Record<string, unknown>[];
+  merchantRefundResponse?: Record<string, unknown>[];
+  totalCustomerRefundAmount?: number;
+  totalMerchantRefundAmount?: number;
   uniqueId?: string;
   settlementDate?: number;
   fee?: number;
@@ -89,7 +93,7 @@ export class DynamoDBService {
       merchantMobileNo: item.merchantMobileNo,
       paymentMethod: item.paymentMethod,
       paymentResponse: item.paymentResponse,
-      disbursementRespons: item.isbursementResponse,
+      disbursementResponse: item.disbursementResponse,
       customerRefundResponse: item.customerRefundResponse,
       merchantRefundResponse: item.merchantRefundResponse,
       uniqueId: item.uniqueId,
@@ -102,9 +106,11 @@ export class DynamoDBService {
   /**
    * Creates a payment record in the DynamoDB table.
    *
-   * @param record - A plain object representing the payment record.
+   * @param record - A plain object representing the payment record or refund reference record.
    */
-  public async createPaymentRecord(record: CreatePaymentRecord): Promise<void> {
+  public async createPaymentRecord(
+    record: CreatePaymentRecord | CreateRefundReferenceRecord
+  ): Promise<void> {
     const params = {
       TableName: this.tableName,
       Item: record,
@@ -263,6 +269,81 @@ export class DynamoDBService {
         indexName,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Deletes a payment record from the DynamoDB table.
+   *
+   * @param key - The primary key of the record to delete.
+   * @param conditionExpression - Optional. A condition that must be satisfied for the delete to succeed.
+   * @param expressionAttributeValues - Optional. Values to use in the condition expression.
+   * @param expressionAttributeNames - Optional. Attribute name placeholders to use in the condition expression.
+   * @returns A Promise that resolves when the delete operation completes.
+   * @throws Will throw an error if the delete operation fails after all retries.
+   */
+  public async deletePaymentRecord<T>(
+    key: T,
+    conditionExpression?: string,
+    expressionAttributeValues?: Record<string, unknown>,
+    expressionAttributeNames?: Record<string, string>
+  ): Promise<void> {
+    const params: DeleteCommandInput = {
+      TableName: this.tableName,
+      Key: key as Record<string, NativeAttributeValue>,
+    };
+
+    // Add conditional parameters if provided
+    if (conditionExpression) {
+      params.ConditionExpression = conditionExpression;
+    }
+
+    if (
+      expressionAttributeValues &&
+      Object.keys(expressionAttributeValues).length > 0
+    ) {
+      params.ExpressionAttributeValues = expressionAttributeValues as Record<
+        string,
+        NativeAttributeValue
+      >;
+    }
+
+    if (
+      expressionAttributeNames &&
+      Object.keys(expressionAttributeNames).length > 0
+    ) {
+      params.ExpressionAttributeNames = expressionAttributeNames;
+    }
+
+    let attempt = 0;
+
+    while (attempt < this.maxRetries) {
+      try {
+        await this.dbClient.deleteItem(new DeleteCommand(params));
+        this.logger.info('Successfully deleted record from DynamoDB', { key });
+        return;
+      } catch (error: unknown) {
+        if (
+          !this.isRetryableError((error as Error).name) ||
+          attempt === this.maxRetries - 1
+        ) {
+          this.logger.error('Error deleting record from DynamoDB', {
+            error,
+            key,
+            attempt,
+            maxRetries: this.maxRetries,
+          });
+          throw error;
+        }
+
+        const delay = this.calculateBackoffDelay(attempt);
+        this.logger.warn(
+          `Retrying delete (attempt ${attempt + 1}/${this.maxRetries}) after ${delay}ms due to ${(error as Error).name}`,
+          { key }
+        );
+        await this.sleep(delay);
+        attempt++;
+      }
     }
   }
 

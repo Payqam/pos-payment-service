@@ -46,6 +46,14 @@ export interface CreatePaymentRecord {
   refundMpGetResponse?: OrangePaymentResponse['data'] | Record<string, any>;
 }
 
+/**
+ * Interface for creating refund reference records that map refund IDs to original transaction IDs
+ */
+export interface CreateRefundReferenceRecord {
+  transactionId: string; // The refund transaction ID
+  originalTransactionId: string; // The original transaction being refunded
+}
+
 export interface UpdatePaymentRecord {
   orderId?: string;
   amount?: number;

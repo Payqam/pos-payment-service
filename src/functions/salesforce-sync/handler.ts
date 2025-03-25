@@ -81,34 +81,35 @@ export class SalesforceSyncService {
           message.TransactionError.ErrorType ||
           message.TransactionError.ErrorSource)
           ? {
-              TransactionError: {
-                ErrorCode__c: message.TransactionError.ErrorCode,
-                ErrorMessage__c: message.TransactionError.ErrorMessage,
-                ErrorType__c: message.TransactionError.ErrorType,
-                ErrorSource__c: message.TransactionError.ErrorSource,
+              transactionError: {
+                errorCode: message.TransactionError.ErrorCode,
+                errorMessage: message.TransactionError.ErrorMessage,
+                errorType: message.TransactionError.ErrorType,
+                errorSource: message.TransactionError.ErrorSource,
               },
             }
           : {};
 
       const recordPayload: SalesforcePaymentRecord = {
-        OwnerId: credentials.ownerId ?? '',
-        ServiceType: message.paymentMethod ?? '',
-        transactionId__c: message.transactionId ?? '',
-        status__c: message.status ?? '',
-        amount__c: message.settlementAmount ?? '',
-        merchantId__c: message.merchantId ?? '',
-        Merchant_Phone__c: message.merchantMobileNo ?? '',
-        transactionType__c: message.transactionType ?? '',
-        metaData__c: message.metaData ? JSON.stringify(message.metaData) : '',
-        fee__c: message.fee ?? '',
-        Device_id__c: message.metaData?.deviceId ?? '',
-        Transaction_Date_Time__c: message.createdOn ?? '',
-        Customer_Phone__c: message.customerPhone ?? '',
-        Currency__c: message.currency ?? '',
-        ExchangeRate__c: message.exchangeRate ?? '',
-        ProcessingFee__c: message.processingFee ?? '',
-        NetAmount__c: message.netAmount ?? '',
-        ExternalTransactionId__c: message.externalTransactionId ?? '',
+        ownerId: credentials.ownerId ?? '',
+        serviceType: message.paymentMethod ?? '',
+        transactionId: message.transactionId ?? '',
+        status: message.status ?? '',
+        amount: message.settlementAmount?.toString() ?? '',
+        merchantId: message.merchantId ?? '',
+        merchantPhone: message.merchantMobileNo ?? '',
+        transactionType: message.transactionType ?? '',
+        metaData: message.metaData ? JSON.stringify(message.metaData) : '',
+        fee: message.fee?.toString() ?? '',
+        deviceId: message.metaData?.deviceId ?? '',
+        transactionDateTime: message.createdOn ?? '',
+        customerPhone: message.customerPhone ?? '',
+        currency: message.currency ?? '',
+        exchangeRate: message.exchangeRate ?? '',
+        processingFee: message.processingFee ?? '',
+        netAmount: message.amount?.toString() ?? '',
+        externalTransactionId: message.externalTransactionId ?? '',
+        originalTransactionId: message.originalTransactionId ?? '',
         ...transactionError,
       };
 
@@ -129,7 +130,9 @@ export class SalesforceSyncService {
         recordId: createRecordResponse.data.id,
       });
     } catch (error) {
-      this.logger.error('Error creating Salesforce record', { error });
+      this.logger.error('Error creating Salesforce record', {
+        error,
+      });
       throw new Error('Failed to create Salesforce record');
     }
   }
