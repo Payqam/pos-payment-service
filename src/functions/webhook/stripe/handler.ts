@@ -1,5 +1,4 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { API } from '../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import stripe from 'stripe';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
@@ -7,6 +6,28 @@ import { DynamoDBService } from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
 import { Readable } from 'stream';
 import { SNSMessage } from '../../../model';
+import { processWebhook } from './process';
+
+type TransactionStatus =
+  | 'INTENT_CREATE_SUCCEEDED'
+  | 'INTENT_REQUIRES_PAYMENT_METHOD'
+  | 'INTENT_REQUIRES_CONFIRMATION'
+  | 'INTENT_REQUIRES_ACTION'
+  | 'INTENT_PROCESSING'
+  | 'INTENT_REQUIRES_CAPTURE'
+  | 'INTENT_SUCCEEDED'
+  | 'INTENT_FAILED'
+  | 'INTENT_CANCELLED'
+  | 'TRANSFER_CREATED'
+  | 'TRANSFER_REVERSED'
+  | 'CHARGE_SUCCEEDED'
+  | 'CHARGE_UPDATE_SUCCEEDED'
+  | 'CHARGE_FAILED'
+  | 'CHARGE_REFUND_SUCCEEDED'
+  | 'REFUND_CREATE_SUCCEEDED'
+  | 'REFUND_UPDATE_SUCCEEDED'
+  | 'REFUND_CHARGE_UPDATE_SUCCEEDED'
+  | 'REFUND_FAILED';
 
 export class StripeWebhookService {
   private readonly logger: Logger;
@@ -51,7 +72,6 @@ export class StripeWebhookService {
   private async publishStatusUpdate(
     transactionId: string,
     status: string,
-    amount: string,
     updateData: Record<string, unknown>
   ): Promise<void> {
     try {
@@ -74,7 +94,6 @@ export class StripeWebhookService {
 
       if (isFailedStatus) {
         if (paymentResponse.last_payment_error) {
-          // Handle INTENT_FAILED structure
           transactionError = {
             ErrorCode: paymentResponse.last_payment_error.code,
             ErrorMessage: paymentResponse.last_payment_error.message,
@@ -85,7 +104,6 @@ export class StripeWebhookService {
           paymentResponse.failure_code &&
           paymentResponse.failure_message
         ) {
-          // Handle CHARGE_FAILED structure
           transactionError = {
             ErrorCode: paymentResponse.failure_code,
             ErrorMessage: paymentResponse.failure_message,
@@ -94,12 +112,12 @@ export class StripeWebhookService {
           };
         }
       }
+      this.logger.info('TransactionId----', { transactionId });
 
       await this.snsService.publish({
         transactionId,
         status,
         type: isFailedStatus ? 'FAILED' : 'UPDATE',
-        amount,
         TransactionError: transactionError,
       } as SNSMessage);
     } catch (error) {
@@ -107,9 +125,9 @@ export class StripeWebhookService {
     }
   }
 
-  private getStatusPriority(status: string): number {
-    const priorities: Record<string, number> = {
-      INTENT_CREATED: 1,
+  private getStatusPriority(status: TransactionStatus): number {
+    const priorities: Record<TransactionStatus, number> = {
+      INTENT_CREATE_SUCCEEDED: 1,
       INTENT_REQUIRES_PAYMENT_METHOD: 2,
       INTENT_REQUIRES_CONFIRMATION: 3,
       INTENT_REQUIRES_ACTION: 4,
@@ -118,183 +136,269 @@ export class StripeWebhookService {
       INTENT_SUCCEEDED: 7,
       INTENT_FAILED: 8,
       INTENT_CANCELLED: 9,
-      CHARGE_SUCCEEDED: 10,
-      CHARGE_UPDATED: 11,
-      CHARGE_FAILED: 12,
-      CHARGE_REFUNDED: 13,
-      CHARGE_REFUND_UPDATED: 14,
-      REFUND_CREATED: 15,
-      REFUND_UPDATED: 16,
-      REFUND_FAILED: 17,
+      TRANSFER_CREATED: 10,
+      TRANSFER_REVERSED: 11,
+      CHARGE_SUCCEEDED: 12,
+      CHARGE_UPDATE_SUCCEEDED: 13,
+      CHARGE_FAILED: 14,
+      CHARGE_REFUND_SUCCEEDED: 15,
+      REFUND_CREATE_SUCCEEDED: 16,
+      REFUND_UPDATE_SUCCEEDED: 17,
+      REFUND_CHARGE_UPDATE_SUCCEEDED: 18,
+      REFUND_FAILED: 19,
     };
-    return priorities[status] || 0; // Default to 0 if status is unrecognized
+    return priorities[status as TransactionStatus] || 0;
+  }
+
+  private async fetchPaymentIntentData(key: {
+    uniqueId: string;
+  }): Promise<{ latestStatus: string; updateData: Record<string, unknown> }> {
+    this.logger.info('Fetching latest status from Stripe for INTENT');
+    const paymentIntent = await this.stripeClient.paymentIntents.retrieve(
+      key.uniqueId
+    );
+    const latestStatus = `INTENT_${paymentIntent.status.toUpperCase()}`;
+    const updateData = {
+      status: latestStatus,
+      paymentIntentResponse: paymentIntent,
+    };
+    this.logger.info('updateData payment_intent', { updateData });
+    return { latestStatus, updateData };
+  }
+
+  private async fetchRefundData(
+    key: { uniqueId: string },
+    newStatus: string
+  ): Promise<{ latestStatus: string; updateData: Record<string, unknown> }> {
+    this.logger.info('Fetching latest status from Stripe for REFUND');
+    const refund = await this.stripeClient.refunds.retrieve(key.uniqueId);
+
+    if (newStatus.startsWith('REFUND_CHARGE')) {
+      const latestStatus = `REFUND_CHARGE_UPDATE_${refund?.status?.toUpperCase()}`;
+      const updateData = {
+        status: latestStatus,
+        refundResponse: refund,
+      };
+      return { latestStatus, updateData };
+    } else {
+      const latestStatus = `REFUND_${refund?.status?.toUpperCase()}`;
+      const updateData = {
+        status: latestStatus,
+        refundResponse: refund,
+      };
+      return { latestStatus, updateData };
+    }
+  }
+
+  private async fetchChargeData(
+    key: { uniqueId: string },
+    newStatus: string
+  ): Promise<{ latestStatus: string; updateData: Record<string, unknown> }> {
+    this.logger.info('Fetching latest status from Stripe for CHARGE');
+    const charge = await this.stripeClient.charges.retrieve(key.uniqueId);
+    if (newStatus.startsWith('CHARGE_REFUND')) {
+      const latestStatus = `CHARGE_REFUND_${charge.status.toUpperCase()}`;
+      const updateData = {
+        status: latestStatus,
+        chargeResponse: charge,
+      };
+      this.logger.info('updateData charge', { updateData });
+      return { latestStatus, updateData };
+    } else if (newStatus.startsWith('CHARGE_UPDATE')) {
+      const latestStatus = `CHARGE_UPDATE_${charge.status.toUpperCase()}`;
+      const updateData = {
+        status: latestStatus,
+        chargeResponse: charge,
+      };
+      this.logger.info('updateData charge', { updateData });
+      return { latestStatus, updateData };
+    } else {
+      const latestStatus = `CHARGE_${charge.status.toUpperCase()}`;
+      const updateData = {
+        status: latestStatus,
+        chargeResponse: charge,
+      };
+      this.logger.info('updateData charge', { updateData });
+      return { latestStatus, updateData };
+    }
+  }
+
+  private async updateRefundResponsesArray(
+    transactionId: string,
+    updateData: Record<string, unknown>
+  ): Promise<void> {
+    this.logger.info('Updating refundResponses array');
+    const transactionRecord = await this.dbService.getItem({
+      transactionId: transactionId,
+    });
+
+    if (transactionRecord) {
+      const existingRefunds = Array.isArray(
+        transactionRecord?.Item?.refundResponses
+      )
+        ? transactionRecord?.Item?.refundResponses
+        : [];
+
+      const cleanUpdateData = JSON.parse(JSON.stringify(updateData));
+      existingRefunds?.push(cleanUpdateData);
+
+      await this.dbService.updatePaymentRecord(
+        { transactionId: transactionId },
+        { refundResponses: existingRefunds }
+      );
+      this.logger.info('Updated refundResponses array:', {
+        refundResponses: existingRefunds,
+      });
+    }
+  }
+
+  private async handleStatusUpdate(
+    transactionId: string,
+    refundId: string | undefined,
+    updateData: Record<string, unknown>
+  ): Promise<void> {
+    await this.publishStatusUpdate(
+      transactionId,
+      updateData.status as string,
+      updateData
+    );
+
+    if (refundId) {
+      this.logger.info('Publishing additional status update for refund', {
+        refundId,
+        status: updateData.status,
+        amount: updateData.amount,
+      });
+      await this.publishStatusUpdate(
+        refundId,
+        updateData.status as string,
+        updateData
+      );
+    }
   }
 
   private async updateRecordIfHigherStatus(
     key: { uniqueId: string },
     newStatus: string,
+    type: 'refund' | 'charge' | 'payment_intent' | 'transfer',
     transactionId: string,
-    updateData: Record<string, unknown>
+    refundId: string | undefined
   ): Promise<void> {
     try {
-      this.logger.info('Fetching latest status from Stripe');
+      this.logger.info('Fetching latest status from Stripe', { newStatus });
 
-      let latestStatus: string | null = null;
+      let result: { latestStatus: string; updateData: Record<string, unknown> };
 
-      if (newStatus.startsWith('INTENT')) {
-        const paymentIntent = await this.stripeClient.paymentIntents.retrieve(
-          key.uniqueId
-        );
-        latestStatus = `INTENT_${paymentIntent.status.toUpperCase()}`;
-        this.logger.info('Latest status:', { latestStatus });
-      } else if (
-        newStatus.startsWith('CHARGE') ||
-        newStatus.startsWith('REFUND')
-      ) {
-        const chargeOrRefund = await this.stripeClient.charges.retrieve(
-          key.uniqueId
-        );
-        latestStatus = `CHARGE_${chargeOrRefund.status.toUpperCase()}`;
-        this.logger.info('Latest status:', { latestStatus });
+      switch (type) {
+        case 'payment_intent':
+          result = await this.fetchPaymentIntentData(key);
+          break;
+        case 'refund':
+          result = await this.fetchRefundData(key, newStatus);
+          break;
+        case 'charge':
+          result = await this.fetchChargeData(key, newStatus);
+          break;
+        default:
+          this.logger.warn('Unsupported type', { type });
+          return;
       }
+
+      const { latestStatus, updateData } = result;
 
       if (!latestStatus) {
         this.logger.warn(
-          'Could not fetch latest status from Stripe, skipping update.'
+          'Could not fetch latest status from Stripe, skipping update.',
+          {
+            key,
+            newStatus,
+            type,
+          }
         );
         return;
       }
-
-      const currentPriority = this.getStatusPriority(latestStatus);
-      const newPriority = this.getStatusPriority(newStatus);
-
-      this.logger.info('Current status:', { currentPriority, newPriority });
-
-      if (newPriority <= currentPriority) {
-        this.logger.info(
-          `Skipping update: latest status (${latestStatus}) has higher or equal priority.`
-        );
-        return;
-      }
-
-      await this.publishStatusUpdate(
-        transactionId,
-        updateData.status as string,
-        updateData.amount as string,
-        updateData
-      );
 
       await this.dbService.updatePaymentRecord(
         { transactionId: transactionId },
         updateData
       );
-      this.logger.info('Record updated successfully', { updateData });
+
+      if (
+        type === 'refund' &&
+        latestStatus === 'REFUND_CHARGE_UPDATE_SUCCEEDED'
+      ) {
+        await this.updateRefundResponsesArray(transactionId, updateData);
+      }
+
+      const currentPriority = this.getStatusPriority(
+        latestStatus as TransactionStatus
+      );
+      const newPriority = this.getStatusPriority(
+        newStatus as TransactionStatus
+      );
+
+      this.logger.info('Status priority comparison', {
+        currentPriority,
+        newPriority,
+        latestStatus,
+        newStatus,
+      });
+
+      if (newPriority <= currentPriority) {
+        this.logger.info('Skipping update due to lower or equal priority', {
+          latestStatus,
+          newStatus,
+          currentPriority,
+          newPriority,
+          transactionId,
+          refundId,
+        });
+        return;
+      }
+
+      await this.handleStatusUpdate(transactionId, refundId, updateData);
+
+      this.logger.info('Record updated successfully', {
+        transactionId,
+        status: updateData.status,
+        refundId,
+      });
     } catch (error) {
-      this.logger.error('Failed to update record:', { error });
+      this.logger.error('Failed to update record', {
+        error,
+        transactionId,
+        refundId,
+        newStatus,
+        type,
+      });
     }
   }
 
-  private async handlePaymentEvent(
+  public async handlePaymentEvent(
     eventObject: stripe.PaymentIntent | stripe.Charge | stripe.Refund,
     status: string
   ): Promise<void> {
     this.logger.info(`Processing event with status: ${status}`, eventObject);
-
-    let uniqueId: string;
-
-    if (eventObject.object === 'payment_intent') {
-      // If it's a Charge or Refund, get the associated PaymentIntent ID
-      uniqueId = eventObject.id as string;
-      this.logger.info('PaymentIntent ID:', uniqueId);
-    } else if (eventObject.object === 'charge') {
-      // Otherwise, use the Charge or Refund ID
-      this.logger.info('Charge', eventObject.id); // Charge or Refund Id
-      uniqueId = eventObject.id;
-    } else {
-      // If it's a Refund, get the associated PaymentIntent ID
-      uniqueId = eventObject.object as string;
-      this.logger.info('Refund ID:');
-    }
+    const uniqueId = eventObject.id as string;
+    const type = eventObject.object as 'payment_intent' | 'charge' | 'refund';
     const transactionId = eventObject?.metadata?.transactionId;
+    const refundId = eventObject?.metadata?.refundId;
+    this.logger.info('handlePaymentEvent', {
+      transactionId,
+      uniqueId,
+      type,
+      refundId,
+    });
     await this.updateRecordIfHigherStatus(
       { uniqueId },
       status,
+      type,
       transactionId as string,
-      {
-        status,
-        refundId: 'refund' in eventObject ? eventObject.id : undefined,
-        paymentResponse: eventObject,
-      }
+      refundId
     );
-  }
-
-  public async processWebhook(
-    event: APIGatewayProxyEvent
-  ): Promise<APIGatewayProxyResult> {
-    try {
-      this.logger.info('Received webhook event');
-      await this.initialize();
-      if (!event.headers['Stripe-Signature'] || !event.body)
-        throw new Error('Invalid webhook request');
-      const bodyBuffer = await this.getEventStream(event.body);
-
-      const stripeEvent = this.stripeClient.webhooks.constructEvent(
-        bodyBuffer,
-        event.headers['Stripe-Signature'],
-        this.signingSecret
-      );
-      this.logger.info('Processing Stripe event', { type: stripeEvent.type });
-
-      const eventMapping: Record<string, string> = {
-        'charge.succeeded': 'CHARGE_SUCCEEDED',
-        'charge.updated': 'CHARGE_UPDATED',
-        'charge.failed': 'CHARGE_FAILED',
-        'charge.refunded': 'CHARGE_REFUNDED',
-        'charge.refund.updated': 'CHARGE_REFUND_UPDATED',
-        'payment_intent.succeeded': 'INTENT_SUCCEEDED',
-        'payment_intent.created': 'INTENT_CREATED',
-        'payment_intent.payment_failed': 'INTENT_FAILED',
-        'payment_intent.requires_action': 'INTENT_REQUIRES_ACTION',
-        'payment_intent.requires_confirmation': 'INTENT_REQUIRES_CONFIRMATION',
-        'payment_intent.requires_capture': 'INTENT_REQUIRES_CAPTURE',
-        'payment_intent.requires_payment_method':
-          'INTENT_REQUIRES_PAYMENT_METHOD',
-        'payment_intent.canceled': 'INTENT_CANCELLED',
-        'payment_intent.processing': 'INTENT_PROCESSING',
-        'refund.created': 'REFUND_CREATED',
-        'refund.updated': 'REFUND_UPDATED',
-        'refund.failed': 'REFUND_FAILED',
-      };
-
-      const status = eventMapping[stripeEvent.type];
-      if (status)
-        if (status)
-          await this.handlePaymentEvent(
-            stripeEvent.data.object as
-              | stripe.PaymentIntent
-              | stripe.Charge
-              | stripe.Refund,
-            status
-          );
-        else this.logger.warn('Unhandled event type', stripeEvent.type);
-
-      return {
-        statusCode: 200,
-        headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({ received: true }),
-      };
-    } catch (error) {
-      this.logger.error('Error processing webhook', { error });
-      return {
-        statusCode: 400,
-        headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({ error: 'Webhook processing failed' }),
-      };
-    }
   }
 }
 
 export const handler = async (
   event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> =>
-  new StripeWebhookService().processWebhook(event);
+): Promise<APIGatewayProxyResult> => processWebhook(event);
