@@ -5,6 +5,10 @@ import {
 } from 'aws-lambda';
 import { API } from '../../../../../configurations/api';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import {
+  registerRedactFilter,
+  maskMobileNumber,
+} from '../../../../../utils/redactUtil';
 import { DynamoDBService } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
 import {
@@ -21,6 +25,9 @@ import {
   EnhancedError,
   ErrorCategory,
 } from '../../../../../utils/errorHandler';
+
+// Register redaction filter for masking sensitive data in logs
+registerRedactFilter();
 
 class WebhookError extends Error {
   constructor(
@@ -59,10 +66,40 @@ export class MTNDisbursementWebhookService {
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
-      this.logger.info('Processing failed transfer', { transactionStatus });
+      this.logger.debug('Processing failed transfer webhook', {
+        transactionId,
+        status: transactionStatus.status,
+        reason: transactionStatus.reason,
+        amount: transactionStatus.amount,
+        currency: transactionStatus.currency,
+        payeePartyIdType: transactionStatus.payee?.partyIdType,
+        payeePartyId: transactionStatus.payee?.partyId
+          ? maskMobileNumber(transactionStatus.payee.partyId)
+          : undefined,
+      });
+
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+
+      this.logger.debug('Mapped error details', {
+        transactionId,
+        errorReason,
+        errorMapping: {
+          statusCode: errorMapping.statusCode,
+          label: errorMapping.label,
+          message: errorMapping.message,
+          retryable: errorMapping.retryable,
+        },
+      });
+
+      this.logger.debug('Publishing disbursement failure notification', {
+        transactionId,
+        status: MTNPaymentStatus.DISBURSEMENT_FAILED,
+        errorCode: errorMapping.statusCode,
+        errorType: errorMapping.label,
+      });
+
       await this.snsService.publish({
         transactionId,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
@@ -74,17 +111,44 @@ export class MTNDisbursementWebhookService {
           ErrorSource: 'pos',
         },
       });
+
+      this.logger.debug(
+        'Successfully published disbursement failure notification',
+        {
+          transactionId,
+        }
+      );
+
       if (
         errorReason === 'INTERNAL_PROCESSING_ERROR' ||
         errorReason === 'SERVICE_UNAVAILABLE'
       ) {
+        this.logger.debug(
+          'Retryable error detected, checking transaction details',
+          {
+            transactionId,
+            errorReason,
+          }
+        );
+
         const transactionDetails = await this.dbService.getItem<{
           transactionId: string;
         }>({
           transactionId,
         });
+
         const settlementResponse = transactionDetails?.Item;
-        this.logger.info('Transaction details', { transactionDetails });
+
+        this.logger.debug(
+          'Retrieved transaction details for retry assessment',
+          {
+            transactionId,
+            hasSettlementRetryResponse:
+              !!settlementResponse?.settlementRetryResponse,
+            retryCount: settlementResponse?.settlementRetryResponse?.retryCount,
+          }
+        );
+
         if (
           !settlementResponse?.settlementRetryResponse ||
           (settlementResponse?.settlementRetryResponse &&
@@ -93,12 +157,25 @@ export class MTNDisbursementWebhookService {
           const maxRetries = 3;
           let retryCount = 0;
 
+          this.logger.debug('Starting retry process for failed disbursement', {
+            transactionId,
+            maxRetries,
+            currentRetryCount:
+              settlementResponse?.settlementRetryResponse?.retryCount || 0,
+          });
+
           while (retryCount < maxRetries) {
             try {
-              this.logger.info(
+              this.logger.debug(
                 `Retry attempt ${retryCount + 1} for transaction`,
                 {
                   transactionId,
+                  retryCount: retryCount + 1,
+                  amount: transactionStatus.amount,
+                  currency: transactionStatus.currency,
+                  payeePartyId: transactionStatus.payee?.partyId
+                    ? maskMobileNumber(transactionStatus.payee.partyId)
+                    : undefined,
                 }
               );
 
@@ -109,8 +186,10 @@ export class MTNDisbursementWebhookService {
                 TransactionType.TRANSFER
               );
 
-              this.logger.info(`Retry successful with new transactionId`, {
+              this.logger.info('Retry successful with new transaction ID', {
+                originalTransactionId: transactionId,
                 newTransactionId,
+                retryCount: retryCount + 1,
               });
 
               return {
@@ -124,13 +203,38 @@ export class MTNDisbursementWebhookService {
               };
             } catch (retryError) {
               this.logger.error(`Retry ${retryCount + 1} failed`, {
-                retryError,
+                error:
+                  retryError instanceof Error
+                    ? {
+                        name: retryError.name,
+                        message: retryError.message,
+                        stack: retryError.stack,
+                      }
+                    : String(retryError),
+                transactionId,
+                retryCount: retryCount + 1,
               });
               retryCount++;
             }
           }
+
+          this.logger.warn('All retry attempts failed for disbursement', {
+            transactionId,
+            maxRetries,
+            errorReason,
+          });
+        } else {
+          this.logger.warn(
+            'Maximum retry attempts already reached, not retrying',
+            {
+              transactionId,
+              retryCount:
+                settlementResponse?.settlementRetryResponse?.retryCount,
+            }
+          );
         }
       }
+
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
         errorMapping.statusCode as unknown as string,
@@ -143,6 +247,13 @@ export class MTNDisbursementWebhookService {
           originalError: transactionStatus.reason,
         }
       );
+
+      this.logger.debug('Created enhanced error for failed disbursement', {
+        transactionId,
+        errorCategory: enhancedError.category,
+        errorMessage: enhancedError.message,
+        retryable: errorMapping.retryable,
+      });
 
       return {
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
@@ -157,7 +268,17 @@ export class MTNDisbursementWebhookService {
         },
       };
     } catch (error) {
-      this.logger.error('Failed to handle the failed payment');
+      this.logger.error('Failed to handle the failed transfer', {
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+              }
+            : String(error),
+        transactionId,
+      });
       throw new Error('Failed to handle the failed transfer');
     }
   }
@@ -171,6 +292,13 @@ export class MTNDisbursementWebhookService {
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     try {
+      this.logger.debug('Updating settlement status', {
+        transactionId,
+        status: transactionStatusResponse.status,
+        financialTransactionId:
+          transactionStatusResponse.financialTransactionId,
+      });
+
       const dateTime = new Date().toISOString();
       const updateData =
         transactionStatusResponse.status === 'SUCCESSFUL'
@@ -183,19 +311,64 @@ export class MTNDisbursementWebhookService {
               transactionId,
               transactionStatusResponse
             );
+
+      this.logger.debug('Prepared update data for settlement status', {
+        transactionId,
+        status: updateData.status,
+        updatedOn: dateTime,
+      });
+
       if (transactionStatusResponse.status === 'SUCCESSFUL') {
+        this.logger.debug('Publishing successful disbursement notification', {
+          transactionId,
+          status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
+        });
+
         await this.snsService.publish({
           transactionId,
           status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
           type: 'CREATE',
           createdOn: dateTime,
         });
+
+        this.logger.debug(
+          'Successfully published disbursement success notification',
+          {
+            transactionId,
+          }
+        );
       }
 
+      this.logger.debug('Updating payment record with settlement status', {
+        transactionId,
+        status: updateData.status,
+      });
+
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
+
+      this.logger.debug(
+        'Successfully updated payment record with settlement status',
+        {
+          transactionId,
+          status: updateData.status,
+        }
+      );
     } catch (error) {
-      this.logger.error('Failed to update the settlement status');
-      throw new Error('Failed to update the settlement status');
+      this.logger.error('Failed to update the settlement status', {
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+              }
+            : String(error),
+        transactionId,
+      });
+      throw new WebhookError('Failed to update settlement status', 500, {
+        transactionId,
+        error,
+      });
     }
   }
 
