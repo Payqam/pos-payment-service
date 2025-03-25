@@ -133,16 +133,19 @@ export class MTNPaymentWebhookService {
     try {
       const amountNumber = parseFloat(amount);
       const settlementAmount = this.calculateSettlementAmount(amountNumber);
+      const dateTime = new Date().toISOString();
       const updateData: Record<string, unknown> = {
         status: MTNPaymentStatus.PAYMENT_SUCCESSFUL,
         paymentResponse: webhookEvent,
         fee: amountNumber - settlementAmount,
+        updatedOn: dateTime,
       };
 
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId: externalId,
         status: MTNPaymentStatus.PAYMENT_SUCCESSFUL,
-        type: 'UPDATE',
+        type: 'CREATE',
+        createdOn: dateTime,
         partyIdType: webhookEvent.payer?.partyIdType,
         partyId: webhookEvent.payer?.partyId,
         payeeNote: webhookEvent.payeeNote,
@@ -159,32 +162,28 @@ export class MTNPaymentWebhookService {
           updateData.status = MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED;
           updateData.settlementDate = Date.now();
           updateData.settlementAmount = settlementAmount;
-          await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-            {
-              transactionId: externalId,
-              status: MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED,
-              type: 'UPDATE',
-            }
-          );
+          updateData.updatedOn = dateTime;
+          await this.snsService.publish({
+            transactionId: externalId,
+            status: MTNPaymentStatus.DISBURSEMENT_REQUEST_CREATED,
+            type: 'CREATE',
+            createdOn: dateTime,
+          });
         } catch (error: unknown) {
           this.logger.error('Failed to process instant disbursement', {
             error,
           });
-          await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-            {
-              transactionId: externalId,
-              status: MTNPaymentStatus.DISBURSEMENT_FAILED,
-              type: 'FAILED',
-              TransactionError: {
-                ErrorCode: 'errorCode',
-                ErrorMessage: 'errorReason',
-                ErrorType: 'errorType',
-                ErrorSource: 'pos',
-              },
-            }
-          );
+          await this.snsService.publish({
+            transactionId: externalId,
+            status: MTNPaymentStatus.DISBURSEMENT_FAILED,
+            type: 'CREATE',
+            TransactionError: {
+              ErrorCode: 'errorCode',
+              ErrorMessage: 'errorReason',
+              ErrorType: 'errorType',
+              ErrorSource: 'pos',
+            },
+          });
         }
       }
 
@@ -222,10 +221,10 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId: externalId,
         status: MTNPaymentStatus.PAYMENT_FAILED,
-        type: 'FAILED',
+        type: 'CREATE',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
           ErrorMessage: errorReason,

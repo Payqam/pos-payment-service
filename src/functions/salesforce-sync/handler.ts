@@ -3,44 +3,11 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../services/secretsManagerService';
 import axios from 'axios';
 import { registerRedactFilter } from '../../../utils/redactUtil';
+import { SalesforceCredentials, SNSMessage } from '../../model';
+import { SalesforcePaymentRecord } from '../../model/salesforce';
 
-// Configure sensitive field redaction in logs
 const sensitiveFields = ['clientId', 'clientSecret', 'username', 'password'];
 registerRedactFilter(sensitiveFields);
-
-interface SalesforceCredentials {
-  clientSecret: string;
-  clientId: string;
-}
-interface SNSMessage {
-  transactionId: string;
-  status: string;
-  amount: string;
-  merchantId: string;
-  merchantMobileNo: string;
-  transactionType: string;
-  metaData: { deviceId: string };
-  fee: string;
-  type: string;
-  customerPhone: string;
-  createdOn: number;
-  currency: string;
-  exchangeRate: string;
-  processingFee: string;
-  settlementAmount: string;
-  externalTransactionId: string;
-  paymentMethod: string;
-  partyIdType: string;
-  partyId: string;
-  payeeNote: string;
-  payerMessage: string;
-  TransactionError: {
-    ErrorCode: string;
-    ErrorMessage: string;
-    ErrorType: string;
-    ErrorSource: string;
-  };
-}
 
 export class SalesforceSyncService {
   private readonly logger: Logger;
@@ -71,30 +38,6 @@ export class SalesforceSyncService {
     }
   }
 
-  // private async getAccessToken(
-  //   credentials: SalesforceCredentials
-  // ): Promise<string> {
-  //   try {
-  //     const urlHost = process.env.SALESFORCE_URL_HOST as string;
-  //     const authResponse = await axios.post(
-  //       `${urlHost}/services/oauth2/token`,
-  //       new URLSearchParams({
-  //         grant_type: 'client_credentials',
-  //         client_id: credentials.clientId,
-  //         client_secret: credentials.clientSecret,
-  //       }),
-  //       {
-  //         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  //       }
-  //     );
-  //
-  //     this.logger.info('Successfully retrieved Salesforce auth token');
-  //     return authResponse.data.access_token;
-  //   } catch (error) {
-  //     this.logger.error('Error fetching Salesforce auth token', { error });
-  //     throw new Error('Failed to fetch Salesforce auth token');
-  //   }
-  // }
   private async getAccessToken(
     credentials: SalesforceCredentials
   ): Promise<string> {
@@ -106,8 +49,8 @@ export class SalesforceSyncService {
           grant_type: 'password',
           client_id: credentials.clientId,
           client_secret: credentials.clientSecret,
-          username: 'kokiladev@qriomatrix.com',
-          password: 'qr!0Matrixs18oDSyszN2oca8x5SY8qyFz',
+          username: credentials.username,
+          password: credentials.password,
         }),
         {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -122,68 +65,6 @@ export class SalesforceSyncService {
     }
   }
 
-  private async handlePaymentStatusUpdate(
-    message: SNSMessage,
-    credentials: SalesforceCredentials
-  ) {
-    try {
-      this.logger.info('Handling payment status update', { message });
-      const accessToken = await this.getAccessToken(credentials);
-      const urlHost = process.env.SALESFORCE_URL_HOST as string;
-
-      // Fetch existing record
-      const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`;
-      const queryResponse = await axios.get(queryUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (!queryResponse.data.records.length) {
-        throw new Error(
-          `No Salesforce record found for transactionId: ${message.transactionId}`
-        );
-      }
-
-      const recordId = queryResponse.data.records[0].Id;
-      this.logger.info('Successfully retrieved Salesforce record ID', {
-        recordId,
-      });
-
-      // Update Salesforce Record
-      const recordPayload = {
-        transactionId__c: message.transactionId,
-        status__c: message.status,
-        amount__c: message.amount,
-        merchantId__c: message.merchantId,
-        ...(message.partyIdType !== undefined && {
-          partyIdType__c: message.partyIdType,
-        }),
-        ...(message.partyId !== undefined && { partyId__c: message.partyId }),
-        ...(message.payeeNote !== undefined && {
-          payeeNote__c: message.payeeNote,
-        }),
-        ...(message.payerMessage !== undefined && {
-          payerMessage__c: message.payerMessage,
-        }),
-      };
-
-      await axios.patch(
-        `${urlHost}/services/data/v60.0/sobjects/Transaction__c/${recordId}`,
-        recordPayload,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      this.logger.info('Successfully updated Salesforce record', { recordId });
-    } catch (error) {
-      this.logger.error('Error updating Salesforce record', { error });
-      throw new Error('Failed to update Salesforce record');
-    }
-  }
-
   private async handlePaymentCreated(
     message: SNSMessage,
     credentials: SalesforceCredentials
@@ -192,35 +73,50 @@ export class SalesforceSyncService {
       this.logger.info('Handling payment created', { message });
 
       const accessToken = await this.getAccessToken(credentials);
-      const urlHost = process.env.SALESFORCE_URL_HOST as string;
+      const urlHost = credentials.host;
+      const transactionError =
+        message.TransactionError &&
+        (message.TransactionError.ErrorMessage ||
+          message.TransactionError.ErrorCode ||
+          message.TransactionError.ErrorType ||
+          message.TransactionError.ErrorSource)
+          ? {
+              transactionError: {
+                errorCode: message.TransactionError.ErrorCode,
+                errorMessage: message.TransactionError.ErrorMessage,
+                errorType: message.TransactionError.ErrorType,
+                errorSource: message.TransactionError.ErrorSource,
+              },
+            }
+          : {};
 
-      // todo: fix date issue
-      // todo: add merchant phone number
-      const recordPayload = {
-        OwnerId: process.env.SALESFORCE_OWNER_ID,
-        ServiceType__c: message.paymentMethod,
-        transactionId__c: message.transactionId,
-        status__c: message.status,
-        amount__c: message.settlementAmount,
-        merchantId__c: message.merchantId,
-        Merchant_Phone__c: message.merchantMobileNo,
-        Transaction_Type__c: message.transactionType,
-        metaData__C: JSON.stringify(message.metaData),
-        fee__c: message.fee,
-        Device_id__c: message.metaData.deviceId,
-        Transaction_Date_Time__c: message.createdOn,
-        Customer_Phone__c: message.customerPhone,
-        Currency__c: message.currency,
-        Exchange_Rate__c: message.exchangeRate,
-        Processing_Fee__c: message.processingFee,
-        Net_Amount__c: message.amount,
-        ExternalTransactionId__c: message.externalTransactionId,
+      const recordPayload: SalesforcePaymentRecord = {
+        ownerId: credentials.ownerId ?? '',
+        serviceType: message.paymentMethod ?? '',
+        transactionId: message.transactionId ?? '',
+        status: message.status ?? '',
+        amount: message.settlementAmount?.toString() ?? '',
+        merchantId: message.merchantId ?? '',
+        merchantPhone: message.merchantMobileNo ?? '',
+        transactionType: message.transactionType ?? '',
+        metaData: message.metaData ? JSON.stringify(message.metaData) : '',
+        fee: message.fee?.toString() ?? '',
+        deviceId: message.metaData?.deviceId ?? '',
+        transactionDateTime: message.createdOn ?? '',
+        customerPhone: message.customerPhone ?? '',
+        currency: message.currency ?? '',
+        exchangeRate: message.exchangeRate ?? '',
+        processingFee: message.processingFee ?? '',
+        netAmount: message.amount?.toString() ?? '',
+        externalTransactionId: message.externalTransactionId ?? '',
+        originalTransactionId: message.originalTransactionId ?? '',
+        ...transactionError,
       };
 
       this.logger.info('Creating Salesforce Payment record', { recordPayload });
 
       const createRecordResponse = await axios.post(
-        `${urlHost}/services/data/v63.0/sobjects/Transaction__c/`,
+        `${urlHost}/services/apexrest/PayQam/Streaming`,
         recordPayload,
         {
           headers: {
@@ -234,107 +130,10 @@ export class SalesforceSyncService {
         recordId: createRecordResponse.data.id,
       });
     } catch (error) {
-      this.logger.error('Error creating Salesforce record', { error });
+      this.logger.error('Error creating Salesforce record', {
+        error,
+      });
       throw new Error('Failed to create Salesforce record');
-    }
-  }
-
-  private async handlePaymentError(
-    message: SNSMessage,
-    credentials: SalesforceCredentials
-  ) {
-    try {
-      this.logger.info('Handling payment failure', { message });
-
-      // Get Salesforce Access Token
-      let accessToken: string;
-      try {
-        accessToken = await this.getAccessToken(credentials);
-      } catch (error) {
-        this.logger.error('Failed to retrieve Salesforce access token', {
-          error,
-        });
-        throw new Error('Failed to authenticate with Salesforce');
-      }
-
-      const urlHost = process.env.SALESFORCE_URL_HOST as string;
-      const queryUrl = `${urlHost}/services/data/v60.0/query/?q=SELECT+Id,Name+FROM+Transaction__c+WHERE+transactionId__c='${message.transactionId}'`;
-
-      this.logger.info('Fetching Salesforce record', { queryUrl });
-
-      // Fetch the Salesforce record
-      let recordId: string;
-      try {
-        const queryResponse = await axios.get(queryUrl, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-
-        if (!queryResponse.data.records.length) {
-          throw new Error(
-            `No Salesforce record found for transactionId: ${message.transactionId}`
-          );
-        }
-
-        recordId = queryResponse.data.records[0].Id;
-        this.logger.info('Successfully retrieved Salesforce record', {
-          recordId,
-        });
-        const recordPayload = {
-          transactionId__c: message.transactionId,
-          status__c: message.status,
-          amount__c: message.amount,
-          merchantId__c: message.merchantId,
-        };
-
-        await axios.patch(
-          `${urlHost}/services/data/v60.0/sobjects/Transaction__c/${recordId}`,
-          recordPayload,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-      } catch (error) {
-        this.logger.error('Failed to fetch Salesforce record', { error });
-        throw new Error('Salesforce record lookup failed');
-      }
-
-      // Prepare transaction error payload
-      const recordPayload = {
-        Transaction__c: recordId,
-        Error_Type__c: message.TransactionError.ErrorType,
-        Error_Source__c: message.TransactionError.ErrorSource,
-        Error_Message__c: message.TransactionError.ErrorMessage,
-        Error_Code__c: message.TransactionError.ErrorCode,
-      };
-
-      // Create a new error record in Salesforce
-      try {
-        const createRecordResponse = await axios.post(
-          `${urlHost}/services/apexrest/PayQam/Streaming`,
-          recordPayload,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        this.logger.info('Successfully created Salesforce failed record', {
-          recordId: createRecordResponse.data.id,
-        });
-      } catch (error) {
-        this.logger.error('Failed to create Salesforce error record', {
-          error,
-        });
-        throw new Error('Failed to log transaction error in Salesforce');
-      }
-    } catch (error) {
-      this.logger.error('Error handling payment error', { error });
-      throw new Error('Failed to handle payment error');
     }
   }
 
@@ -350,25 +149,8 @@ export class SalesforceSyncService {
           this.logger.info('Processing message', {
             messageId: record.Sns.MessageId,
           });
-
-          switch (message.type) {
-            case 'UPDATE':
-              this.logger.info('Update case', { message });
-              await this.handlePaymentStatusUpdate(message, credentials);
-              break;
-            case 'CREATE':
-              this.logger.info('Create case', { message });
-              await this.handlePaymentCreated(message, credentials);
-              break;
-            case 'FAILED':
-              this.logger.info('Failed case', { message });
-              await this.handlePaymentError(message, credentials);
-              break;
-            default:
-              this.logger.warn('Unknown event type', {
-                eventType: message.type,
-              });
-          }
+          this.logger.info('Create case', { message });
+          await this.handlePaymentCreated(message, credentials);
         } catch (messageError) {
           this.logger.error('Error processing individual message', {
             error: messageError,

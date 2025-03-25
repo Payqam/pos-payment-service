@@ -9,6 +9,8 @@ import {
   GetCommandOutput,
   QueryCommand,
   QueryCommandOutput,
+  DeleteCommand,
+  DeleteCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
 
 export class DynamoDBDocClient {
@@ -19,7 +21,7 @@ export class DynamoDBDocClient {
   // Private constructor to enforce singleton usage.
   private constructor() {
     const client = new DynamoDBClient({
-      region: process.env.AWS_REGION || 'us-east-1',
+      region: process.env.AWS_REGION,
     });
     this.docClient = DynamoDBDocumentClient.from(client);
   }
@@ -75,6 +77,19 @@ export class DynamoDBDocClient {
   public async queryCommand(
     command: QueryCommand
   ): Promise<QueryCommandOutput> {
+    return this.docClient.send(command);
+  }
+
+  /**
+   * Sends a Delete command using the DynamoDB Document Client.
+   * This method is used to delete an item from a DynamoDB table.
+   *
+   * @param command - The Delete command to be sent.
+   * @returns The result of the delete command.
+   */
+  public async deleteItem(
+    command: DeleteCommand
+  ): Promise<DeleteCommandOutput> {
     return this.docClient.send(command);
   }
 }

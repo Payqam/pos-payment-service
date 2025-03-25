@@ -10,8 +10,7 @@ import {
   OrangeToken,
   PaymentInitResponse,
   PaymentResponse,
-} from '../interfaces/orange';
-import { config } from 'cypress/types/bluebird';
+} from '../../../model';
 import { OrangePaymentStatus } from 'src/types/orange';
 
 /**
@@ -338,10 +337,10 @@ export class OrangePaymentService {
   }
 
   /**
- * Executes a merchant payment transaction
- * @param params Payment parameters including amount, subscriber details, and description
- * @returns PaymentResponse
- */
+   * Executes a merchant payment transaction
+   * @param params Payment parameters including amount, subscriber details, and description
+   * @returns PaymentResponse
+   */
   private async executeMerchantPayment(params: {
     channelUserMsisdn: string;
     amount: string;
@@ -374,7 +373,7 @@ export class OrangePaymentService {
           orderId: params.orderId,
           payToken: params.payToken,
           status: response.data.data.status,
-          txnid: response.data.data.txnid
+          txnid: response.data.data.txnid,
         });
 
         // Return the PaymentResponse data, not the full Axios response
@@ -382,7 +381,7 @@ export class OrangePaymentService {
       } catch (error) {
         this.logger.error('Error executing merchant payment', {
           error: error instanceof Error ? error.message : 'Unknown error',
-          params
+          params,
         });
         throw error;
       }
@@ -424,7 +423,7 @@ export class OrangePaymentService {
   }) {
     const dateTime = new Date().toISOString();
     const timestamp = Math.floor(new Date(dateTime).getTime() / 1000);
-    await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+    await this.snsService.publish({
       transactionId: params.transactionId,
       paymentMethod: 'Orange',
       status: params.status,
@@ -459,13 +458,13 @@ export class OrangePaymentService {
       const axiosInstance = await this.createAxiosInstance();
       await axiosInstance.post(webhookUrl, {
         type: 'payment_notification',
-        data: params
+        data: params,
       });
     } catch (error) {
       this.logger.error('Error calling webhook', {
         error: error instanceof Error ? error.message : 'Unknown error',
         params,
-        webhookUrl
+        webhookUrl,
       });
     }
   }
@@ -499,7 +498,7 @@ export class OrangePaymentService {
         orderId,
         description: metaData?.description || 'PayQam payment',
         payToken,
-        notifyUrl: credentials.notifyUrl
+        notifyUrl: credentials.notifyUrl,
       });
 
       this.logger.info('Orange Money charge execution response', {
@@ -513,8 +512,8 @@ export class OrangePaymentService {
           amount: paymentResponse.data.amount,
           channelUserMsisdn: paymentResponse.data.channelUserMsisdn,
           description: paymentResponse.data.description,
-          createtime: paymentResponse.data.createtime
-        }
+          createtime: paymentResponse.data.createtime,
+        },
       });
 
       // Create payment record
@@ -559,14 +558,14 @@ export class OrangePaymentService {
         metaData: record.metaData,
         fee: feeAmount,
         customerPhone,
-        currency
+        currency,
       });
 
       // Check if we're in sandbox environment
       if (credentials.targetEnvironment === 'sandbox') {
         await this.callWebhook(
           {
-            payToken: payToken
+            payToken: payToken,
           },
           credentials.chargeWebhookUrl
         );
@@ -574,7 +573,7 @@ export class OrangePaymentService {
 
       return {
         transactionId,
-        status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED
+        status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED,
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money charge', {
@@ -620,7 +619,7 @@ export class OrangePaymentService {
         metaData,
         fee: feeAmount,
         customerPhone,
-        currency
+        currency,
       });
 
       throw error;
@@ -646,14 +645,16 @@ export class OrangePaymentService {
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
   ): Promise<{ transactionId: string; status: string; message?: string }> {
-
     if (!transactionId) {
       const error = new Error('Transaction ID is required for refund');
-      this.logger.error('Error processing Orange Money refund: Missing transaction ID', {
-        amount,
-        customerPhone,
-        merchantId
-      });
+      this.logger.error(
+        'Error processing Orange Money refund: Missing transaction ID',
+        {
+          amount,
+          customerPhone,
+          merchantId,
+        }
+      );
       throw error;
     }
 
@@ -671,47 +672,52 @@ export class OrangePaymentService {
         return {
           transactionId,
           status: 'FAILED',
-          message: `Transaction not found with ID: ${transactionId}`
+          message: `Transaction not found with ID: ${transactionId}`,
         };
       }
 
       this.logger.info('Found existing transaction', {
         transactionId,
         type: existingTransaction.transactionType,
-        status: existingTransaction.status
+        status: existingTransaction.status,
       });
 
       // Check if it's already a successful refund
-      if (existingTransaction.transactionType === 'REFUND' &&
-        existingTransaction.status === OrangePaymentStatus.CUSTOMER_REFUND_SUCCESSFUL) {
+      if (
+        existingTransaction.transactionType === 'REFUND' &&
+        existingTransaction.status ===
+          OrangePaymentStatus.CUSTOMER_REFUND_SUCCESSFUL
+      ) {
         return {
           transactionId,
           status: 'ALREADY_REFUNDED',
-          message: 'Transaction has already been refunded'
+          message: 'Transaction has already been refunded',
         };
       }
 
       // Check if the original transaction exists and was successful
-      // if (existingTransaction.transactionType === 'CHARGE' && 
+      // if (existingTransaction.transactionType === 'CHARGE' &&
       //     existingTransaction.status !== 'SUCCESSFULL') {
       //   throw new Error('Original transaction was not successful');
       // }
 
       // TODO: Temporary check for PENDING transactions
-      if (existingTransaction.transactionType === 'CHARGE' &&
-        existingTransaction.status !== OrangePaymentStatus.PAYMENT_SUCCESSFUL) {
+      if (
+        existingTransaction.transactionType === 'CHARGE' &&
+        existingTransaction.status !== OrangePaymentStatus.PAYMENT_SUCCESSFUL
+      ) {
         throw new Error('Original transaction was not successful');
       }
     } catch (error) {
       if ((error as Error).name === 'ResourceNotFoundException') {
         this.logger.warn('Transaction not found for refund', {
           transactionId,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
         return {
           transactionId,
           status: 'FAILED',
-          message: `Transaction not found with ID: ${transactionId}`
+          message: `Transaction not found with ID: ${transactionId}`,
         };
       }
       throw error;
@@ -723,7 +729,7 @@ export class OrangePaymentService {
       customerPhone,
       merchantId,
       merchantMobileNo,
-      currency
+      currency,
     });
 
     try {
@@ -741,7 +747,7 @@ export class OrangePaymentService {
         subscriberMsisdn: customerPhone,
         orderId: refundOrderId,
         description: metaData?.reason || 'PayQam refund',
-        payToken: refundPayToken
+        payToken: refundPayToken,
       });
 
       this.logger.info('Orange Money refund cashin execution response', {
@@ -756,15 +762,18 @@ export class OrangePaymentService {
           amount: refundResponse.data.amount,
           channelUserMsisdn: refundResponse.data.channelUserMsisdn,
           description: refundResponse.data.description,
-          createtime: refundResponse.data.createtime
-        }
+          createtime: refundResponse.data.createtime,
+        },
       });
 
       const refundCashinResponsePayload: UpdatePaymentRecord = {
-        refundCashinResponse: refundResponse.data
+        refundCashinResponse: refundResponse.data,
       };
 
-      await this.dbService.updatePaymentRecord({ transactionId }, refundCashinResponsePayload);
+      await this.dbService.updatePaymentRecord(
+        { transactionId },
+        refundCashinResponsePayload
+      );
 
       // Step 3: Initiate merchant payment
       const merchantPayToken = await this.initiateMerchantPayment();
@@ -778,7 +787,7 @@ export class OrangePaymentService {
         orderId: merchantPayOrderId,
         description: `Refund payment for ${transactionId}`,
         payToken: merchantPayToken,
-        notifyUrl: credentials.notifyUrl
+        notifyUrl: credentials.notifyUrl,
       });
 
       this.logger.info('Orange Money merchant payment execution response', {
@@ -793,8 +802,8 @@ export class OrangePaymentService {
           amount: merchantPayResponse.data.amount,
           channelUserMsisdn: merchantPayResponse.data.channelUserMsisdn,
           description: merchantPayResponse.data.description,
-          createtime: merchantPayResponse.data.createtime
-        }
+          createtime: merchantPayResponse.data.createtime,
+        },
       });
 
       // Update refund record
@@ -815,7 +824,7 @@ export class OrangePaymentService {
           merchantPayToken,
           refundOrderId,
           merchantPayOrderId,
-          originalTransactionId: transactionId
+          originalTransactionId: transactionId,
         },
         merchantRefundId: merchantPayToken,
         GSI1SK: Math.floor(Date.now() / 1000),
@@ -825,7 +834,7 @@ export class OrangePaymentService {
         netAmount: amount.toString(),
         externalTransactionId: refundResponse.data.txnid,
         fee: 0,
-        settlementAmount: amount
+        settlementAmount: amount,
       };
 
       await this.dbService.updatePaymentRecord({ transactionId }, record);
@@ -834,7 +843,7 @@ export class OrangePaymentService {
       if (credentials.targetEnvironment === 'sandbox') {
         await this.callWebhook(
           {
-            payToken: merchantPayToken
+            payToken: merchantPayToken,
           },
           credentials.refundWebhookUrl
         );
@@ -851,19 +860,19 @@ export class OrangePaymentService {
         metaData: record.metaData,
         fee: 0,
         customerPhone,
-        currency
+        currency,
       });
 
       return {
         transactionId,
-        status: OrangePaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED
+        status: OrangePaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED,
       };
     } catch (error) {
       this.logger.error('Error processing Orange Money refund', {
         error: error instanceof Error ? error.message : 'Unknown error',
         transactionId,
         amount,
-        customerPhone
+        customerPhone,
       });
 
       // Update failed refund record
@@ -878,7 +887,7 @@ export class OrangePaymentService {
         refundMpResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
-          timestamp: Math.floor(Date.now() / 1000)
+          timestamp: Math.floor(Date.now() / 1000),
         },
         transactionType: 'REFUND',
         metaData,
@@ -890,7 +899,7 @@ export class OrangePaymentService {
         netAmount: 'N/A',
         externalTransactionId: 'N/A',
         fee: 0,
-        settlementAmount: amount
+        settlementAmount: amount,
       };
 
       await this.dbService.updatePaymentRecord({ transactionId }, failedRecord);
@@ -906,7 +915,7 @@ export class OrangePaymentService {
         metaData,
         fee: 0,
         customerPhone,
-        currency
+        currency,
       });
 
       throw error;
@@ -914,18 +923,19 @@ export class OrangePaymentService {
   }
 
   /**
- * Processes a payment request from a customer.
- * Creates a payment request via Orange's API and stores the transaction in DynamoDB.
- *
- * @param amount - The payment amount
- * @param customerPhone - Customer's mobile number
- * @param merchantId - ID of the merchant receiving the payment
- * @param merchantMobileNo - Merchant's mobile number for disbursement
- * @param metaData - Optional metadata for the transaction
- * @param transactionType - Type of transaction (CHARGE/REFUND)
- * @param currency - Payment currency (default: EUR)
- * @returns The transaction ID and status
- */
+   * Processes a payment request from a customer.
+   * Creates a payment request via Orange's API and stores the transaction in DynamoDB.
+   *
+   * @param amount - The payment amount
+   * @param customerPhone - Customer's mobile number
+   * @param merchantId - ID of the merchant receiving the payment
+   * @param merchantMobileNo - Merchant's mobile number for disbursement
+   * @param metaData - Optional metadata for the transaction
+   * @param transactionType - Type of transaction (CHARGE/REFUND)
+   * @param currency - Payment currency (default: EUR)
+   * @param transactionId
+   * @returns The transaction ID and status
+   */
   public async processPayment(
     amount: number,
     customerPhone: string,

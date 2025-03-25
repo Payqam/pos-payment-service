@@ -63,10 +63,10 @@ export class MTNDisbursementWebhookService {
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
-        type: 'FAILED',
+        type: 'CREATE',
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
           ErrorMessage: errorReason,
@@ -171,25 +171,25 @@ export class MTNDisbursementWebhookService {
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     try {
+      const dateTime = new Date().toISOString();
       const updateData =
         transactionStatusResponse.status === 'SUCCESSFUL'
           ? {
               status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
               disbursementResponse: transactionStatusResponse,
+              updatedOn: dateTime,
             }
           : await this.handleFailedTransfer(
               transactionId,
               transactionStatusResponse
             );
       if (transactionStatusResponse.status === 'SUCCESSFUL') {
-        await this.snsService.publish(
-          process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-          {
-            transactionId,
-            status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
-            type: 'UPDATE',
-          }
-        );
+        await this.snsService.publish({
+          transactionId,
+          status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
+          type: 'CREATE',
+          createdOn: dateTime,
+        });
       }
 
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
@@ -211,7 +211,7 @@ export class MTNDisbursementWebhookService {
     currency: string
   ): Promise<void> {
     try {
-      await this.snsService.publish(process.env.TRANSACTION_STATUS_TOPIC_ARN!, {
+      await this.snsService.publish({
         transactionId,
         uniqueId,
         status,

@@ -2,10 +2,10 @@ import stripe from 'stripe';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
-import { CardData, CreatePaymentRecord } from '../../../model';
-// import { CacheService } from '../../../services/cacheService';
+import { CardData, CreatePaymentRecord, SNSMessage } from '../../../model';
 import { SNSService } from '../../../services/snsService';
 import { v4 as uuidv4 } from 'uuid';
+import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 
 export class CardPaymentService {
   private readonly logger: Logger;
@@ -14,17 +14,12 @@ export class CardPaymentService {
 
   private readonly dbService: DynamoDBService;
 
-  // private readonly cacheService: CacheService;
-
   private readonly snsService: SNSService;
 
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    // if (process.env.ENABLE_CACHE === 'true') {
-    //   this.cacheService = new CacheService();
-    // }
     this.snsService = SNSService.getInstance();
     this.logger.info('init()');
   }
@@ -35,6 +30,7 @@ export class CardPaymentService {
     transactionType: string,
     merchantId: string,
     currency: string,
+    merchantMobileNo?: string,
     customerPhone?: string,
     metaData?: Record<string, string>
   ): Promise<{ transactionId: string; status: string }> {
@@ -52,8 +48,8 @@ export class CardPaymentService {
 
     switch (transactionType) {
       case 'CHARGE': {
+        const transactionId = uuidv4();
         try {
-          const transactionId = uuidv4();
           const feePercentage = 0.1;
           const feeAmount = Math.floor(amount * feePercentage);
           const transferAmount = Math.max(amount - feeAmount, 0);
@@ -109,27 +105,22 @@ export class CardPaymentService {
                 'Failed payment record created in DynamoDB',
                 failedRecord
               );
-              await this.snsService.publish(
-                process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-                {
-                  transactionId,
-                  paymentMethod: 'Stripe',
-                  status: 'FAILED',
-                  type: 'CREATE',
-                  amount,
-                  merchantId,
-                  transactionType: 'CHARGE',
-                  metaData,
-                  fee: feeAmount,
-                  createdOn: dateTime,
-                  customerPhone,
-                  currency: currency,
-                  // exchangeRate: 'exchangeRate',
-                  // processingFee: 'processingFee',
-                  // netAmount: 'netAmount',
-                  // externalTransactionId: 'externalTransactionId',
-                }
-              );
+              await this.snsService.publish({
+                transactionId,
+                paymentMethod: 'Stripe',
+                status: 'FAILED',
+                merchantId,
+                transactionType: 'CHARGE',
+                metaData,
+                fee: feeAmount.toString(),
+                createdOn: dateTime,
+                customerPhone,
+                currency: currency,
+                netAmount: amount.toString(),
+                externalTransactionId: paymentError?.payment_intent?.id,
+                merchantMobileNo,
+                settlementAmount: transferAmount.toString(),
+              } as SNSMessage);
               await this.dbService.createPaymentRecord(failedRecord);
               this.logger.info(
                 'Failed payment record created in DynamoDB',
@@ -162,40 +153,39 @@ export class CardPaymentService {
           await this.dbService.createPaymentRecord(record);
           this.logger.info('Payment record created in DynamoDB', record);
 
-          // if (process.env.ENABLE_CACHE === 'true') {
-          //   const key = `payment:${record.transactionId}`;
-          //   this.logger.info('Payment record stored in Redis', { key });
-          // }
-
-          await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-            {
-              transactionId,
-              paymentMethod: 'Stripe',
-              status: paymentIntent?.status,
-              type: 'CREATE',
-              amount,
-              merchantId,
-              transactionType: 'CHARGE',
-              metaData,
-              fee: feeAmount,
-              createdOn: dateTime,
-              customerPhone,
-              currency: currency,
-              // exchangeRate: 'exchangeRate',
-              // processingFee: 'processingFee',
-              // netAmount: 'netAmount',
-              // externalTransactionId: 'externalTransactionId',
-            }
-          );
+          await this.snsService.publish({
+            transactionId,
+            paymentMethod: 'Stripe',
+            status: paymentIntent?.status,
+            amount: transferAmount.toString(),
+            merchantId,
+            transactionType: 'CHARGE',
+            metaData,
+            fee: feeAmount.toString(),
+            createdOn: dateTime,
+            customerPhone,
+            currency: currency,
+            netAmount: amount.toString(),
+            externalTransactionId: paymentIntent?.id,
+            merchantMobileNo,
+            settlementAmount: transferAmount.toString(),
+          } as SNSMessage);
 
           return {
             transactionId,
             status: paymentIntent?.status as string,
           };
-        } catch (error) {
+        } catch (error: unknown) {
           this.logger.error('Error processing charge', error);
-          throw error;
+          throw new EnhancedError(
+            'STRIPE_ERROR',
+            ErrorCategory.PROVIDER_ERROR,
+            error instanceof Error ? error.message : String(error),
+            {
+              retryable: false,
+              transactionId: transactionId,
+            }
+          );
         }
       }
 
@@ -221,37 +211,29 @@ export class CardPaymentService {
           } catch (refundError: unknown) {
             if (refundError instanceof stripe.errors.StripeError) {
               this.logger.error('Error creating refund', refundError);
-              await this.snsService.publish(
-                process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-                {
-                  transactionId,
-                  status: 'FAILED',
-                  type: 'CREATE',
-                  amount,
-                  merchantId,
-                  transactionType: 'REFUND',
-                  metaData,
-                }
-              );
+              await this.snsService.publish({
+                transactionId,
+                status: 'FAILED',
+                amount,
+                merchantId,
+                transactionType: 'REFUND',
+                metaData,
+              });
 
               throw refundError;
             }
           }
 
           this.logger.info('Refund processed', refund);
-          await this.snsService.publish(
-            process.env.TRANSACTION_STATUS_TOPIC_ARN!,
-            {
-              paymentMethod: 'Stripe',
-              transactionId: transactionId,
-              status: refund?.status as string,
-              type: 'UPDATE',
-              amount,
-              merchantId,
-              transactionType: 'REFUND',
-              metaData,
-            }
-          );
+          await this.snsService.publish({
+            paymentMethod: 'Stripe',
+            transactionId: transactionId,
+            status: refund?.status as string,
+            amount,
+            merchantId,
+            transactionType: 'REFUND',
+            metaData,
+          });
 
           return {
             transactionId: transactionId,
