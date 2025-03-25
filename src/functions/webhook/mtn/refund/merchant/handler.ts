@@ -77,9 +77,27 @@ export class MTNPaymentWebhookService {
     webhookEvent: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
+      // Get existing transaction to retrieve current merchantRefundResponse array
+      const existingTransaction = await this.dbService.getItem({
+        transactionId,
+      });
+      const existingResponses =
+        existingTransaction?.Item?.merchantRefundResponse || [];
+      const totalMerchantRefundAmount =
+        Number(existingTransaction.Item?.totalMerchantRefundAmount) || 0;
+      // Ensure existingResponses is treated as an array
+      const responseArray = Array.isArray(existingResponses)
+        ? existingResponses
+        : [];
+      const dateTime = new Date().toISOString();
       const updateData: Record<string, unknown> = {
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
-        merchantRefundResponse: webhookEvent,
+        totalMerchantRefundAmount:
+          Number(totalMerchantRefundAmount) + Number(webhookEvent.amount),
+        merchantRefundResponse: [
+          ...responseArray,
+          { ...webhookEvent, createdOn: dateTime },
+        ],
       };
       this.logger.info('[debug]update data', {
         updateData,
@@ -88,7 +106,24 @@ export class MTNPaymentWebhookService {
       await this.snsService.publish({
         transactionId,
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        type: 'CREATE',
+        createdOn: dateTime,
       });
+      await this.snsService.publish({
+        transactionId: webhookEvent.externalId,
+        paymentMethod: 'MTN MOMO',
+        status: String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL),
+        type: 'CREATE',
+        amount: webhookEvent.amount,
+        merchantId: existingTransaction.Item?.merchantId,
+        merchantMobileNo: existingTransaction.Item?.merchantMobileNo,
+        transactionType: 'REFUND',
+        createdOn: dateTime,
+        customerPhone: existingTransaction.Item?.customerPhone,
+        currency: existingTransaction.Item?.merchantId,
+        originalTransactionId: existingTransaction.Item?.transactionId,
+      });
+
       this.logger.info('[debug]sent to sns', {
         updateData,
       });
@@ -126,10 +161,38 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
+
+      // Get existing transaction to retrieve current merchantRefundResponse array
+      const existingTransaction = await this.dbService.getItem({
+        transactionId,
+      });
+      const existingResponses =
+        existingTransaction?.Item?.merchantRefundResponse || [];
+
+      // Ensure existingResponses is treated as an array
+      const responseArray = Array.isArray(existingResponses)
+        ? existingResponses
+        : [];
+
       // Send to SalesForce
+      const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId,
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'CREATE',
+      });
+      await this.snsService.publish({
+        transactionId: transactionStatus.externalId,
+        paymentMethod: 'MTN MOMO',
+        status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'CREATE',
+        amount: transactionStatus.amount,
+        merchantId: existingTransaction.Item?.merchantId,
+        merchantMobileNo: existingTransaction.Item?.merchantMobileNo,
+        transactionType: 'REFUND',
+        createdOn: dateTime,
+        customerPhone: existingTransaction.Item?.mobileNo,
+        currency: existingTransaction.Item?.currency,
         TransactionError: {
           ErrorCode: errorMapping.statusCode,
           ErrorMessage: errorReason,
@@ -137,18 +200,21 @@ export class MTNPaymentWebhookService {
           ErrorSource: 'pos',
         },
       });
-      this.logger.info('[debug]sent failed to sns', {});
       return {
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
-        merchantRefundResponse: {
-          ...transactionStatus,
-          errorMessage: enhancedError.message,
-          reason: transactionStatus.reason as string,
-          retryable: errorMapping.retryable,
-          suggestedAction: errorMapping.suggestedAction,
-          httpStatus: errorMapping.statusCode,
-          errorCategory: enhancedError.category,
-        },
+        merchantRefundResponse: [
+          ...responseArray,
+          {
+            ...transactionStatus,
+            createdOn: dateTime,
+            errorMessage: enhancedError.message,
+            reason: transactionStatus.reason as string,
+            retryable: errorMapping.retryable,
+            suggestedAction: errorMapping.suggestedAction,
+            httpStatus: errorMapping.statusCode,
+            errorCategory: enhancedError.category,
+          },
+        ],
       };
     } catch (error) {
       this.logger.error('Failed to handle the failed payment');
@@ -193,37 +259,26 @@ export class MTNPaymentWebhookService {
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
 
-      const result = await this.dbService.queryByGSI(
-        {
-          merchantRefundId: externalId,
-        },
-        'GSI5'
-      );
-      if (!result || result.Items?.length === 0) {
+      // Get temporary reference item from DB
+      const result = await this.dbService.getItem<{
+        transactionId: string;
+      }>({
+        transactionId: externalId,
+      });
+
+      if (!result.Item) {
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
-      const transaction = result?.Items?.[0] ?? null;
-
-      // Verify the transaction hasn't already been processed
-      if (
-        transaction?.status ===
-          String(MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL) ||
-        transaction?.status === String(MTNPaymentStatus.MERCHANT_REFUND_FAILED)
-      ) {
-        this.logger.warn('Merchant refund already processed', {
-          transactionId: transaction.transactionId,
-          currentStatus: transaction.status,
-          externalId,
-        });
-        return {
-          statusCode: 200,
-          headers: API.DEFAULT_HEADERS,
-          body: JSON.stringify({
-            message: 'Webhook already processed for this transaction',
-          }),
-        };
-      }
+      const transactionItem = await this.dbService.getItem<{
+        transactionId: string;
+      }>({
+        transactionId: result.Item.originalTransactionId,
+      });
+      const transaction: Record<string, any> = transactionItem.Item as Record<
+        string,
+        any
+      >;
 
       const transactionStatus: WebhookEvent =
         await this.mtnService.checkTransactionStatus(
@@ -246,10 +301,13 @@ export class MTNPaymentWebhookService {
       this.logger.info('[debug]update data', {
         updateData,
       });
+      // Update the payment record in DB
       await this.dbService.updatePaymentRecord(
         { transactionId: transaction?.transactionId },
         updateData
       );
+      // delete the previous temp item
+      await this.dbService.deletePaymentRecord({ transactionId: externalId });
 
       this.logger.info('Webhook processed successfully', {
         externalId,

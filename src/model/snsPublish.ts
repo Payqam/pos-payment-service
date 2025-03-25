@@ -19,9 +19,10 @@ export interface SNSMessage {
   currency?: string;
   exchangeRate?: string;
   processingFee?: string;
-  netAmount?: string;
+  amount?: string;
   settlementAmount?: string;
   externalTransactionId?: string;
+  originalTransactionId?: string;
   paymentMethod?: string;
   partyIdType?: string;
   partyId?: string;
