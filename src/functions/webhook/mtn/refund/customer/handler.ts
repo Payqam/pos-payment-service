@@ -314,11 +314,13 @@ export class MTNDisbursementWebhookService {
           payeeNote: 'Thank you for your payment',
         });
         // Update the payment record
+        const dateTime = new Date().toISOString();
         await this.dbService.updatePaymentRecord(
           { transactionId: transaction.transactionId },
           {
             status: MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
             merchantRefundId,
+            updatedOn: dateTime,
           }
         );
         // Create a temporary record to associate the transaction with the merchant refund ID
@@ -330,7 +332,8 @@ export class MTNDisbursementWebhookService {
         await this.snsService.publish({
           transactionId: transaction.transactionId,
           status: MTNPaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
-          type: 'UPDATE',
+          type: 'CREATE',
+          createdOn: dateTime,
         });
         // Call merchant refund webhook if in sandbox environment
         const environment = process.env.MTN_TARGET_ENVIRONMENT;

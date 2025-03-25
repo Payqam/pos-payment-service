@@ -95,19 +95,19 @@ export class SalesforceSyncService {
         serviceType: message.paymentMethod ?? '',
         transactionId: message.transactionId ?? '',
         status: message.status ?? '',
-        amount: message.settlementAmount ?? '',
+        amount: message.settlementAmount?.toString() ?? '',
         merchantId: message.merchantId ?? '',
         merchantPhone: message.merchantMobileNo ?? '',
         transactionType: message.transactionType ?? '',
         metaData: message.metaData ? JSON.stringify(message.metaData) : '',
-        fee: message.fee ?? '',
+        fee: message.fee?.toString() ?? '',
         deviceId: message.metaData?.deviceId ?? '',
         transactionDateTime: message.createdOn ?? '',
         customerPhone: message.customerPhone ?? '',
         currency: message.currency ?? '',
         exchangeRate: message.exchangeRate ?? '',
         processingFee: message.processingFee ?? '',
-        netAmount: message.netAmount ?? '',
+        netAmount: message.amount?.toString() ?? '',
         externalTransactionId: message.externalTransactionId ?? '',
         originalTransactionId: message.originalTransactionId ?? '',
         ...transactionError,
@@ -130,7 +130,9 @@ export class SalesforceSyncService {
         recordId: createRecordResponse.data.id,
       });
     } catch (error) {
-      this.logger.error('Error creating Salesforce record', { error });
+      this.logger.error('Error creating Salesforce record', {
+        error,
+      });
       throw new Error('Failed to create Salesforce record');
     }
   }

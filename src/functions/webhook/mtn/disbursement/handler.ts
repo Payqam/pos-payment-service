@@ -171,11 +171,13 @@ export class MTNDisbursementWebhookService {
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     try {
+      const dateTime = new Date().toISOString();
       const updateData =
         transactionStatusResponse.status === 'SUCCESSFUL'
           ? {
               status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
               disbursementResponse: transactionStatusResponse,
+              updatedOn: dateTime,
             }
           : await this.handleFailedTransfer(
               transactionId,
@@ -185,7 +187,8 @@ export class MTNDisbursementWebhookService {
         await this.snsService.publish({
           transactionId,
           status: MTNPaymentStatus.DISBURSEMENT_SUCCESSFUL,
-          type: 'UPDATE',
+          type: 'CREATE',
+          createdOn: dateTime,
         });
       }
 

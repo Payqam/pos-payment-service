@@ -594,17 +594,18 @@ export class MtnPaymentService {
           transactionId: customerRefundId,
           originalTransactionId: transactionRecord.Item.transactionId,
         });
-
         const updateData = {
           status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
           customerRefundId: customerRefundId,
+          updatedOn: dateTime,
         };
         await this.dbService.updatePaymentRecord({ transactionId }, updateData);
         // Send to SalesForce
         await this.snsService.publish({
           transactionId: transactionRecord.Item.transactionId,
           status: String(MTNPaymentStatus.CUSTOMER_REFUND_REQUEST_CREATED),
-          type: 'UPDATE',
+          type: 'CREATE',
+          createdOn: dateTime,
         });
 
         // Check if we're in sandbox environment
