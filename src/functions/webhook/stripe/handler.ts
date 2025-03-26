@@ -116,7 +116,7 @@ export class StripeWebhookService {
         currency: transactionRecord?.currency,
         paymentMethod: 'Stripe',
         metaData: transactionRecord?.metaData,
-        netAmount: originalTransactionId
+        amount: originalTransactionId
           ? updateData.refundAmount
           : transactionRecord?.netAmount?.toString() || '0',
         transactionType: originalTransactionId ? 'REFUND' : 'CHARGE',
@@ -192,6 +192,7 @@ export class StripeWebhookService {
       const updateData = {
         status: latestStatus,
         refundResponse: refund,
+        refundAmount: refund.amount,
       };
       return { latestStatus, updateData };
     } else if (newStatus.startsWith('REFUND_CREATE')) {
@@ -208,6 +209,7 @@ export class StripeWebhookService {
       const updateData = {
         status: latestStatus,
         refundResponse: refund,
+        refundAmount: refund.amount,
       };
       return { latestStatus, updateData };
     }
