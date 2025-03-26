@@ -2,11 +2,31 @@ import { SNSEvent, SNSHandler } from 'aws-lambda';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../services/secretsManagerService';
 import axios from 'axios';
-import { registerRedactFilter } from '../../../utils/redactUtil';
+import {
+  registerRedactFilter,
+  maskSensitiveValue,
+  maskMobileNumber,
+} from '../../../utils/redactUtil';
 import { SalesforceCredentials, SNSMessage } from '../../model';
 import { SalesforcePaymentRecord } from '../../model/salesforce';
+import { EnhancedError, ErrorCategory } from '../../../utils/errorHandler';
 
-const sensitiveFields = ['clientId', 'clientSecret', 'username', 'password'];
+const sensitiveFields = [
+  'clientId',
+  'clientSecret',
+  'username',
+  'password',
+  'accessToken',
+  'refreshToken',
+  'merchantPhone',
+  'customerPhone',
+  'apiKey',
+  'apiSecret',
+  'authToken',
+  'signature',
+  'securityToken',
+];
+
 registerRedactFilter(sensitiveFields);
 
 export class SalesforceSyncService {
@@ -14,35 +34,98 @@ export class SalesforceSyncService {
 
   private readonly secretsManagerService: SecretsManagerService;
 
+  private readonly startTime: number;
+
   constructor() {
+    this.startTime = Date.now();
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
-    this.logger.info('SalesforceSyncService initialized');
+    this.logger.debug('SalesforceSyncService initialized', {
+      timestamp: new Date().toISOString(),
+      environment: process.env.ENVIRONMENT || 'unknown',
+    });
   }
 
   private async getSalesforceCredentials(): Promise<SalesforceCredentials> {
+    const secretName = process.env.SALESFORCE_SECRET as string;
+    const operationContext = {
+      secretName: secretName ? `${secretName.substring(0, 5)}...` : 'undefined',
+      startTime: Date.now(),
+    };
+
+    this.logger.debug('Retrieving Salesforce credentials', operationContext);
+
     try {
-      const secretResponse = await this.secretsManagerService.getSecret(
-        process.env.SALESFORCE_SECRET as string
-      );
+      const secretResponse =
+        await this.secretsManagerService.getSecret(secretName);
 
       if (!secretResponse) {
-        throw new Error('Salesforce credentials not found in Secrets Manager');
+        this.logger.error('Salesforce credentials not found', {
+          ...operationContext,
+          durationMs: Date.now() - operationContext.startTime,
+        });
+        throw new EnhancedError(
+          'SALESFORCE_CREDENTIALS_NOT_FOUND',
+          ErrorCategory.SYSTEM_ERROR,
+          'Salesforce credentials not found in Secrets Manager',
+          { retryable: false }
+        );
       }
 
-      this.logger.info('Successfully retrieved Salesforce credentials');
+      this.logger.debug('Successfully retrieved Salesforce credentials', {
+        ...operationContext,
+        durationMs: Date.now() - operationContext.startTime,
+        hasClientId: !!secretResponse.clientId,
+        hasUsername: !!secretResponse.username,
+      });
+
       return secretResponse as unknown as SalesforceCredentials;
     } catch (error) {
-      this.logger.error('Error retrieving Salesforce credentials', { error });
-      throw new Error('Failed to retrieve Salesforce credentials');
+      this.logger.error('Error retrieving Salesforce credentials', {
+        ...operationContext,
+        durationMs: Date.now() - operationContext.startTime,
+        error: error instanceof Error ? error.message : String(error),
+        stackTrace: error instanceof Error ? error.stack : undefined,
+      });
+
+      throw new EnhancedError(
+        'SALESFORCE_CREDENTIALS_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to retrieve Salesforce credentials',
+        {
+          retryable: true,
+          originalError: error,
+        }
+      );
     }
   }
 
   private async getAccessToken(
     credentials: SalesforceCredentials
   ): Promise<string> {
+    const operationContext = {
+      startTime: Date.now(),
+      host: credentials.host
+        ? `${credentials.host.substring(0, 12)}...`
+        : 'undefined',
+    };
+
+    this.logger.debug('Requesting Salesforce auth token', operationContext);
+
     try {
-      // const urlHost = process.env.SALESFORCE_URL_HOST as string;
+      const authParams = {
+        grant_type: 'password',
+        client_id: maskSensitiveValue(credentials.clientId, '*', 4),
+        client_secret: maskSensitiveValue(credentials.clientSecret, '*', 0),
+        username: maskSensitiveValue(credentials.username, '*', 3),
+        password: '********',
+      };
+
+      this.logger.debug('Auth request parameters prepared', {
+        ...operationContext,
+        authParams,
+      });
+
       const authResponse = await axios.post(
         `https://login.salesforce.com/services/oauth2/token`,
         new URLSearchParams({
@@ -57,11 +140,47 @@ export class SalesforceSyncService {
         }
       );
 
-      this.logger.info('Successfully retrieved Salesforce auth token');
+      this.logger.debug('Successfully retrieved Salesforce auth token', {
+        ...operationContext,
+        durationMs: Date.now() - operationContext.startTime,
+        tokenType: authResponse.data.token_type,
+        instanceUrl: authResponse.data.instance_url,
+        responseStatus: authResponse.status,
+      });
+
       return authResponse.data.access_token;
     } catch (error) {
-      this.logger.error('Error fetching Salesforce auth token', { error });
-      throw new Error('Failed to fetch Salesforce auth token');
+      let statusCode, responseData;
+      if (
+        error &&
+        typeof error === 'object' &&
+        'isAxiosError' in error &&
+        error.isAxiosError
+      ) {
+        const axiosError = error as any;
+        statusCode = axiosError.response?.status;
+        responseData = axiosError.response?.data;
+      }
+
+      this.logger.error('Error fetching Salesforce auth token', {
+        ...operationContext,
+        durationMs: Date.now() - operationContext.startTime,
+        error: error instanceof Error ? error.message : String(error),
+        statusCode,
+        responseData,
+        stackTrace: error instanceof Error ? error.stack : undefined,
+      });
+
+      throw new EnhancedError(
+        'SALESFORCE_AUTH_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to fetch Salesforce auth token',
+        {
+          retryable: true,
+          originalError: error,
+          httpStatus: statusCode,
+        }
+      );
     }
   }
 
@@ -69,11 +188,23 @@ export class SalesforceSyncService {
     message: SNSMessage,
     credentials: SalesforceCredentials
   ) {
-    try {
-      this.logger.info('Handling payment created', { message });
+    const transactionId = message.transactionId || 'unknown';
+    const operationContext = {
+      transactionId,
+      startTime: Date.now(),
+      paymentMethod: message.paymentMethod,
+      status: message.status,
+    };
 
+    this.logger.debug(
+      'Processing payment record for Salesforce sync',
+      operationContext
+    );
+
+    try {
       const accessToken = await this.getAccessToken(credentials);
       const urlHost = credentials.host;
+
       const transactionError =
         message.TransactionError &&
         (message.TransactionError.ErrorMessage ||
@@ -89,6 +220,14 @@ export class SalesforceSyncService {
               },
             }
           : {};
+
+      const maskedMerchantPhone = message.merchantMobileNo
+        ? maskMobileNumber(message.merchantMobileNo)
+        : undefined;
+
+      const maskedCustomerPhone = message.customerPhone
+        ? maskMobileNumber(message.customerPhone)
+        : undefined;
 
       const recordPayload: SalesforcePaymentRecord = {
         ownerId: credentials.ownerId ?? '',
@@ -113,8 +252,23 @@ export class SalesforceSyncService {
         ...transactionError,
       };
 
-      this.logger.info('Creating Salesforce Payment record', { recordPayload });
+      const maskedPayload = {
+        ...recordPayload,
+        merchantPhone: maskedMerchantPhone,
+        customerPhone: maskedCustomerPhone,
+        transactionId: maskSensitiveValue(recordPayload.transactionId, '*', 4),
+        externalTransactionId: recordPayload.externalTransactionId
+          ? maskSensitiveValue(recordPayload.externalTransactionId, '*', 4)
+          : '',
+      };
 
+      this.logger.debug('Creating Salesforce Payment record', {
+        ...operationContext,
+        recordPayload: maskedPayload,
+        hasTransactionError: Object.keys(transactionError).length > 0,
+      });
+
+      const apiStartTime = Date.now();
       const createRecordResponse = await axios.post(
         `${urlHost}/services/apexrest/PayQam/Streaming`,
         recordPayload,
@@ -126,50 +280,161 @@ export class SalesforceSyncService {
         }
       );
 
-      this.logger.info('Successfully created Salesforce record', {
+      this.logger.debug('Successfully created Salesforce record', {
+        ...operationContext,
         recordId: createRecordResponse.data.id,
+        responseStatus: createRecordResponse.status,
+        apiDurationMs: Date.now() - apiStartTime,
+        totalDurationMs: Date.now() - operationContext.startTime,
       });
     } catch (error) {
+      let statusCode, responseData;
+      if (
+        error &&
+        typeof error === 'object' &&
+        'isAxiosError' in error &&
+        error.isAxiosError
+      ) {
+        const axiosError = error as any;
+        statusCode = axiosError.response?.status;
+        responseData = axiosError.response?.data;
+      }
+
       this.logger.error('Error creating Salesforce record', {
-        error,
+        ...operationContext,
+        error: error instanceof Error ? error.message : String(error),
+        statusCode,
+        responseData,
+        durationMs: Date.now() - operationContext.startTime,
+        stackTrace: error instanceof Error ? error.stack : undefined,
       });
-      throw new Error('Failed to create Salesforce record');
+
+      throw new EnhancedError(
+        'SALESFORCE_RECORD_CREATE_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        `Failed to create Salesforce record for transaction ${transactionId}`,
+        {
+          retryable: true,
+          originalError: error,
+          httpStatus: statusCode,
+          transactionId,
+        }
+      );
     }
   }
 
   public async processEvent(event: SNSEvent): Promise<void> {
-    this.logger.info('Processing Salesforce sync event', { event });
+    const operationContext = {
+      recordCount: event.Records.length,
+      startTime: this.startTime,
+      processingStartTime: Date.now(),
+    };
+
+    this.logger.debug('Processing Salesforce sync event', operationContext);
 
     try {
       const credentials = await this.getSalesforceCredentials();
+      let successCount = 0;
+      let failureCount = 0;
 
       for (const record of event.Records) {
+        const messageContext = {
+          messageId: record.Sns.MessageId,
+          topicArn: maskSensitiveValue(record.Sns.TopicArn, '*', 8),
+          timestamp: record.Sns.Timestamp,
+          startTime: Date.now(),
+        };
+
         try {
+          this.logger.debug('Processing SNS message', messageContext);
+
           const message: SNSMessage = JSON.parse(record.Sns.Message);
-          this.logger.info('Processing message', {
-            messageId: record.Sns.MessageId,
+          const transactionId = message.transactionId || 'unknown';
+
+          this.logger.debug('Parsed SNS message', {
+            ...messageContext,
+            transactionId,
+            status: message.status,
+            paymentMethod: message.paymentMethod,
+            hasError: !!message.TransactionError,
           });
-          this.logger.info('Create case', { message });
+
           await this.handlePaymentCreated(message, credentials);
+
+          this.logger.debug('Successfully processed message', {
+            ...messageContext,
+            transactionId,
+            durationMs: Date.now() - messageContext.startTime,
+          });
+
+          successCount++;
         } catch (messageError) {
+          failureCount++;
           this.logger.error('Error processing individual message', {
-            error: messageError,
+            ...messageContext,
+            error:
+              messageError instanceof Error
+                ? messageError.message
+                : String(messageError),
+            stackTrace:
+              messageError instanceof Error ? messageError.stack : undefined,
+            durationMs: Date.now() - messageContext.startTime,
           });
         }
       }
+
+      this.logger.debug('Completed Salesforce sync batch processing', {
+        ...operationContext,
+        successCount,
+        failureCount,
+        totalDurationMs: Date.now() - this.startTime,
+        batchDurationMs: Date.now() - operationContext.processingStartTime,
+      });
     } catch (error) {
-      this.logger.error('Error processing Salesforce sync event', { error });
-      throw new Error('Failed to process Salesforce sync event');
+      this.logger.error('Error processing Salesforce sync event', {
+        ...operationContext,
+        error: error instanceof Error ? error.message : String(error),
+        stackTrace: error instanceof Error ? error.stack : undefined,
+        durationMs: Date.now() - this.startTime,
+      });
+
+      throw new EnhancedError(
+        'SALESFORCE_SYNC_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to process Salesforce sync event',
+        {
+          retryable: true,
+          originalError: error,
+        }
+      );
     }
   }
 }
 
 export const handler: SNSHandler = async (event: SNSEvent) => {
   const service = new SalesforceSyncService();
+  const logger = LoggerService.named('SalesforceSync');
+  const startTime = Date.now();
+
   try {
+    logger.debug('Starting Salesforce sync handler', {
+      recordCount: event.Records.length,
+      timestamp: new Date().toISOString(),
+    });
+
     await service.processEvent(event);
+
+    logger.debug('Salesforce sync handler completed successfully', {
+      recordCount: event.Records.length,
+      durationMs: Date.now() - startTime,
+    });
   } catch (error) {
-    console.error('Lambda Handler Error:', error);
+    logger.error('Unhandled exception in Salesforce sync handler', {
+      error: error instanceof Error ? error.message : String(error),
+      stackTrace: error instanceof Error ? error.stack : undefined,
+      recordCount: event.Records.length,
+      durationMs: Date.now() - startTime,
+    });
     throw error;
   }
 };
