@@ -273,8 +273,14 @@ export class MTNPaymentWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing MTN merchant refund webhook');
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
+
+      this.logger.debug('Webhook event parsed', {
+        externalId,
+        status: webhookEvent.status,
+      });
 
       // Get temporary reference item from DB
       const result = await this.dbService.getItem<{
@@ -284,13 +290,18 @@ export class MTNPaymentWebhookService {
       });
 
       if (!result.Item) {
+        this.logger.debug('Transaction not found', { externalId });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
+
+      this.logger.debug('Transaction found', {
+        externalId,
+      });
 
       const transactionItem = await this.dbService.getItem<{
         transactionId: string;
       }>({
-        transactionId: result.Item.originalTransactionId,
+        transactionId: result.Item.transactionId,
       });
       const transaction: Record<string, any> = transactionItem.Item as Record<
         string,
@@ -302,9 +313,16 @@ export class MTNPaymentWebhookService {
           externalId,
           TransactionType.MERCHANT_REFUND
         );
+
+      this.logger.debug('Transaction status checked', {
+        externalId,
+        status: transactionStatus.status,
+      });
+
       this.logger.info('[debug]transaction status', transactionStatus);
       this.logger.info('[debug]transaction', transaction);
       this.logger.info('[debug]result', result);
+
       const updateData: Record<string, unknown> =
         transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
@@ -315,22 +333,24 @@ export class MTNPaymentWebhookService {
               transaction?.transactionId,
               transactionStatus
             );
+
       this.logger.info('[debug]update data', {
         updateData,
       });
+
       // Update the payment record in DB
       await this.dbService.updatePaymentRecord(
         { transactionId: transaction?.transactionId },
         updateData
       );
+
       // delete the previous temp item
       await this.dbService.deletePaymentRecord({ transactionId: externalId });
 
-      this.logger.info('Webhook processed successfully', {
+      this.logger.debug('Temporary record deleted', { externalId });
+
+      this.logger.debug('Webhook processing completed successfully', {
         externalId,
-        status: updateData.status,
-        uniqueId: updateData.uniqueId,
-        settlementStatus: updateData.settlementStatus,
       });
 
       return {

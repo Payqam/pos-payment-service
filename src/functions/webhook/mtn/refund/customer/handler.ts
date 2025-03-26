@@ -274,8 +274,14 @@ export class MTNDisbursementWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing MTN customer refund webhook');
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
+
+      this.logger.debug('Webhook event parsed', {
+        externalId,
+        status: webhookEvent.status,
+      });
 
       // Get temporary reference item from DB
       const result = await this.dbService.getItem<{
@@ -285,8 +291,11 @@ export class MTNDisbursementWebhookService {
       });
 
       if (!result.Item) {
+        this.logger.debug('Transaction not found', { externalId });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
+
+      this.logger.debug('Transaction found', { externalId });
 
       const transactionItem = await this.dbService.getItem<{
         transactionId: string;
@@ -303,10 +312,20 @@ export class MTNDisbursementWebhookService {
         TransactionType.TRANSFER
       );
 
+      this.logger.debug('Transaction status checked', {
+        externalId,
+        status: transactionStatus.status,
+      });
+
       await this.updateCustomerRefundStatus(
         transaction.transactionId,
         transactionStatus
       );
+
+      this.logger.debug('Customer refund status updated', {
+        externalId,
+        status: transactionStatus.status,
+      });
 
       // Initiate merchant refund if customer refund is successful
       if (transactionStatus.status === 'SUCCESSFUL') {
@@ -329,6 +348,12 @@ export class MTNDisbursementWebhookService {
           payerMessage: `PayQAM refund request for the transaction ${transaction.transactionId}`,
           payeeNote: 'Thank you for your payment',
         });
+
+        this.logger.debug('Merchant refund request created', {
+          externalId,
+          merchantRefundId,
+        });
+
         // Update the payment record
         const dateTime = new Date().toISOString();
         await this.dbService.updatePaymentRecord(
@@ -339,11 +364,23 @@ export class MTNDisbursementWebhookService {
             updatedOn: dateTime,
           }
         );
+
+        this.logger.debug('Payment record updated for merchant refund', {
+          externalId,
+          merchantRefundId,
+        });
+
         // Create a temporary record to associate the transaction with the merchant refund ID
         await this.dbService.createPaymentRecord({
           transactionId: merchantRefundId,
           originalTransactionId: transaction.transactionId,
         });
+
+        this.logger.debug('Temporary record created for merchant refund', {
+          externalId,
+          merchantRefundId,
+        });
+
         // Send to SalesForce
         await this.snsService.publish({
           transactionId: transaction.transactionId,
@@ -351,6 +388,12 @@ export class MTNDisbursementWebhookService {
           type: 'CREATE',
           createdOn: dateTime,
         });
+
+        this.logger.debug('SalesForce notification sent for merchant refund', {
+          externalId,
+          merchantRefundId,
+        });
+
         // Call merchant refund webhook if in sandbox environment
         const environment = process.env.MTN_TARGET_ENVIRONMENT;
         const webhookUrl = process.env.MTN_MERCHANT_REFUND_WEBHOOK_URL;
@@ -377,6 +420,12 @@ export class MTNDisbursementWebhookService {
       }
       // delete the previous temp item
       await this.dbService.deletePaymentRecord({ transactionId: externalId });
+
+      this.logger.debug('Temporary record deleted', { externalId });
+
+      this.logger.debug('Webhook processing completed successfully', {
+        externalId,
+      });
       return {
         statusCode: 200,
         headers: API.DEFAULT_HEADERS,

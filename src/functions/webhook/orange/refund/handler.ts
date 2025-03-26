@@ -198,6 +198,7 @@ export class OrangeRefundWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing Orange refund webhook');
       const webhookEvent = await this.validateWebhook(event);
       const { payToken } = webhookEvent.data;
 
@@ -209,8 +210,11 @@ export class OrangeRefundWebhookService {
       // Get transaction using merchantRefundId (GSI4)
       const transaction = await this.getTransactionByMerchantRefundId(payToken);
       if (!transaction) {
+        this.logger.debug('Transaction not found', { payToken });
         throw new WebhookError('Transaction not found', 404, { payToken });
       }
+
+      this.logger.debug('Transaction found', { payToken });
 
       // Get payment status from Orange API
       const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
@@ -223,6 +227,8 @@ export class OrangeRefundWebhookService {
         transaction.transactionId,
         refundMpGetResponsePayload
       );
+
+      this.logger.debug('Payment record updated', { payToken });
 
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
@@ -248,10 +254,14 @@ export class OrangeRefundWebhookService {
 
       const refundStatus = this.determineRefundStatus(paymentStatus);
 
+      this.logger.debug('Refund status determined', { refundStatus });
+
       // Update transaction record
       await this.updatePaymentRecord(transaction.transactionId, {
         status: refundStatus,
       });
+
+      this.logger.debug('Transaction record updated', { payToken });
 
       return {
         statusCode: 200,

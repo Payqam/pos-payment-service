@@ -300,21 +300,36 @@ export class MTNPaymentWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing MTN payment webhook');
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId, amount, currency } = webhookEvent;
+
+      this.logger.debug('Webhook event parsed', {
+        externalId,
+        amount,
+        currency,
+      });
 
       const result = await this.dbService.getItem({
         transactionId: externalId,
       });
       if (!result) {
+        this.logger.debug('Transaction not found', { externalId });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
+
+      this.logger.debug('Transaction found', { externalId });
 
       const transactionStatus: WebhookEvent =
         await this.mtnService.checkTransactionStatus(
           externalId,
           TransactionType.PAYMENT
         );
+
+      this.logger.debug('Transaction status checked', {
+        externalId,
+        status: transactionStatus.status,
+      });
 
       const updateData: Record<string, unknown> =
         transactionStatus.status === 'SUCCESSFUL'
@@ -326,10 +341,18 @@ export class MTNPaymentWebhookService {
             )
           : await this.handleFailedPayment(externalId, transactionStatus);
 
+      this.logger.debug('Update data prepared', {
+        externalId,
+        status: transactionStatus.status,
+      });
+
       await this.dbService.updatePaymentRecord(
         { transactionId: externalId },
         updateData
       );
+
+      this.logger.debug('Payment record updated', { externalId });
+
       // Call sandbox disbursement webhook if in sandbox environment
       const environment = process.env.MTN_TARGET_ENVIRONMENT;
       const webhookUrl = process.env.MTN_DISBURSEMENT_WEBHOOK_URL;
@@ -340,6 +363,11 @@ export class MTNPaymentWebhookService {
         updateData.uniqueId &&
         updateData.settlementAmount
       ) {
+        this.logger.debug('Calling sandbox disbursement webhook', {
+          externalId,
+          uniqueId: updateData.uniqueId,
+        });
+
         await this.mtnService.callWebhook(
           {
             financialTransactionId: uuidv4(),
@@ -357,8 +385,15 @@ export class MTNPaymentWebhookService {
           },
           TransactionType.TRANSFER
         );
+
+        this.logger.debug('Sandbox disbursement webhook called', {
+          externalId,
+        });
       }
 
+      this.logger.debug('Webhook processing completed successfully', {
+        externalId,
+      });
       return {
         statusCode: 200,
         headers: API.DEFAULT_HEADERS,

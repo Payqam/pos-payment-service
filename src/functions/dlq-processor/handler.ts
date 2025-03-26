@@ -51,7 +51,15 @@ export class DeadLetterQueueService {
 
         this.logger.info('Parsed message:', parsedMessage);
 
+        this.logger.debug('Processing DLQ record', {
+          messageId: record.messageId,
+        });
+
         await this.sendSlackMessage(parsedMessage, record.messageId);
+
+        this.logger.debug('Slack message sent successfully', {
+          messageId: record.messageId,
+        });
       } catch (error) {
         this.logger.error('Failed to process message', {
           error: error instanceof Error ? error.message : error,
@@ -74,6 +82,9 @@ export class DeadLetterQueueService {
     try {
       await this.webhook.send(slackPayload);
       this.logger.info('Slack message sent successfully');
+      this.logger.debug('Slack notification sent', {
+        messageId: message.messageId,
+      });
     } catch (error) {
       this.logger.error('Failed to send Slack notification', {
         error: error instanceof Error ? error.message : error,
