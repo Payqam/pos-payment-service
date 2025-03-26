@@ -18,7 +18,6 @@ import { OrangePaymentStatus } from 'src/types/orange';
 import { registerRedactFilter } from '../../../../../utils/redactUtil';
 
 const sensitiveFields = [
-  'transactionId',
   'payToken',
   'uniqueId',
   'merchantMobileNo',

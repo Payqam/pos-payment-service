@@ -24,7 +24,6 @@ import {
 import { registerRedactFilter } from '../../../../../utils/redactUtil';
 
 const sensitiveFields = [
-  'transactionId',
   'referenceId',
   'uniqueId',
   'partyId',

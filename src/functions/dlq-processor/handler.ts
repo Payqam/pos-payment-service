@@ -4,8 +4,6 @@ import { IncomingWebhook } from '@slack/webhook';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 
 const sensitiveFields = [
-  'transactionId',
-  'messageId',
   'uniqueId',
   'merchantMobileNo',
   'customerMobileNo',

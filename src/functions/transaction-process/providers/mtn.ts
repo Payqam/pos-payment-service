@@ -559,7 +559,7 @@ export class MtnPaymentService {
         // Get the current total customer refund amount
         const totalCustomerRefundAmount =
           Number(transactionRecord.Item.totalCustomerRefundAmount) || 0;
-        this.logger.info('[debug]validations', {
+        this.logger.info('validations', {
           transactionId,
           totalCustomerRefundAmount,
           refundAmount,

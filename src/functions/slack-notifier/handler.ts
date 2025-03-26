@@ -6,7 +6,6 @@ import { unzip } from 'zlib';
 import { registerRedactFilter } from '../../../utils/redactUtil';
 
 const sensitiveFields = [
-  'transactionId',
   'lambdaFunction',
   'errorMessage',
   'message',

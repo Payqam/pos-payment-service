@@ -24,8 +24,6 @@ import {
 import { registerRedactFilter } from '../../../../../../utils/redactUtil';
 
 const sensitiveFields = [
-  'transactionId',
-  'externalId',
   'partyId',
   'merchantMobileNo',
   'subscriptionKey',
@@ -116,7 +114,7 @@ export class MTNPaymentWebhookService {
           { ...webhookEvent, createdOn: dateTime },
         ],
       };
-      this.logger.info('[debug]update data', {
+      this.logger.info('update data', {
         updateData,
       });
       // Send to SalesForce
@@ -141,7 +139,7 @@ export class MTNPaymentWebhookService {
         originalTransactionId: existingTransaction.Item?.transactionId,
       });
 
-      this.logger.info('[debug]sent to sns', {
+      this.logger.info('sent to sns', {
         updateData,
       });
       return updateData;
@@ -301,7 +299,7 @@ export class MTNPaymentWebhookService {
       const transactionItem = await this.dbService.getItem<{
         transactionId: string;
       }>({
-        transactionId: result.Item.transactionId,
+        transactionId: result.Item.originalTransactionId,
       });
       const transaction: Record<string, any> = transactionItem.Item as Record<
         string,
@@ -319,10 +317,6 @@ export class MTNPaymentWebhookService {
         status: transactionStatus.status,
       });
 
-      this.logger.info('[debug]transaction status', transactionStatus);
-      this.logger.info('[debug]transaction', transaction);
-      this.logger.info('[debug]result', result);
-
       const updateData: Record<string, unknown> =
         transactionStatus.status === 'SUCCESSFUL'
           ? await this.handleSuccessfulPayment(
@@ -334,7 +328,7 @@ export class MTNPaymentWebhookService {
               transactionStatus
             );
 
-      this.logger.info('[debug]update data', {
+      this.logger.info('update data', {
         updateData,
       });
 
