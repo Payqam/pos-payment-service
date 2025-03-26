@@ -22,6 +22,21 @@ import {
   EnhancedError,
   ErrorCategory,
 } from '../../../../../utils/errorHandler';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'transactionId',
+  'externalId',
+  'partyId',
+  'merchantMobileNo',
+  'uniqueId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'payerMessage',
+  'payeeNote',
+];
+registerRedactFilter(sensitiveFields);
 
 class WebhookError extends Error {
   constructor(

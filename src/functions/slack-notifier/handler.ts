@@ -3,6 +3,26 @@ import { IncomingWebhook } from '@slack/webhook';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { promisify } from 'util';
 import { unzip } from 'zlib';
+import { registerRedactFilter } from '../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'transactionId',
+  'lambdaFunction',
+  'errorMessage',
+  'message',
+  'rawMessage',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'partyId',
+  'payToken',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'data',
+];
+registerRedactFilter(sensitiveFields);
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL as string;
 

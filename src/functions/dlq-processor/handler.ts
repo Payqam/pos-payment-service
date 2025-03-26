@@ -1,6 +1,24 @@
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SQSEvent } from 'aws-lambda';
 import { IncomingWebhook } from '@slack/webhook';
+import { registerRedactFilter } from '../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'transactionId',
+  'messageId',
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'partyId',
+  'payToken',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'body',
+];
+registerRedactFilter(sensitiveFields);
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL as string;
 

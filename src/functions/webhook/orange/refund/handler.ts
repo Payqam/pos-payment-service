@@ -15,6 +15,23 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { REFUND_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'transactionId',
+  'payToken',
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'refundMpGetResponse',
+  'refundAmount',
+];
+registerRedactFilter(sensitiveFields);
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
