@@ -35,6 +35,12 @@ export class SNSService {
     messageAttributes?: Record<string, never>
   ): Promise<string> {
     try {
+      logger.debug('Preparing to publish message to SNS', {
+        messageType: typeof message,
+        hasAttributes: !!messageAttributes,
+        topicArn: this.topicArn,
+      });
+
       const messageString =
         typeof message === 'string' ? message : JSON.stringify(message);
 
@@ -47,6 +53,12 @@ export class SNSService {
       logger.debug({ input }, 'Publishing message to SNS');
       const messageId = await this.snsClientWrapper.publishMessage(input);
 
+      logger.debug('Message published successfully', {
+        messageId,
+        messageLength: messageString.length,
+        topicArn: this.topicArn,
+      });
+
       logger.info(
         { messageId, topicArn: this.topicArn },
         'Successfully published message to SNS'
@@ -54,6 +66,12 @@ export class SNSService {
 
       return messageId;
     } catch (error) {
+      logger.debug('Detailed error information for SNS publish failure', {
+        errorName: (error as Error).name,
+        errorMessage: (error as Error).message,
+        topicArn: this.topicArn,
+      });
+
       logger.error(
         { error, topicArn: this.topicArn, message },
         'Error publishing message to SNS'
