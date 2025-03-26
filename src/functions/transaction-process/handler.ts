@@ -12,8 +12,6 @@ import {
 // Register redaction filter for masking sensitive data in logs
 registerRedactFilter();
 
-const logger: Logger = LoggerService.named('transaction-process-handler');
-
 const sensitiveFields = [
   'id',
   'destinationId',
@@ -271,12 +269,6 @@ export class TransactionProcessService {
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  logger.info('Transaction process handler invoked', {
-    path: event.path,
-    httpMethod: event.httpMethod,
-    resourcePath: event.resource,
-  });
-
   const service = new TransactionProcessService();
   return service.processTransaction(event);
 };

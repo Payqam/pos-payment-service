@@ -40,10 +40,6 @@ const sensitiveFields = [
 ];
 registerRedactFilter(sensitiveFields);
 
-const logger: Logger = LoggerService.named(
-  'mtn-merchant-refund-webhook-handler'
-);
-
 class WebhookError extends Error {
   constructor(
     message: string,
@@ -621,13 +617,6 @@ export class MTNPaymentWebhookService {
 export const handler: APIGatewayProxyHandler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  logger.info('MTN merchant refund webhook handler invoked', {
-    path: event.path,
-    httpMethod: event.httpMethod,
-    resourcePath: event.resource,
-    hasBody: !!event.body,
-  });
-
   const service = new MTNPaymentWebhookService();
   return service.processWebhook(event);
 };
