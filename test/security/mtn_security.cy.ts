@@ -1,5 +1,3 @@
-import testData from '../../cypress/fixtures/mtn_test_data.json';
-
 describe('Security Tests - API Response Verification ', () => {
   let transactionId;
   describe('Security Tests - HTTPS enforcement', () => {
@@ -45,105 +43,103 @@ describe('Security Tests - API Response Verification ', () => {
   });
 
   describe(`API Key Validation for Payment Process`, () => {
-    (Cypress.env('apiKeyValidation') as { title: string; apiKey: string }[]).forEach(
-      (invalidApiKey) => {
-        it(`Verify 403 error for ${invalidApiKey.title}`, () => {
-          cy.request({
-            method: 'POST',
-            url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
-            headers: {
-              'x-api-key': `${invalidApiKey.apiKey}`,
-              'Content-Type': 'application/json',
+    (
+      Cypress.env('apiKeyValidation') as { title: string; apiKey: string }[]
+    ).forEach((invalidApiKey) => {
+      it(`Verify 403 error for ${invalidApiKey.title}`, () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'x-api-key': `${invalidApiKey.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: {
+            merchantId: 'M123',
+            merchantMobileNo: '7656543457',
+            amount: 100,
+            customerPhone: '7658987987',
+            transactionType: 'CHARGE',
+            paymentMethod: 'MTN',
+            currency: 'EUR',
+            metaData: {
+              reference: 'ORDER_123',
+              description: 'Payment for order #123',
             },
-            body: {
-              merchantId: 'M123',
-              merchantMobileNo: '7656543457',
-              amount: 100,
-              customerPhone: '7658987987',
-              transactionType: 'CHARGE',
-              paymentMethod: 'MTN',
-              currency: 'EUR',
-              metaData: {
-                reference: 'ORDER_123',
-                description: 'Payment for order #123',
-              },
-            },
-            failOnStatusCode: false,
-          }).then((response) => {
-            expect(response.status).to.eq(403);
-            cy.task('log', response.body);
-            cy.wait(500);
-          });
-        });
-      });
-  });
-
-  (Cypress.env('apiKeyValidation') as { title: string; apiKey: string }[]).forEach(
-    (invalidApiKey) => {
-      describe(`API Key Validation for Transaction Process with ${invalidApiKey.title}`, () => {
-        it('should process a payment', () => {
-          cy.request({
-            method: 'POST',
-            url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
-            headers: {
-              'x-api-key': `${Cypress.env('MTNApiKey')}`,
-              'Content-Type': 'application/json',
-            },
-            body: {
-              merchantId: 'M123',
-              merchantMobileNo: '7656543457',
-              amount: 100,
-              customerPhone: '7658987987',
-              transactionType: 'CHARGE',
-              paymentMethod: 'MTN',
-              currency: 'EUR',
-              metaData: {
-                reference: 'ORDER_123',
-                description: 'Payment for order #123',
-              },
-            },
-          }).then((response) => {
-            expect(response.status).to.eq(200);
-            cy.task('log', response.body);
-            expect(response.body).to.have.property(
-              'message',
-              'Payment processed successfully',
-            );
-            expect(response.body).to.have.property('transactionDetails');
-            expect(response.body.transactionDetails).to.have.property(
-              'transactionId',
-            );
-            expect('PAYMENT_REQUEST_CREATED').to.include(
-              response.body.transactionDetails.status,
-            );
-            transactionId = response.body.transactionDetails.transactionId;
-            cy.task('log', `Transaction ID : ${transactionId}`);
-            Cypress.env('transactionId', transactionId);
-            cy.wait(500);
-          });
-        });
-
-        it(`Verify 403 error for ${invalidApiKey.title}`, () => {
-          cy.request({
-            method: 'GET',
-            url: `${Cypress.env('MTNServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
-            headers: {
-              'x-api-key': `${invalidApiKey.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            failOnStatusCode: false,
-          }).then((response) => {
-            expect(response.status).to.eq(403);
-            expect(response.body).to.have.property(
-              'message',
-              'Forbidden',
-            );
-            cy.task('log', response.body);
-          });
+          },
+          failOnStatusCode: false,
+        }).then((response) => {
+          expect(response.status).to.eq(403);
+          cy.task('log', response.body);
+          cy.wait(500);
         });
       });
     });
+  });
 
+  (
+    Cypress.env('apiKeyValidation') as { title: string; apiKey: string }[]
+  ).forEach((invalidApiKey) => {
+    describe(`API Key Validation for Transaction Process with ${invalidApiKey.title}`, () => {
+      it('should process a payment', () => {
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
+          headers: {
+            'x-api-key': `${Cypress.env('MTNApiKey')}`,
+            'Content-Type': 'application/json',
+          },
+          body: {
+            merchantId: 'M123',
+            merchantMobileNo: '7656543457',
+            amount: 100,
+            customerPhone: '7658987987',
+            transactionType: 'CHARGE',
+            paymentMethod: 'MTN',
+            currency: 'EUR',
+            metaData: {
+              reference: 'ORDER_123',
+              description: 'Payment for order #123',
+            },
+          },
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+          cy.task('log', response.body);
+          expect(response.body).to.have.property(
+            'message',
+            'Payment processed successfully'
+          );
+          expect(response.body).to.have.property('transactionDetails');
+          expect(response.body.transactionDetails).to.have.property(
+            'transactionId'
+          );
+          expect('PAYMENT_REQUEST_CREATED').to.include(
+            response.body.transactionDetails.status
+          );
+          transactionId = response.body.transactionDetails.transactionId;
+          cy.task('log', `Transaction ID : ${transactionId}`);
+          Cypress.env('transactionId', transactionId);
+          cy.wait(500);
+        });
+      });
+
+      it(`Verify 403 error for ${invalidApiKey.title}`, () => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('MTNServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
+          headers: {
+            'x-api-key': `${invalidApiKey.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          failOnStatusCode: false,
+        }).then((response) => {
+          expect(response.status).to.eq(403);
+          expect(response.body).to.have.property('message', 'Forbidden');
+          cy.task('log', response.body);
+        });
+      });
+    });
+  });
 
   describe('Validate WAF - Block Malicious Payloads', () => {
     it('Validate WAF - Block Malicious Payloads', () => {
@@ -192,7 +188,6 @@ describe('Security Tests - API Response Verification ', () => {
     });
   });
 
-
   describe('Validate SQL Injection Protection', () => {
     it('Validate SQL Injection Protection', () => {
       cy.request({
@@ -209,7 +204,7 @@ describe('Security Tests - API Response Verification ', () => {
           customerPhone: '7658987987',
           transactionType: 'CHARGE',
           paymentMethod: 'MTN',
-          currency: '\' OR \'1\'=\'1',
+          currency: "' OR '1'='1",
           metaData: {
             reference: 'ORDER_123',
             description: 'Payment for order #123',
@@ -231,7 +226,7 @@ describe('Security Tests - API Response Verification ', () => {
           'Content-Type': 'application/json',
         },
         body: {
-          query: '\' OR \'1\'=\'1',
+          query: "' OR '1'='1",
         },
         failOnStatusCode: false,
       }).then((response) => {
