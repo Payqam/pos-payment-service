@@ -10,6 +10,7 @@ export interface CreatePaymentRecord {
   customerPhone?: string;
   destinationId?: string;
   status: string;
+  paymentIntentResponse?: Stripe.PaymentIntent | Record<string, any>;
   paymentResponse?:
     | Stripe.PaymentIntent
     | Stripe.Refund

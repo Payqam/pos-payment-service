@@ -89,16 +89,22 @@ export class CardPaymentService {
                 amount,
                 paymentMethod: 'CARD',
                 status: 'FAILED',
-                paymentResponse: paymentError.raw as Record<string, unknown>,
+                paymentIntentResponse: paymentError.raw as Record<
+                  string,
+                  unknown
+                >,
                 transactionType: 'CHARGE',
                 metaData,
                 fee: feeAmount,
                 uniqueId: paymentError.payment_intent?.id as string,
                 GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
                 GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
+                currency: currency,
+                customerPhone: customerPhone,
+                netAmount: amount.toString(),
+                merchantMobileNo,
                 // exchangeRate: 'N/A',
                 // processingFee: 'N/A',
-                // netAmount: 'N/A',
                 // externalTransactionId: 'N/A',
               };
               this.logger.info(
@@ -116,7 +122,7 @@ export class CardPaymentService {
                 createdOn: dateTime,
                 customerPhone,
                 currency: currency,
-                netAmount: amount.toString(),
+                amount: amount.toString(),
                 externalTransactionId: paymentError?.payment_intent?.id,
                 merchantMobileNo,
                 settlementAmount: transferAmount.toString(),
@@ -138,13 +144,17 @@ export class CardPaymentService {
             amount,
             paymentMethod: 'CARD',
             status: paymentIntent?.status as string,
-            paymentResponse: paymentIntent,
+            paymentIntentResponse: paymentIntent,
             transactionType: 'CHARGE',
             metaData,
             fee: feeAmount,
             uniqueId: paymentIntent?.id as string,
             GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
             GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
+            currency: currency,
+            customerPhone: customerPhone,
+            netAmount: amount.toString(),
+            merchantMobileNo,
             // exchangeRate: 'exchangeRate',
             // processingFee: 'processingFee',
             // netAmount: 'netAmount',
@@ -157,7 +167,6 @@ export class CardPaymentService {
             transactionId,
             paymentMethod: 'Stripe',
             status: paymentIntent?.status,
-            amount: transferAmount.toString(),
             merchantId,
             transactionType: 'CHARGE',
             metaData,
@@ -165,7 +174,7 @@ export class CardPaymentService {
             createdOn: dateTime,
             customerPhone,
             currency: currency,
-            netAmount: amount.toString(),
+            amount: amount.toString(),
             externalTransactionId: paymentIntent?.id,
             merchantMobileNo,
             settlementAmount: transferAmount.toString(),
@@ -197,6 +206,7 @@ export class CardPaymentService {
           );
           const currentRecord = queryResult.Items?.[0];
           const transactionId = currentRecord?.transactionId;
+          const refundId = uuidv4();
           let refund;
           try {
             refund = await stripeClient.refunds.create({
@@ -206,6 +216,7 @@ export class CardPaymentService {
               reverse_transfer: cardData.reverse_transfer,
               metadata: {
                 transactionId: transactionId,
+                refundId: refundId,
               },
             });
           } catch (refundError: unknown) {
