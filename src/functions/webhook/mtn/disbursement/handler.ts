@@ -70,6 +70,7 @@ export class MTNDisbursementWebhookService {
    */
   private async handleFailedTransfer(
     transactionId: string,
+    merchantId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -79,6 +80,7 @@ export class MTNDisbursementWebhookService {
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
       await this.snsService.publish({
         transactionId,
+        merchantId,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
@@ -182,6 +184,7 @@ export class MTNDisbursementWebhookService {
    */
   private async updateSettlementStatus(
     transactionId: string,
+    merchantId: string,
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     try {
@@ -195,6 +198,7 @@ export class MTNDisbursementWebhookService {
             }
           : await this.handleFailedTransfer(
               transactionId,
+              merchantId,
               transactionStatusResponse
             );
       if (transactionStatusResponse.status === 'SUCCESSFUL') {
@@ -313,7 +317,11 @@ export class MTNDisbursementWebhookService {
         status: transactionStatus.status,
       });
 
-      await this.updateSettlementStatus(transactionId, transactionStatus);
+      await this.updateSettlementStatus(
+        transactionId,
+        result.Items[0].merchantId,
+        transactionStatus
+      );
 
       this.logger.debug('Settlement status updated', { externalId });
 

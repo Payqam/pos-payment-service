@@ -213,6 +213,7 @@ export class MTNPaymentWebhookService {
    */
   private async handleFailedPayment(
     externalId: string,
+    merchantId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -236,6 +237,7 @@ export class MTNPaymentWebhookService {
       );
       await this.snsService.publish({
         transactionId: externalId,
+        merchantId,
         status: MTNPaymentStatus.PAYMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
@@ -337,7 +339,11 @@ export class MTNPaymentWebhookService {
               currency,
               webhookEvent
             )
-          : await this.handleFailedPayment(externalId, transactionStatus);
+          : await this.handleFailedPayment(
+              externalId,
+              result.Item?.merchantMobileNo,
+              transactionStatus
+            );
 
       this.logger.debug('Update data prepared', {
         externalId,
