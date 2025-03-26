@@ -5,6 +5,7 @@ import stripe from 'stripe';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
 import { Readable } from 'stream';
 import { StripeWebhookService } from '../handler';
+import { StripeTransactionStatus } from '../../../../model';
 
 export class WebhookProcessor {
   private readonly logger: Logger;
@@ -58,7 +59,7 @@ export class WebhookProcessor {
       this.logger.info('Processing Stripe event', '-->', { stripeEvent });
       this.logger.info('Processing Stripe event', { type: stripeEvent.type });
 
-      const eventMapping: Record<string, string> = {
+      const eventMapping: Record<string, StripeTransactionStatus> = {
         'charge.succeeded': 'CHARGE_SUCCEEDED',
         'charge.updated': 'CHARGE_UPDATE_SUCCEEDED',
         'charge.failed': 'CHARGE_FAILED',
@@ -77,6 +78,9 @@ export class WebhookProcessor {
         'refund.created': 'REFUND_CREATE_SUCCEEDED',
         'refund.updated': 'REFUND_UPDATE_SUCCEEDED',
         'refund.failed': 'REFUND_FAILED',
+        'transfer.created': 'TRANSFER_CREATE_SUCCEEDED',
+        'transfer.reversed': 'TRANSFER_REVERSED_SUCCEEDED',
+        'transfer.failed': 'TRANSFER_FAILED',
       };
 
       const status = eventMapping[stripeEvent.type];
