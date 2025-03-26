@@ -168,6 +168,7 @@ export class DynamoDBService {
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: ReturnValue.ALL_NEW,
+      removeNullValues: true,
     };
 
     let attempt = 0;
