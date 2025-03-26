@@ -8,7 +8,6 @@ import { MTNPaymentStatus, WebhookEvent } from '../../../types/mtn';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
-import { SNSService } from '../../../services/snsService';
 import * as process from 'node:process';
 import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 import {
@@ -76,13 +75,10 @@ export class MtnPaymentService {
 
   private readonly baseUrl: string;
 
-  private readonly snsService: SNSService;
-
   constructor() {
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
-    this.snsService = SNSService.getInstance();
     this.baseUrl =
       process.env.MTN_API_BASE_URL || 'https://sandbox.momodeveloper.mtn.com';
     this.logger.info('init()');
