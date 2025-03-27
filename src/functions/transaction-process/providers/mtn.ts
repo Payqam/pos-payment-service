@@ -378,7 +378,17 @@ export class MtnPaymentService {
       });
     } catch (error) {
       this.logger.info('Failed to call the webhook');
-      throw new Error('Failed to call the webhook');
+      throw new EnhancedError(
+        'WEBHOOK_CALL_FAILED',
+        ErrorCategory.PROVIDER_ERROR,
+        'Failed to call the webhook',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check webhook URL configuration and try again',
+          transactionId: event.externalId,
+        }
+      );
     }
   }
 
@@ -549,7 +559,17 @@ export class MtnPaymentService {
           });
 
           // If not a mapped MTN error, throw the original error
-          throw new Error('Failed to process the payment');
+          throw new EnhancedError(
+            'PAYMENT_PROCESSING_FAILED',
+            ErrorCategory.PROVIDER_ERROR,
+            'Failed to process the payment',
+            {
+              originalError: error,
+              retryable: true,
+              suggestedAction: 'Check payment details and try again',
+              transactionId,
+            }
+          );
         }
       }
 
@@ -560,7 +580,16 @@ export class MtnPaymentService {
         });
 
         if (!transactionRecord?.Item) {
-          throw new Error('Transaction not found for refund');
+          throw new EnhancedError(
+            'TRANSACTION_NOT_FOUND',
+            ErrorCategory.VALIDATION_ERROR,
+            'Transaction not found for refund',
+            {
+              retryable: false,
+              suggestedAction: 'Verify the transaction ID and try again',
+              transactionId,
+            }
+          );
         }
 
         const status = transactionRecord.Item.status;
@@ -574,6 +603,7 @@ export class MtnPaymentService {
               retryable: false,
               suggestedAction:
                 'Ensure the payment is successful before initiating a refund.',
+              transactionId,
             }
           );
         }
@@ -586,6 +616,7 @@ export class MtnPaymentService {
               retryable: false,
               suggestedAction:
                 'Ensure the payment is successful before initiating a refund.',
+              transactionId,
             }
           );
         }
@@ -600,6 +631,7 @@ export class MtnPaymentService {
             {
               retryable: false,
               suggestedAction: 'No further actions are required.',
+              transactionId,
             }
           );
         }
@@ -611,6 +643,7 @@ export class MtnPaymentService {
             {
               retryable: false,
               suggestedAction: 'No further actions are required.',
+              transactionId,
             }
           );
         }
@@ -649,6 +682,7 @@ export class MtnPaymentService {
               retryable: false,
               suggestedAction:
                 'Reduce the refund amount to not exceed the original transaction amount.',
+              transactionId,
             }
           );
         }
@@ -708,7 +742,17 @@ export class MtnPaymentService {
       }
 
       default:
-        throw new Error(`Unsupported transaction type: ${transactionType}`);
+        throw new EnhancedError(
+          'UNSUPPORTED_TRANSACTION_TYPE',
+          ErrorCategory.VALIDATION_ERROR,
+          `Unsupported transaction type: ${transactionType}`,
+          {
+            retryable: false,
+            suggestedAction:
+              'Use a supported transaction type (CHARGE or REFUND)',
+            transactionId,
+          }
+        );
     }
   }
 
@@ -734,9 +778,24 @@ export class MtnPaymentService {
       const response = await axiosInstance.get(endpoint);
 
       return response.data;
-    } catch (error) {
-      this.logger.error('Failed to check the transaction status');
-      throw new Error('Failed to check the transaction status');
+    } catch (error: any) {
+      this.logger.error('Failed to check the transaction status', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        type,
+      });
+
+      throw new EnhancedError(
+        'TRANSACTION_STATUS_CHECK_FAILED',
+        ErrorCategory.PROVIDER_ERROR,
+        'Failed to check the transaction status',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Retry the status check after a short delay',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -777,9 +836,25 @@ export class MtnPaymentService {
       });
 
       return transactionId;
-    } catch (error) {
-      this.logger.error('Failed to initiate transfer');
-      throw new Error('Failed to initiate transfer');
+    } catch (error: any) {
+      this.logger.error('Failed to initiate transfer', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        amount,
+        currency,
+        recipientMobileNo: recipientMobileNo ? '[PRESENT]' : '[MISSING]',
+        transactionType,
+      });
+
+      throw new EnhancedError(
+        'TRANSFER_INITIATION_FAILED',
+        ErrorCategory.PROVIDER_ERROR,
+        'Failed to initiate transfer',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Verify recipient information and try again',
+        }
+      );
     }
   }
 }

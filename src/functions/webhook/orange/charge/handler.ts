@@ -15,6 +15,10 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { PAYMENT_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
+import {
+  EnhancedError,
+  ErrorCategory,
+} from '../../../../../utils/errorHandler';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -195,8 +199,15 @@ export class OrangeChargeWebhookService {
       const cleanedUpdate = this.removeUndefined(update);
 
       if (!cleanedUpdate) {
-        throw new Error(
-          'Update payload is empty after cleaning undefined values'
+        throw new EnhancedError(
+          'EMPTY_UPDATE_PAYLOAD',
+          ErrorCategory.VALIDATION_ERROR,
+          'Update payload is empty after cleaning undefined values',
+          {
+            retryable: false,
+            suggestedAction: 'Verify the update payload contains valid data',
+            transactionId,
+          }
         );
       }
 
@@ -270,7 +281,20 @@ export class OrangeChargeWebhookService {
   }> {
     try {
       if (!transaction.merchantMobileNo) {
-        throw new Error('Merchant mobile number not found');
+        this.logger.error('Merchant mobile number not found', {
+          transactionId: transaction.transactionId,
+        });
+        throw new EnhancedError(
+          'MERCHANT_MOBILE_MISSING',
+          ErrorCategory.VALIDATION_ERROR,
+          'Merchant mobile number not found',
+          {
+            retryable: false,
+            suggestedAction:
+              'Verify merchant information is correctly stored in the transaction record',
+            transactionId: transaction.transactionId,
+          }
+        );
       }
 
       // Get Orange credentials from Secrets Manager
@@ -285,7 +309,20 @@ export class OrangeChargeWebhookService {
       const initResponse = await this.orangeService.initiateCashinTransaction();
 
       if (!initResponse.data?.payToken) {
-        throw new Error('Failed to get payToken for disbursement');
+        this.logger.error('Failed to get payToken for disbursement', {
+          transactionId: transaction.transactionId,
+          merchantMobileNo: transaction.merchantMobileNo,
+        });
+        throw new EnhancedError(
+          'DISBURSEMENT_PAYTOKEN_FAILED',
+          ErrorCategory.PROVIDER_ERROR,
+          'Failed to get payToken for disbursement',
+          {
+            retryable: true,
+            suggestedAction: 'Check Orange API connectivity and credentials',
+            transactionId: transaction.transactionId,
+          }
+        );
       }
 
       // Execute disbursement

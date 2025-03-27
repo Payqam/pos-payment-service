@@ -133,8 +133,22 @@ export class MTNDisbursementWebhookService {
         ],
       };
     } catch (error) {
-      this.logger.error('Failed to handle the failed customer refund');
-      throw new Error('Failed to handle the failed failed customer refund');
+      this.logger.error('Failed to handle the failed customer refund', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        reason: transactionStatus.reason,
+      });
+      throw new EnhancedError(
+        'FAILED_CUSTOMER_REFUND_HANDLING_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to handle the failed customer refund',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check logs for detailed error information',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -192,8 +206,22 @@ export class MTNDisbursementWebhookService {
         ],
       };
     } catch (error) {
-      this.logger.error('Failed to handle the successful customer refund');
-      throw new Error('Failed to handle the successful customer refund');
+      this.logger.error('Failed to handle the successful customer refund', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        amount: transactionStatus.amount,
+      });
+      throw new EnhancedError(
+        'SUCCESSFUL_CUSTOMER_REFUND_HANDLING_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to handle the successful customer refund',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check logs for detailed error information',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -218,8 +246,23 @@ export class MTNDisbursementWebhookService {
             );
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
     } catch (error) {
-      this.logger.error('Failed to update the customer refund status');
-      throw new Error('Failed to update the customer refund status');
+      this.logger.error('Failed to update the customer refund status', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        status: transactionStatusResponse.status,
+      });
+      throw new EnhancedError(
+        'CUSTOMER_REFUND_STATUS_UPDATE_FAILED',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to update the customer refund status',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction:
+            'Check database connectivity and transaction record existence',
+          transactionId,
+        }
+      );
     }
   }
 

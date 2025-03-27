@@ -130,8 +130,21 @@ export class MTNPaymentWebhookService {
       });
       return updateData;
     } catch (error) {
-      this.logger.error('Failed to handle the successful payment');
-      throw new Error('Failed to handle the successful payment');
+      this.logger.error('Failed to handle the successful payment', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+      });
+      throw new EnhancedError(
+        'SUCCESSFUL_MERCHANT_REFUND_HANDLING_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to handle the successful payment',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check logs for detailed error information',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -218,8 +231,22 @@ export class MTNPaymentWebhookService {
         ],
       };
     } catch (error) {
-      this.logger.error('Failed to handle the failed payment');
-      throw new Error('Failed to handle the failed payment');
+      this.logger.error('Failed to handle the failed payment', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        errorReason: transactionStatus.reason,
+      });
+      throw new EnhancedError(
+        'FAILED_MERCHANT_REFUND_HANDLING_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to handle the failed payment',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check logs for detailed error information',
+          transactionId,
+        }
+      );
     }
   }
 
