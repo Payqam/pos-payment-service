@@ -258,6 +258,7 @@ export class CDKStack extends cdk.Stack {
           VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
+          FAILURE_INJECTION_PARAM: 'failureLambdaConfig', // Add environment variable for failure-lambda
         },
       }
     );
@@ -270,6 +271,15 @@ export class CDKStack extends cdk.Stack {
     transactionsProcessLambda.lambda.addToRolePolicy(iamConstruct.snsPolicy);
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
+    );
+    // Add SSM Parameter Store permissions for failure-lambda
+    transactionsProcessLambda.lambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+        resources: [
+          `arn:aws:ssm:${env.region}:${env.account}:parameter/failureLambdaConfig`,
+        ],
+      })
     );
     // Define configs for KMS
     key.grantDecrypt(transactionsProcessLambda.lambda);

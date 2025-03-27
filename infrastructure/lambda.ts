@@ -58,6 +58,7 @@ export class PAYQAMLambda extends Construct {
           'class-validator',
           'class-transformer',
           'aws-xray-sdk-core',
+          'aws-sdk', 
         ],
         sourceMap: true,
       },
