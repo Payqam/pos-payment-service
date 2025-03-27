@@ -11,6 +11,12 @@ import { URL } from 'url';
 import { SNSService } from '../../../services/snsService';
 import * as process from 'node:process';
 import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
+import {
+  RetryConfig,
+  DEFAULT_RETRY_CONFIG,
+  executeWithRetry,
+  createRetryableAxiosInstance,
+} from '../../../../utils/retryUtils';
 
 const PAYQAM_FEE_PERCENTAGE = parseFloat(
   process.env.PAYQAM_FEE_PERCENTAGE || '2.5'
@@ -71,6 +77,8 @@ export class MtnPaymentService {
 
   private readonly snsService: SNSService;
 
+  private readonly retryConfig: RetryConfig;
+
   constructor() {
     LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
@@ -79,6 +87,13 @@ export class MtnPaymentService {
     this.snsService = SNSService.getInstance();
     this.baseUrl =
       process.env.MTN_API_BASE_URL || 'https://sandbox.momodeveloper.mtn.com';
+    this.retryConfig = {
+      ...DEFAULT_RETRY_CONFIG,
+      logger: this.logger,
+      maxRetries: parseInt(process.env.MTN_API_MAX_RETRIES || '5', 10),
+      baseDelayMs: parseInt(process.env.MTN_API_BASE_DELAY_MS || '100', 10),
+      maxDelayMs: parseInt(process.env.MTN_API_MAX_DELAY_MS || '30000', 10),
+    };
     this.logger.info('init()');
   }
 
@@ -166,9 +181,42 @@ export class MtnPaymentService {
     const credentials = await this.getMTNCredentials();
     const token = await this.generateToken(credentials, type);
 
-    return axios.create({
+    const axiosInstance = axios.create({
       baseURL: this.baseUrl,
       headers: this.createHeaders(type, credentials, token, transactionId),
+    });
+
+    // Enhance the axios instance with retry capability
+    return createRetryableAxiosInstance(axiosInstance, {
+      ...this.retryConfig,
+      // Add transaction context to logs
+      logger: {
+        ...this.logger,
+        warn: (message: string, data?: any) =>
+          this.logger.warn(message, {
+            ...data,
+            transactionType: type,
+            transactionId: transactionId || 'none',
+          }),
+        error: (message: string, data?: any) =>
+          this.logger.error(message, {
+            ...data,
+            transactionType: type,
+            transactionId: transactionId || 'none',
+          }),
+        info: (message: string, data?: any) =>
+          this.logger.info(message, {
+            ...data,
+            transactionType: type,
+            transactionId: transactionId || 'none',
+          }),
+        debug: (message: string, data?: any) =>
+          this.logger.debug(message, {
+            ...data,
+            transactionType: type,
+            transactionId: transactionId || 'none',
+          }),
+      },
     });
   }
 
@@ -197,66 +245,71 @@ export class MtnPaymentService {
     credentials: MTNCredentials,
     type: TransactionType
   ): Promise<MTNToken> {
+    const apiPath =
+      type === TransactionType.PAYMENT ||
+      type === TransactionType.MERCHANT_REFUND
+        ? '/collection/token/'
+        : '/disbursement/token/';
+    // Log the transaction type and API path being used
+    this.logger.debug('Generating MTN token', {
+      type,
+      apiPath,
+      baseURL: this.baseUrl,
+    });
+
+    const creds =
+      type === TransactionType.PAYMENT ||
+      type === TransactionType.MERCHANT_REFUND
+        ? credentials.collection
+        : credentials.disbursement;
+
+    // Log credential information (without sensitive data)
+    this.logger.debug('Using credentials', {
+      apiUser: creds.apiUser,
+      hasApiKey: !!creds.apiKey,
+      hasSubscriptionKey: !!creds.subscriptionKey,
+      targetEnvironment: credentials.targetEnvironment,
+    });
+
+    const config = {
+      baseURL: this.baseUrl,
+      auth: {
+        username: creds.apiUser,
+        password: creds.apiKey,
+      },
+      headers: {
+        'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
+        'Content-Type': 'application/json',
+      },
+    };
+
+    // Log the request configuration (without sensitive data)
+    this.logger.debug('Token request configuration', {
+      url: `${this.baseUrl}${apiPath}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': config.headers['Content-Type'],
+        'Ocp-Apim-Subscription-Key': config.headers['Ocp-Apim-Subscription-Key']
+          ? '[PRESENT]'
+          : '[MISSING]',
+      },
+      auth: {
+        username: config.auth.username,
+        password: config.auth.password ? '[PRESENT]' : '[MISSING]',
+      },
+    });
+
     try {
-      const apiPath =
-        type === TransactionType.PAYMENT ||
-        type === TransactionType.MERCHANT_REFUND
-          ? '/collection/token/'
-          : '/disbursement/token/';
-      // Log the transaction type and API path being used
-      this.logger.debug('Generating MTN token', {
-        type,
-        apiPath,
-        baseURL: this.baseUrl,
-      });
-
-      const creds =
-        type === TransactionType.PAYMENT ||
-        type === TransactionType.MERCHANT_REFUND
-          ? credentials.collection
-          : credentials.disbursement;
-
-      // Log credential information (without sensitive data)
-      this.logger.debug('Using credentials', {
-        apiUser: creds.apiUser,
-        hasApiKey: !!creds.apiKey,
-        hasSubscriptionKey: !!creds.subscriptionKey,
-        targetEnvironment: credentials.targetEnvironment,
-      });
-
-      const config = {
-        baseURL: this.baseUrl,
-        auth: {
-          username: creds.apiUser,
-          password: creds.apiKey,
-        },
-        headers: {
-          'Ocp-Apim-Subscription-Key': creds.subscriptionKey,
-          'Content-Type': 'application/json',
-        },
-      };
-
-      // Log the request configuration (without sensitive data)
-      this.logger.debug('Token request configuration', {
-        url: `${this.baseUrl}${apiPath}`,
-        method: 'POST',
-        headers: {
-          'Content-Type': config.headers['Content-Type'],
-          'Ocp-Apim-Subscription-Key': config.headers[
-            'Ocp-Apim-Subscription-Key'
-          ]
-            ? '[PRESENT]'
-            : '[MISSING]',
-        },
-        auth: {
-          username: config.auth.username,
-          password: config.auth.password ? '[PRESENT]' : '[MISSING]',
-        },
-      });
-
-      // Make the token request
-      this.logger.debug('Sending token request to MTN API');
-      const response = await axios.post(apiPath, {}, config);
+      // Use executeWithRetry to handle token generation with retries
+      const response = await executeWithRetry(
+        () => axios.post(apiPath, {}, config),
+        this.retryConfig,
+        'MTN token generation',
+        'MTN_TOKEN_ERROR',
+        ErrorCategory.PROVIDER_ERROR,
+        'Failed to generate MTN token',
+        { type, baseURL: this.baseUrl }
+      );
 
       // Log the response status and headers
       this.logger.debug('Token response received', {
@@ -446,8 +499,7 @@ export class MtnPaymentService {
             transactionId
           );
 
-          // Create payment request in MTN
-
+          // Create payment request in MTN with retry logic built into the axios instance
           await axiosInstance.post('/collection/v1_0/requesttopay', {
             amount: amount.toString(),
             currency,
@@ -775,8 +827,8 @@ export class MtnPaymentService {
           ? `/collection/v1_0/requesttopay/${transactionId}`
           : `/disbursement/v1_0/transfer/${transactionId}`;
 
+      // The axios instance already has retry logic built in
       const response = await axiosInstance.get(endpoint);
-
       return response.data;
     } catch (error: any) {
       this.logger.error('Failed to check the transaction status', {
@@ -823,6 +875,7 @@ export class MtnPaymentService {
         transactionId
       );
 
+      // The axios instance already has retry logic built in
       await axiosInstance.post('/disbursement/v1_0/transfer', {
         amount: amount.toString(),
         currency,
