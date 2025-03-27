@@ -216,6 +216,7 @@ export class MTNPaymentWebhookService {
    */
   private async handleFailedPayment(
     externalId: string,
+    merchantId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -227,7 +228,7 @@ export class MTNPaymentWebhookService {
 
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -237,12 +238,15 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
+      const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId: externalId,
+        merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.PAYMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -251,6 +255,7 @@ export class MTNPaymentWebhookService {
 
       return {
         status: MTNPaymentStatus.PAYMENT_FAILED,
+        updatedOn: dateTime,
         paymentResponse: {
           ...transactionStatus,
           errorMessage: enhancedError.message,
@@ -339,7 +344,11 @@ export class MTNPaymentWebhookService {
               currency,
               webhookEvent
             )
-          : await this.handleFailedPayment(externalId, transactionStatus);
+          : await this.handleFailedPayment(
+              externalId,
+              result.Item?.merchantId,
+              transactionStatus
+            );
 
       await this.dbService.updatePaymentRecord(
         { transactionId: externalId },

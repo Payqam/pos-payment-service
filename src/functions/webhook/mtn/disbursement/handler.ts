@@ -57,6 +57,7 @@ export class MTNDisbursementWebhookService {
    */
   private async handleFailedTransfer(
     transactionId: string,
+    merchantId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -64,12 +65,15 @@ export class MTNDisbursementWebhookService {
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+      const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId,
+        merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -134,7 +138,7 @@ export class MTNDisbursementWebhookService {
       }
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -147,6 +151,7 @@ export class MTNDisbursementWebhookService {
 
       return {
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
+        updatedOn: dateTime,
         disbursementResponse: {
           ...transactionStatus,
           errorMessage: enhancedError.message,
@@ -183,6 +188,7 @@ export class MTNDisbursementWebhookService {
    */
   private async updateSettlementStatus(
     transactionId: string,
+    merchantId: string,
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     try {
@@ -196,6 +202,7 @@ export class MTNDisbursementWebhookService {
             }
           : await this.handleFailedTransfer(
               transactionId,
+              merchantId,
               transactionStatusResponse
             );
       if (transactionStatusResponse.status === 'SUCCESSFUL') {
@@ -315,7 +322,11 @@ export class MTNDisbursementWebhookService {
         TransactionType.TRANSFER
       );
 
-      await this.updateSettlementStatus(transactionId, transactionStatus);
+      await this.updateSettlementStatus(
+        transactionId,
+        result.Items?.[0].merchantId,
+        transactionStatus
+      );
 
       return {
         statusCode: 200,
