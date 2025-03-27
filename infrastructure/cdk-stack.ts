@@ -258,7 +258,17 @@ export class CDKStack extends cdk.Stack {
           VALKEY_PRIMARY_ENDPOINT: cacheEndpoint || '',
           TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
           KMS_TRANSPORT_KEY: key.keyArn,
-          FAILURE_INJECTION_PARAM: 'failureLambdaConfig', // Add environment variable for failure-lambda
+          FAILURE_CONFIG: JSON.stringify({
+            isEnabled: false,
+            failureMode: 'latency',
+            rate: 1,
+            minLatency: 100,
+            maxLatency: 400,
+            exceptionMsg: 'Injected failure for testing transaction resilience',
+            statusCode: 500,
+            diskSpace: 100,
+            denylist: ['dynamodb.*.amazonaws.com']
+          }),
         },
       }
     );
@@ -272,15 +282,7 @@ export class CDKStack extends cdk.Stack {
     transactionsProcessLambda.lambda.addToRolePolicy(
       iamConstruct.secretsManagerPolicy
     );
-    // Add SSM Parameter Store permissions for failure-lambda
-    transactionsProcessLambda.lambda.addToRolePolicy(
-      new PolicyStatement({
-        actions: ['ssm:GetParameter', 'ssm:GetParameters'],
-        resources: [
-          `arn:aws:ssm:${env.region}:${env.account}:parameter/failureLambdaConfig`,
-        ],
-      })
-    );
+    
     // Define configs for KMS
     key.grantDecrypt(transactionsProcessLambda.lambda);
     KMSHelper.grantDecryptPermission(
