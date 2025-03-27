@@ -181,9 +181,10 @@ describe('MTN Payment Processing Tests', () => {
         });
 
         it(`Verify Payment on salesforce`, () => {
+          cy.wait(2000);
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+            url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
             headers: {
               Authorization: `Bearer ${Cypress.env('accessToken')}`,
             },
@@ -199,8 +200,24 @@ describe('MTN Payment Processing Tests', () => {
               '97.5'
             );
             expect(response.body.records[0]).to.have.property(
+              'Net_Amount__c',
+              '100'
+            );
+            expect(response.body.records[0]).to.have.property(
               'MerchantId__c',
               'M123'
+            );
+            expect(response.body.records[0]).to.have.property(
+              'Merchant_Phone__c',
+              test.merchant
+            );
+            expect(response.body.records[0]).to.have.property(
+              'Customer_Phone__c',
+              test.payer
+            );
+            expect(response.body.records[0]).to.have.property(
+              'ServiceType__c',
+              'MTN MOMO'
             );
             cy.task('log', response.body);
           });

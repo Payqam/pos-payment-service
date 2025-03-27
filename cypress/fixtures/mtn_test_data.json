@@ -148,12 +148,49 @@
     "transactionId": "585c07a4-2c80-42f7-9e73-e586b36dee68"
   }
 ],
-  "refundTestData": [
+  "requestPayer": [
     {
-      "payer": "94713579067",
+      "title": "Ongoing payment request",
+      "payer": "46733123453",
+      "merchant": "94760000000"
+    },
+    {
+      "title": "delayed payment request",
+      "payer": "46733123454",
       "merchant": "94760000000"
     }
   ],
+
+  "errortest": [
+    {
+      "title": "failed payment request",
+      "payer": "46733123450",
+      "reason":"INTERNAL_PROCESSING_ERROR"
+    },
+    {
+      "title": "rejected payment request",
+      "payer": "46733123451",
+      "reason":"APPROVAL_REJECTED"
+    }
+  ],
+
+"RefundTestData":[
+  {
+    "title": "full amount refund",
+    "amount": 2000,
+    "status": "SUCCESSFUL",
+    "payer": "94713579067",
+    "merchant": "94760000000"
+  },
+  {
+    "title": "partial amount refund",
+    "amount": 1500,
+    "status": "SUCCESSFUL",
+    "payer": "94713579067",
+    "merchant": "94760000000"
+  }
+],
+
   "invalidRefundData": [
     {
       "title": "Invalid transactionId",
@@ -194,9 +231,10 @@
       "reason":"INTERNAL_PROCESSING_ERROR"
     },
     {
-      "title": "rejected payment request",
-      "payer": "46733123451",
-      "reason":"APPROVAL_REJECTED"
+      "title": "with amount greater than original payment",
+      "body": { "mtn[amount]": "3000"},
+      "expectedStatus":400,
+      "expectedMessage": "Invalid request body"
     }
   ]
 }
