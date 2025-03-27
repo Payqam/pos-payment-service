@@ -417,6 +417,23 @@ export class OrangeChargeWebhookService {
           isSuccessful: disbursementResult.status === 'SUCCESSFULL',
         });
 
+              // Check if we're in sandbox environment
+      if (credentials.targetEnvironment === 'sandbox') {
+        const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
+
+        // Override payment status based on test phone numbers
+        const scenarioKey = Object.entries(TEST_NUMBERS.PAYMENT_SCENARIOS).find(
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          ([_, number]) => number === subscriberMsisdn
+        )?.[0];
+
+        if (scenarioKey && scenarioKey in PAYMENT_SCENARIOS) {
+          const scenario =
+            PAYMENT_SCENARIOS[scenarioKey as keyof typeof PAYMENT_SCENARIOS];
+            disbursementResult.status = scenario.status;
+        }
+      }
+
         // Only add disbursement data if we have valid results
         if (disbursementResult.status === 'SUCCESSFULL') {
           this.logger.debug('Inside successful disbursement block');
