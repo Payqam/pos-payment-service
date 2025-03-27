@@ -66,6 +66,7 @@ export class OrangeChargeWebhookService {
   private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();

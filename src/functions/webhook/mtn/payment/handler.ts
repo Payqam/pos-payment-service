@@ -48,6 +48,7 @@ export class MTNPaymentWebhookService {
   private readonly payqamFeePercentage: number;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.mtnService = new MtnPaymentService();
     this.dbService = new DynamoDBService();

@@ -65,6 +65,7 @@ export class DynamoDBService {
   private readonly baseDelayMS: number;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.tableName = process.env.TRANSACTIONS_TABLE as string;
     this.dbClient = DynamoDBDocClient.getInstance();

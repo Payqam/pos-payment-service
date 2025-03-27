@@ -9,6 +9,7 @@ export class SecretsManagerService {
 
   constructor() {
     this.smClient = SMClient.getInstance();
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.logger.info('SecretsManagerService initialized');
   }

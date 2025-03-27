@@ -72,6 +72,7 @@ export class MtnPaymentService {
   private readonly snsService: SNSService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();

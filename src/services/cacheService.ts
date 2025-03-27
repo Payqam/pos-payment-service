@@ -8,6 +8,7 @@ export class CacheService {
 
   constructor() {
     this.cacheClient = CacheClient.getInstance();
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.logger.info('CacheService initialized');
   }
