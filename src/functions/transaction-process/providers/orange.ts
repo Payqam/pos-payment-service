@@ -659,6 +659,8 @@ export class OrangePaymentService {
       throw error;
     }
 
+    let existingTransaction;
+
     // Check if transaction exists and its status
     try {
       const existingTransactionResult = await this.dbService.getItem(
@@ -666,7 +668,7 @@ export class OrangePaymentService {
         'TransactionIndex'
       );
 
-      const existingTransaction = existingTransactionResult.Item;
+      existingTransaction = existingTransactionResult.Item;
 
       if (!existingTransaction) {
         this.logger.warn('Transaction not found for refund', { transactionId });
@@ -677,24 +679,40 @@ export class OrangePaymentService {
         };
       }
 
+            // // Check if it's already a successful refund
+      if (
+        existingTransaction.transactionType === 'REFUND' &&
+        existingTransaction.amount ===
+          0
+      ) {
+        return {
+          transactionId,
+          status: 'ALREADY_REFUNDED',
+          message: 'Transaction has already been fully refunded',
+        };
+      }
+
+      // Validate refund amount against original payment amount
+      if (amount > existingTransaction.amount) {
+        this.logger.warn('Refund amount exceeds original payment amount', {
+          refundAmount: amount,
+          originalAmount: existingTransaction.amount,
+          transactionId,
+        });
+        return {
+          transactionId,
+          status: 'FAILED',
+          message: `Refund amount (${amount}) cannot exceed original payment amount (${existingTransaction.amount})`,
+        };
+      }
+
       this.logger.info('Found existing transaction', {
         transactionId,
         type: existingTransaction.transactionType,
         status: existingTransaction.status,
       });
 
-      // Check if it's already a successful refund
-      if (
-        existingTransaction.transactionType === 'REFUND' &&
-        existingTransaction.status ===
-          OrangePaymentStatus.CUSTOMER_REFUND_SUCCESSFUL
-      ) {
-        return {
-          transactionId,
-          status: 'ALREADY_REFUNDED',
-          message: 'Transaction has already been refunded',
-        };
-      }
+
 
       // Check if the original transaction exists and was successful
       // if (existingTransaction.transactionType === 'CHARGE' &&
@@ -765,8 +783,8 @@ export class OrangePaymentService {
           notifUrl: credentials.notifyUrl,
           id: 0,
           txnid: '',
-          inittxnmessage: '',
           inittxnstatus: '',
+          inittxnmessage: '',
           confirmtxnstatus: '',
           confirmtxnmessage: '',
         },
@@ -850,7 +868,7 @@ export class OrangePaymentService {
         orderId: refundOrderId,
         merchantId,
         merchantMobileNo,
-        amount,
+        amount: existingTransaction.amount - amount,
         paymentMethod: 'ORANGE',
         status: refundResponse.data.status,
         currency,
@@ -916,28 +934,12 @@ export class OrangePaymentService {
 
       // Update failed refund record
       const failedRecord: UpdatePaymentRecord = {
-        merchantId,
-        merchantMobileNo,
-        amount,
-        paymentMethod: 'ORANGE',
         status: 'FAILED',
-        currency,
-        customerPhone,
         refundMpResponse: {
           error: error instanceof Error ? error.message : 'Unknown error',
           status: 'FAILED',
           timestamp: Math.floor(Date.now() / 1000),
         },
-        transactionType: 'REFUND',
-        metaData,
-        GSI1SK: Math.floor(Date.now() / 1000),
-        GSI2SK: Math.floor(Date.now() / 1000),
-        exchangeRate: 'N/A',
-        processingFee: 'N/A',
-        netAmount: 'N/A',
-        externalTransactionId: 'N/A',
-        fee: 0,
-        settlementAmount: amount,
       };
 
       await this.dbService.updatePaymentRecord({ transactionId }, failedRecord);
