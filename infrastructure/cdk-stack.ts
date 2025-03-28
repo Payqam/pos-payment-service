@@ -45,6 +45,8 @@ interface CDKStackProps extends cdk.StackProps {
   envConfigs: EnvConfig;
   slackWebhookUrl: string;
   appVpcId: string;
+  destinationEmail: string;
+  sourceEmail: string;
 }
 
 export class CDKStack extends cdk.Stack {
@@ -220,6 +222,7 @@ export class CDKStack extends cdk.Stack {
         environment: {
           LOG_LEVEL: props.envConfigs.LOG_LEVEL,
           SALESFORCE_SECRET: salesForceSecret.secretName,
+          SALESFORCE_DLQ_URL: `https://sqs.us-east-1.amazonaws.com/${env.account}/salesforce-dlq-${props.envName}${props.namespace}`,
         },
       }
     );
@@ -229,6 +232,7 @@ export class CDKStack extends cdk.Stack {
       iamConstruct.secretsManagerPolicy
     );
     salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.dynamoDBPolicy);
+    salesforceSyncLambda.lambda.addToRolePolicy(iamConstruct.sqsPolicy);
 
     // Create SNS topic and DLQ for Salesforce events
     const snsConstruct = new PaymentServiceSNS(this, 'PaymentServiceSNS', {
@@ -533,11 +537,14 @@ export class CDKStack extends cdk.Stack {
         LOG_LEVEL: props.envConfigs.LOG_LEVEL,
         TRANSACTION_STATUS_TOPIC_ARN: snsConstruct.eventTopic.topicArn,
         SLACK_WEBHOOK_URL: props.slackWebhookUrl,
+        SES_DESTINATION_EMAIL: props.destinationEmail,
+        SES_SOURCE_EMAIL: props.sourceEmail,
       },
     });
     dlqProcessLambda.lambda.addEventSource(
       new SqsEventSource(snsConstruct.dlq)
     );
+    dlqProcessLambda.lambda.addToRolePolicy(iamConstruct.sesPolicy);
 
     const slackNotifierLambda = new PAYQAMLambda(this, 'SlackNotifierLambda', {
       name: `SlackNotifier-${props.envName}${props.namespace}`,
