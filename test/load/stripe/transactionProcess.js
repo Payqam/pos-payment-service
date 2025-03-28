@@ -84,8 +84,8 @@ export let options = {
 };
 
 // API Endpoint and Key
-const API_URL = 'https://2jytsrjbhf.execute-api.us-east-1.amazonaws.com/DEV/transaction/process/charge';
-const API_KEY = 'MCSPN8idoL8sRdoTIjzuu2iDwUp4L5N3DvdQ8L27';
+const API_URL = 'place your api url here';
+const API_KEY = 'place your api key here';
 
 export default function () {
     let startTime = new Date();

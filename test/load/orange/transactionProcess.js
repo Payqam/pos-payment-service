@@ -48,8 +48,8 @@ export let options = {
 };
 
 // Define API endpoint
-const API_URL = 'https://ohdgm566qg.execute-api.us-east-1.amazonaws.com/SQA/transaction/process/charge';
-const API_KEY = 'yOHZDaeTvt2NO7nyzk7Oi8DHU4cBXIY84D8eBKMi';
+const API_URL = 'place here the API endpoint';
+const API_KEY = 'place here the API key';
 
 export default function () {
   let startTime = new Date();
