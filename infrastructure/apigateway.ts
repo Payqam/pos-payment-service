@@ -78,11 +78,11 @@ export class ApiGatewayConstruct extends Construct {
     const usagePlan = this.api.addUsagePlan('PAYQAM-UsagePlan', {
       name: `PAYQAM-${props.envName}${props.namespace}-UsagePlan`,
       throttle: {
-        rateLimit: 100, // 100 requests per second
-        burstLimit: 200, // Allow burst up to 200 requests
+        rateLimit: 1000,
+        burstLimit: 2000,
       },
       quota: {
-        limit: 10000, // 10,000 requests per month
+        limit: 1000000,
         period: apigateway.Period.MONTH,
       },
     });

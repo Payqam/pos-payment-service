@@ -62,23 +62,48 @@ export class CardPaymentService {
 
           let paymentIntent;
           try {
-            paymentIntent = await stripeClient.paymentIntents.create({
-              amount,
-              currency: currency,
-              payment_method: cardData.paymentMethodId,
-              confirm: true,
-              transfer_data: {
-                amount: transferAmount,
-                destination: cardData.destinationId as string,
-              },
-              automatic_payment_methods: {
-                enabled: true,
-                allow_redirects: 'never',
-              },
-              metadata: {
-                transactionId: transactionId,
-              },
-            });
+            const maxRetries = 5;
+            let retryCount = 0;
+            let retryDelay = 5000; // Initial delay of 1 second
+
+            while (retryCount <= maxRetries) {
+              try {
+                paymentIntent = await stripeClient.paymentIntents.create({
+                  amount,
+                  currency: currency,
+                  payment_method: cardData.paymentMethodId,
+                  confirm: true,
+                  transfer_data: {
+                    amount: transferAmount,
+                    destination: cardData.destinationId as string,
+                  },
+                  automatic_payment_methods: {
+                    enabled: true,
+                    allow_redirects: 'never',
+                  },
+                  metadata: {
+                    transactionId: transactionId,
+                  },
+                });
+                break; // If successful, exit the retry loop
+              } catch (error) {
+                if (
+                  error instanceof stripe.errors.StripeRateLimitError &&
+                  retryCount < maxRetries
+                ) {
+                  retryCount++;
+                  this.logger.warn(
+                    `Rate limit hit. Attempt ${retryCount} of ${maxRetries}. Retrying in ${retryDelay}ms`
+                  );
+                  await new Promise((resolve) =>
+                    setTimeout(resolve, retryDelay)
+                  );
+                  retryDelay *= 2; // Exponential backoff
+                  continue;
+                }
+                throw error; // Rethrow if not a rate limit error or max retries exceeded
+              }
+            }
           } catch (paymentError: unknown) {
             if (paymentError instanceof stripe.errors.StripeError) {
               this.logger.error('Error creating payment intent', paymentError);
@@ -89,16 +114,22 @@ export class CardPaymentService {
                 amount,
                 paymentMethod: 'CARD',
                 status: 'FAILED',
-                paymentResponse: paymentError.raw as Record<string, unknown>,
+                paymentIntentResponse: paymentError.raw as Record<
+                  string,
+                  unknown
+                >,
                 transactionType: 'CHARGE',
                 metaData,
                 fee: feeAmount,
                 uniqueId: paymentError.payment_intent?.id as string,
                 GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
                 GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
+                currency: currency,
+                customerPhone: customerPhone,
+                netAmount: amount.toString(),
+                merchantMobileNo,
                 // exchangeRate: 'N/A',
                 // processingFee: 'N/A',
-                // netAmount: 'N/A',
                 // externalTransactionId: 'N/A',
               };
               this.logger.info(
@@ -116,7 +147,7 @@ export class CardPaymentService {
                 createdOn: dateTime,
                 customerPhone,
                 currency: currency,
-                netAmount: amount.toString(),
+                amount: amount.toString(),
                 externalTransactionId: paymentError?.payment_intent?.id,
                 merchantMobileNo,
                 settlementAmount: transferAmount.toString(),
@@ -138,13 +169,17 @@ export class CardPaymentService {
             amount,
             paymentMethod: 'CARD',
             status: paymentIntent?.status as string,
-            paymentResponse: paymentIntent,
+            paymentIntentResponse: paymentIntent,
             transactionType: 'CHARGE',
             metaData,
             fee: feeAmount,
             uniqueId: paymentIntent?.id as string,
             GSI1SK: Math.floor(new Date(dateTime).getTime() / 1000),
             GSI2SK: Math.floor(new Date(dateTime).getTime() / 1000),
+            currency: currency,
+            customerPhone: customerPhone,
+            netAmount: amount.toString(),
+            merchantMobileNo,
             // exchangeRate: 'exchangeRate',
             // processingFee: 'processingFee',
             // netAmount: 'netAmount',
@@ -157,7 +192,6 @@ export class CardPaymentService {
             transactionId,
             paymentMethod: 'Stripe',
             status: paymentIntent?.status,
-            amount: transferAmount.toString(),
             merchantId,
             transactionType: 'CHARGE',
             metaData,
@@ -165,7 +199,7 @@ export class CardPaymentService {
             createdOn: dateTime,
             customerPhone,
             currency: currency,
-            netAmount: amount.toString(),
+            amount: amount.toString(),
             externalTransactionId: paymentIntent?.id,
             merchantMobileNo,
             settlementAmount: transferAmount.toString(),
@@ -197,6 +231,7 @@ export class CardPaymentService {
           );
           const currentRecord = queryResult.Items?.[0];
           const transactionId = currentRecord?.transactionId;
+          const refundId = uuidv4();
           let refund;
           try {
             refund = await stripeClient.refunds.create({
@@ -206,6 +241,7 @@ export class CardPaymentService {
               reverse_transfer: cardData.reverse_transfer,
               metadata: {
                 transactionId: transactionId,
+                refundId: refundId,
               },
             });
           } catch (refundError: unknown) {
