@@ -22,12 +22,18 @@ export class PaymentServiceIAM extends Construct {
 
   public readonly secretsManagerPolicy: PolicyStatement;
 
+  public readonly sqsPolicy: PolicyStatement;
+
+  public readonly sesPolicy: PolicyStatement;
+
   constructor(scope: Construct, id: string, env: Environment) {
     super(scope, id);
     this.lambdaRole = this.createLambdaRole();
     this.dynamoDBPolicy = this.createDynamoDBPolicy(env);
     this.snsPolicy = this.createSNSPolicy(env);
     this.secretsManagerPolicy = this.createSecretsManagerPolicy(env);
+    this.sqsPolicy = this.createSQSPolicy(env);
+    this.sesPolicy = this.createSESPolicy(env);
 
     // Add ElastiCache permissions
     this.lambdaRole.addToPolicy(
@@ -105,6 +111,21 @@ export class PaymentServiceIAM extends Construct {
         'sns:Unsubscribe', // Allow removing subscriptions if needed
       ],
       resources: [`arn:aws:sns:${env.region}:${env.account}:*`],
+    });
+  }
+
+  // SQS policy for dead letter queue
+  private createSQSPolicy(env: Environment) {
+    return new PolicyStatement({
+      actions: ['sqs:SendMessage', 'sqs:ReceiveMessage', 'sqs:DeleteMessage'],
+      resources: [`arn:aws:sqs:${env.region}:${env.account}:*`],
+    });
+  }
+
+  private createSESPolicy(env: Environment) {
+    return new PolicyStatement({
+      actions: ['ses:SendEmail'],
+      resources: [`arn:aws:ses:${env.region}:${env.account}:identity/*`],
     });
   }
 
