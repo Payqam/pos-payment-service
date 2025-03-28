@@ -57,6 +57,7 @@ export class MTNDisbursementWebhookService {
   private readonly mtnService: MtnPaymentService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
@@ -78,13 +79,15 @@ export class MTNDisbursementWebhookService {
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+      const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId,
         merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -149,7 +152,7 @@ export class MTNDisbursementWebhookService {
       }
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -162,6 +165,7 @@ export class MTNDisbursementWebhookService {
 
       return {
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
+        updatedOn: dateTime,
         disbursementResponse: {
           ...transactionStatus,
           errorMessage: enhancedError.message,
@@ -319,7 +323,7 @@ export class MTNDisbursementWebhookService {
 
       await this.updateSettlementStatus(
         transactionId,
-        result.Items[0].merchantId,
+        result.Items?.[0].merchantId,
         transactionStatus
       );
 

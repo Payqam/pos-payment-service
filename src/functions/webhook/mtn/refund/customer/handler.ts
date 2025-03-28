@@ -57,6 +57,7 @@ export class MTNDisbursementWebhookService {
   private readonly mtnService: MtnPaymentService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
@@ -79,7 +80,7 @@ export class MTNDisbursementWebhookService {
 
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -105,6 +106,8 @@ export class MTNDisbursementWebhookService {
       const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId,
+        merchantId: existingTransaction.Item?.merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
         type: 'CREATE',
       });
@@ -121,7 +124,7 @@ export class MTNDisbursementWebhookService {
         customerPhone: existingTransaction.Item?.mobileNo,
         currency: existingTransaction.Item?.currency,
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -130,6 +133,7 @@ export class MTNDisbursementWebhookService {
 
       return {
         status: MTNPaymentStatus.CUSTOMER_REFUND_FAILED,
+        updatedOn: dateTime,
         customerRefundResponse: [
           ...responseArray,
           {
@@ -171,6 +175,13 @@ export class MTNDisbursementWebhookService {
         transactionId,
       });
       const dateTime = new Date().toISOString();
+      await this.snsService.publish({
+        transactionId,
+        merchantId: existingTransaction.Item?.merchantId,
+        createdOn: dateTime,
+        status: MTNPaymentStatus.CUSTOMER_REFUND_SUCCESSFUL,
+        type: 'CREATE',
+      });
       await this.snsService.publish({
         transactionId: transactionStatus.externalId,
         paymentMethod: 'MTN MOMO',

@@ -31,6 +31,7 @@ export class SlackNotifierService {
   private readonly webhook: IncomingWebhook;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.webhook = new IncomingWebhook(SLACK_WEBHOOK_URL);
     this.logger.info('SlackNotifierService initialized');

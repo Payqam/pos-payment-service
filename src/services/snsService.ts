@@ -2,6 +2,7 @@ import { PublishCommandInput } from '@aws-sdk/client-sns';
 import { SNSClientWrapper } from '../snsClient';
 import { Logger, LoggerService } from '@mu-ts/logger';
 
+LoggerService.setLevel('debug');
 const logger: Logger = LoggerService.named('sns-service');
 
 export class SNSService {

@@ -17,6 +17,7 @@ export class WebhookProcessor {
   private signingSecret!: string;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.logger.info('WebhookProcessor initialized');

@@ -61,6 +61,7 @@ export class MTNPaymentWebhookService {
   private readonly payqamFeePercentage: number;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.mtnService = new MtnPaymentService();
     this.dbService = new DynamoDBService();
@@ -225,7 +226,7 @@ export class MTNPaymentWebhookService {
 
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -235,13 +236,15 @@ export class MTNPaymentWebhookService {
           originalError: transactionStatus.reason,
         }
       );
+      const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId: externalId,
         merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.PAYMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -250,6 +253,7 @@ export class MTNPaymentWebhookService {
 
       return {
         status: MTNPaymentStatus.PAYMENT_FAILED,
+        updatedOn: dateTime,
         paymentResponse: {
           ...transactionStatus,
           errorMessage: enhancedError.message,
@@ -341,7 +345,7 @@ export class MTNPaymentWebhookService {
             )
           : await this.handleFailedPayment(
               externalId,
-              result.Item?.merchantMobileNo,
+              result.Item?.merchantId,
               transactionStatus
             );
 

@@ -24,6 +24,7 @@ export class TransactionProcessService {
   private readonly dbService: DynamoDBService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.paymentService = new PaymentService(this.logger);
     this.dbService = new DynamoDBService();

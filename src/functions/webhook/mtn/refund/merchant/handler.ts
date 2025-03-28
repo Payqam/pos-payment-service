@@ -62,6 +62,7 @@ export class MTNPaymentWebhookService {
   private readonly payqamFeePercentage: number;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.mtnService = new MtnPaymentService();
     this.dbService = new DynamoDBService();
@@ -120,9 +121,10 @@ export class MTNPaymentWebhookService {
       // Send to SalesForce
       await this.snsService.publish({
         transactionId,
+        merchantId: existingTransaction.Item?.merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
         type: 'CREATE',
-        createdOn: dateTime,
       });
       await this.snsService.publish({
         transactionId: webhookEvent.externalId,
@@ -166,7 +168,7 @@ export class MTNPaymentWebhookService {
 
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -193,6 +195,8 @@ export class MTNPaymentWebhookService {
       const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId,
+        merchantId: existingTransaction.Item?.merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
         type: 'CREATE',
       });
@@ -209,7 +213,7 @@ export class MTNPaymentWebhookService {
         customerPhone: existingTransaction.Item?.mobileNo,
         currency: existingTransaction.Item?.currency,
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -217,6 +221,7 @@ export class MTNPaymentWebhookService {
       });
       return {
         status: MTNPaymentStatus.MERCHANT_REFUND_FAILED,
+        updatedOn: dateTime,
         merchantRefundResponse: [
           ...responseArray,
           {
