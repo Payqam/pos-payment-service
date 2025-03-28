@@ -190,6 +190,7 @@ describe('Validate Refund Scenario', () => {
   testData.RefundTestData.forEach((test) => {
     describe(`Verify successful refund  ${test.title}`, () => {
       it('Process a payment for refund', () => {
+        cy.wait(2500);
         cy.request({
           method: 'POST',
           url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
@@ -224,7 +225,6 @@ describe('Validate Refund Scenario', () => {
           expect('PAYMENT_REQUEST_CREATED').to.include(
             response.body.transactionDetails.status
           );
-
           transactionId = response.body.transactionDetails.transactionId;
           cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
@@ -341,6 +341,7 @@ describe('Validate Refund Scenario', () => {
       });
 
       it(`Verify Payment on salesforce`, () => {
+        cy.wait(1500);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,

@@ -155,7 +155,7 @@ describe('Successful Payment -  Cards by Brand', () => {
         cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },
@@ -351,7 +351,7 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
         cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },
@@ -548,7 +548,7 @@ describe('Successful Payment -  Cards by Brand', () => {
         cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },

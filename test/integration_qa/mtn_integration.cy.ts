@@ -48,6 +48,7 @@ describe('MTN Payment Processing Tests', () => {
       });
 
       it('should get transaction status', () => {
+        cy.wait(4000);
         cy.request({
           method: 'GET',
           url: `${Cypress.env('MTNServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
