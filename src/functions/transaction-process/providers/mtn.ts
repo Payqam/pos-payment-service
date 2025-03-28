@@ -303,7 +303,55 @@ export class MtnPaymentService {
       // Use executeWithRetry to handle token generation with retries
       const response = await executeWithRetry(
         () => axios.post(apiPath, {}, config),
-        this.retryConfig,
+        {
+          ...this.retryConfig,
+          // Add custom retry logic for rate limiting
+          shouldRetry: (error) => {
+            // Always retry on network errors
+            if (!error.response) return true;
+
+            // For 429 errors, extract retry time from response
+            if (error.response.status === 429) {
+              // Check for Retry-After header
+              const retryAfter = error.response.headers['retry-after'];
+              if (retryAfter) {
+                // Convert to milliseconds and use as delay
+                const retryDelayMs = parseInt(retryAfter, 10) * 1000;
+                error.retryDelay = retryDelayMs;
+                return true;
+              }
+
+              // Try to extract retry time from error message
+              const message = error.response.data?.message;
+              if (message) {
+                const match = message.match(/Try again in (\d+) seconds/);
+                if (match && match[1]) {
+                  const retryDelayMs = parseInt(match[1], 10) * 1000;
+                  error.retryDelay = retryDelayMs;
+                  return true;
+                }
+              }
+            }
+
+            // Use default retry logic for other status codes
+            return (
+              error.response.status >= 500 || error.response.status === 429
+            );
+          },
+          // Use custom delay calculation that respects rate limit instructions
+          calculateDelay: (attempt, error) => {
+            // If we extracted a retry delay from the response, use it
+            if (error.retryDelay) {
+              return error.retryDelay;
+            }
+
+            // Otherwise use exponential backoff
+            return Math.min(
+              this.retryConfig.maxDelayMs,
+              this.retryConfig.baseDelayMs * Math.pow(2, attempt)
+            );
+          },
+        },
         'MTN token generation',
         'MTN_TOKEN_ERROR',
         ErrorCategory.PROVIDER_ERROR,

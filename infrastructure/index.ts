@@ -20,8 +20,7 @@ const namespace: string = app.node.tryGetContext('namespace')
   : '';
 const envConfigs: EnvConfig = app.node.tryGetContext(envName);
 const slackWebhookUrl = envConfigs.SLACK_WEBHOOK_URL;
-const appVpcId = envConfigs.APP_VPC_ID;
-
+const appVpcId = 'vpc-02cc78e1af823536e';
 const stackName = `${process.env.CDK_STACK_NAME_PREFIX}-backend-${envName}${namespace}`;
 
 const stack = new CDKStack(app, stackName, {

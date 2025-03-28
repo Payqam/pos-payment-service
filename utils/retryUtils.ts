@@ -18,6 +18,10 @@ export interface RetryConfig {
   logger: Logger;
   /** Custom function to determine if an error is retryable */
   isRetryable?: (error: any) => boolean;
+  /** Alternative to isRetryable - more descriptive name */
+  shouldRetry?: (error: any) => boolean;
+  /** Custom function to calculate delay between retries */
+  calculateDelay?: (attempt: number, error: any) => number;
 }
 
 /**
@@ -124,7 +128,9 @@ export async function executeWithRetry<T>(
   errorMessage: string = 'Operation failed after multiple retries',
   metadata: Record<string, any> = {}
 ): Promise<T> {
-  const isRetryableFn = config.isRetryable || isRetryableError;
+  // Use shouldRetry if provided, otherwise fall back to isRetryable, or default to isRetryableError
+  const isRetryableFn =
+    config.shouldRetry || config.isRetryable || isRetryableError;
   let lastError: any;
   let attempt = 0;
 
@@ -145,8 +151,13 @@ export async function executeWithRetry<T>(
         retryAfter = parseInt(error.response.headers['retry-after'], 10);
       }
 
-      // Calculate delay with exponential backoff
-      const delay = calculateBackoffDelay(attempt, config, retryAfter);
+      // Calculate delay - use custom function if provided
+      let delay: number;
+      if (config.calculateDelay) {
+        delay = config.calculateDelay(attempt, error);
+      } else {
+        delay = calculateBackoffDelay(attempt, config, retryAfter);
+      }
 
       // Log retry attempt
       config.logger.warn(
