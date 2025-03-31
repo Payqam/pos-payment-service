@@ -1,6 +1,22 @@
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SQSEvent } from 'aws-lambda';
 import { IncomingWebhook } from '@slack/webhook';
+import { registerRedactFilter } from '../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'partyId',
+  'payToken',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'body',
+];
+registerRedactFilter(sensitiveFields);
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL as string;
 
@@ -10,6 +26,7 @@ export class DeadLetterQueueService {
   private readonly webhook: IncomingWebhook;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.webhook = new IncomingWebhook(SLACK_WEBHOOK_URL);
     this.logger.info('DeadLetterQueueService initialized');
@@ -33,7 +50,15 @@ export class DeadLetterQueueService {
 
         this.logger.info('Parsed message:', parsedMessage);
 
+        this.logger.debug('Processing DLQ record', {
+          messageId: record.messageId,
+        });
+
         await this.sendSlackMessage(parsedMessage, record.messageId);
+
+        this.logger.debug('Slack message sent successfully', {
+          messageId: record.messageId,
+        });
       } catch (error) {
         this.logger.error('Failed to process message', {
           error: error instanceof Error ? error.message : error,
@@ -56,6 +81,9 @@ export class DeadLetterQueueService {
     try {
       await this.webhook.send(slackPayload);
       this.logger.info('Slack message sent successfully');
+      this.logger.debug('Slack notification sent', {
+        messageId: message.messageId,
+      });
     } catch (error) {
       this.logger.error('Failed to send Slack notification', {
         error: error instanceof Error ? error.message : error,
