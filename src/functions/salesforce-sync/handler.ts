@@ -246,7 +246,7 @@ export class SalesforceSyncService {
     this.logger.info('Processing Salesforce sync event', { event });
 
     try {
-      // const credentials = await this.getSalesforceCredentials();
+      const credentials = await this.getSalesforceCredentials();
 
       for (const record of event.Records) {
         try {
@@ -255,7 +255,7 @@ export class SalesforceSyncService {
             messageId: record.Sns.MessageId,
           });
           this.logger.info('Create case', { message });
-          // await this.handlePaymentCreated(message, credentials);
+          await this.handlePaymentCreated(message, credentials);
         } catch (messageError) {
           this.logger.error('Error processing individual message', {
             error: messageError,
