@@ -24,31 +24,31 @@
     {
       "title": "Invalid phone number format for customerPhone",
       "body": { "mtn[customerPhone]": "invalid_number"},
-      "expectedStatus": 500,
+      "expectedStatus": 400,
       "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
     {
       "title": "Invalid phone number for merchantMobile",
       "body": { "mtn[merchantMobileNo]": "invalid_number"},
-      "expectedStatus": 500,
+      "expectedStatus": 400,
       "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
   {
     "title": "Exceeding maximum transaction limit",
     "body": {"mtn[amount]": 1000000000000000000000000000000.0 },
-    "expectedStatus": 500,
+    "expectedStatus": 400,
     "expectedMessage": "Unsupported transaction type: PAYMENT"
   },
     {
       "title": "Empty phone number for customerPhone",
       "body": { "mtn[customerPhone]": " "},
-      "expectedStatus": 500,
+      "expectedStatus": 400,
       "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
     {
       "title": "Empty phone number for merchantMobile",
       "body": { "mtn[merchantMobileNo]": " "},
-      "expectedStatus": 500,
+      "expectedStatus": 400,
       "expectedMessage": "Unsupported transaction type: PAYMENT"
     },
   {
@@ -59,68 +59,85 @@
   }
   ],
   "requestToPayPayer": [
-      {
-        "title": "failed payment request",
-        "payer": "46733123450",
-        "reason":"INTERNAL_PROCESSING_ERROR"
-      },
-      {
-        "title": "rejected payment request",
-        "payer": "46733123451",
-        "reason":"APPROVAL_REJECTED"
-      },
-      {
-        "title": "expired payment request",
-        "payer": "46733123452",
-        "reason":"EXPIRED"
-      },
-      {
-        "title": "non-existent payer",
-        "payer": "46733123455",
-        "reason":"PAYER_NOT_FOUND"
-      },
-      {
-        "title": "payee not allowed to receive",
-        "payer": "46733123456",
-        "reason":"PAYEE_NOT_ALLOWED_TO_RECEIVE"
-      },
-      {
-        "title": "payer not allowed to initiate",
-        "payer": "46733123457",
-        "reason":"NOT_ALLOWED"
-      },
-      {
-        "title": "invalid target environment",
-        "payer": "46733123458",
-        "reason":"NOT_ALLOWED_TARGET_ENVIRONMENT"
-      },
+    {
+      "title": "rejected payment request",
+      "payer": "46733123451",
+      "reason":"APPROVAL_REJECTED",
+      "Error_Code__c":"400",
+      "Error_Type__c": "PayerRejected"
+    },
+       {
+      "title": "expired payment request",
+      "payer": "46733123452",
+      "reason":"EXPIRED",
+      "Error_Code__c":"408",
+      "Error_Type__c": "PayerExpired"
+    },
+    {
+      "title": "non-existent payer",
+      "payer": "46733123455",
+      "reason":"PAYER_NOT_FOUND",
+      "Error_Code__c":"404",
+      "Error_Type__c": "PayerNotFound"
+    },
+
+    {
+      "title": "payee not allowed to receive",
+      "payer": "46733123456",
+      "reason":"PAYEE_NOT_ALLOWED_TO_RECEIVE",
+      "Error_Code__c":"403",
+      "Error_Type__c": "PayerNotAllowedToReceive"
+    },
+    {
+      "title": "payer not allowed to initiate",
+      "payer": "46733123457",
+      "reason":"NOT_ALLOWED",
+      "Error_Code__c":"403",
+      "Error_Type__c": "RequestToPayPayerNotAllowed"
+    },
+    {
+      "title": "invalid target environment",
+      "payer": "46733123458",
+      "reason":"NOT_ALLOWED_TARGET_ENVIRONMENT",
+      "Error_Code__c":"403",
+      "Error_Type__c": "RequestToPayPayerNotAllowedTargetEnvironment"
+    },
       {
         "title": "invalid callback URL host",
         "payer": "46733123459",
-        "reason":"INVALID_CALLBACK_URL_HOST"
+        "reason":"INVALID_CALLBACK_URL_HOST",
+        "Error_Code__c":"403",
+        "Error_Type__c": "RequestToPayPayerInvalidCallbackUrlHost"
       },
       {
         "title": "invalid currency in payment request",
         "payer": "46733123460",
-        "reason":"INVALID_CURRENCY"
+        "reason":"INVALID_CURRENCY",
+        "Error_Code__c":"403",
+        "Error_Type__c": "RequestToPayPayerInvalidCurrency"
       },
       {
         "title": "internal processing error",
         "payer": "46733123461",
-        "reason":"INTERNAL_PROCESSING_ERROR"
+        "reason":"INTERNAL_PROCESSING_ERROR",
+        "Error_Code__c":"500",
+        "Error_Type__c": "RequestToPayPayerInternalProcessingError"
       },
       {
         "title": "service unavailable scenario",
         "payer": "46733123462",
-        "reason":"SERVICE_UNAVAILABLE"
+        "reason":"SERVICE_UNAVAILABLE",
+        "Error_Code__c":"503",
+        "Error_Type__c": "RequestToPayPayerServiceUnavailable"
       },
       {
         "title": "transaction failure",
         "payer": "46733123463",
-        "reason":"COULD_NOT_PERFORM_TRANSACTION"
+        "reason":"COULD_NOT_PERFORM_TRANSACTION",
+        "Error_Code__c":"500",
+        "Error_Type__c": "RequestToPayPayerCouldNotPerformTransaction"
       }
     ],
-
 
   "AccountHolderActivePartyCode": [
   {
@@ -148,12 +165,49 @@
     "transactionId": "585c07a4-2c80-42f7-9e73-e586b36dee68"
   }
 ],
-  "refundTestData": [
+  "requestPayer": [
     {
-      "payer": "94713579067",
+      "title": "Ongoing payment request",
+      "payer": "46733123453",
+      "merchant": "94760000000"
+    },
+    {
+      "title": "delayed payment request",
+      "payer": "46733123454",
       "merchant": "94760000000"
     }
   ],
+
+  "errortest": [
+    {
+      "title": "failed payment request",
+      "payer": "46733123450",
+      "reason":"INTERNAL_PROCESSING_ERROR"
+    },
+    {
+      "title": "rejected payment request",
+      "payer": "46733123451",
+      "reason":"APPROVAL_REJECTED"
+    }
+  ],
+
+"RefundTestData":[
+  {
+    "title": "full amount refund",
+    "amount": 2000,
+    "status": "SUCCESSFUL",
+    "payer": "94713579067",
+    "merchant": "94760000000"
+  },
+  {
+    "title": "partial amount refund",
+    "amount": 1500,
+    "status": "SUCCESSFUL",
+    "payer": "94713579067",
+    "merchant": "94760000000"
+  }
+],
+
   "invalidRefundData": [
     {
       "title": "Invalid transactionId",
@@ -194,9 +248,10 @@
       "reason":"INTERNAL_PROCESSING_ERROR"
     },
     {
-      "title": "rejected payment request",
-      "payer": "46733123451",
-      "reason":"APPROVAL_REJECTED"
+      "title": "with amount greater than original payment",
+      "body": { "mtn[amount]": "3000"},
+      "expectedStatus":400,
+      "expectedMessage": "Invalid request body"
     }
   ]
 }
