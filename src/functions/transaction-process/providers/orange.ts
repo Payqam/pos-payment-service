@@ -2,7 +2,7 @@ import { Logger, LoggerService } from '@mu-ts/logger';
 import { SecretsManagerService } from '../../../services/secretsManagerService';
 import { DynamoDBService } from '../../../services/dynamodbService';
 import { SNSService } from '../../../services/snsService';
-import { CreatePaymentRecord, UpdatePaymentRecord } from '../../../model';
+import { CreatePaymentRecord, SNSMessage, UpdatePaymentRecord } from '../../../model';
 import { v4 as uuidv4 } from 'uuid';
 import axios, { AxiosInstance } from 'axios';
 import querystring from 'querystring';
@@ -412,6 +412,7 @@ export class OrangePaymentService {
    */
   private async publishTransactionStatus(params: {
     transactionId: string;
+    paymentMethod: string;
     status: string;
     type: string;
     amount: number;
@@ -419,29 +420,40 @@ export class OrangePaymentService {
     transactionType: string;
     metaData?: Record<string, string>;
     fee: number;
+    createdOn?: string;
     customerPhone?: string;
     currency?: string;
+    exchangeRate?: string;
+    processingFee?: string;
+    netAmount?: string;
+    externalTransactionId?: string;
+    settlementAmount?: string;
+    merchantMobileNo?: string;
+    originalTransactionId?: string;
   }) {
+    this.logger.info('Publishing transaction status to SNS', params);
     const dateTime = new Date().toISOString();
     const timestamp = Math.floor(new Date(dateTime).getTime() / 1000);
     await this.snsService.publish({
       transactionId: params.transactionId,
-      paymentMethod: 'Orange',
+      originalTransactionId: params.originalTransactionId,
+      paymentMethod: params.paymentMethod,
       status: params.status,
-      type: params.type,
-      amount: params.amount,
+      amount: params.amount.toString(),
       merchantId: params.merchantId,
       transactionType: params.transactionType,
       metaData: params.metaData,
-      fee: params.fee,
-      createdOn: timestamp,
+      fee: params.fee.toString(),
+      createdOn: params.createdOn || timestamp,
       customerPhone: params.customerPhone,
       currency: params.currency || 'EUR',
-      exchangeRate: 'N/A',
-      processingFee: 'N/A',
-      netAmount: 'N/A',
-      externalTransactionId: 'N/A',
-    });
+      exchangeRate: params.exchangeRate || 'N/A',
+      processingFee: params.processingFee || 'N/A',
+      netAmount: params.netAmount || 'N/A',
+      externalTransactionId: params.externalTransactionId || 'N/A',
+      settlementAmount: params.settlementAmount || 'N/A',
+      merchantMobileNo: params.merchantMobileNo
+    } as SNSMessage);
   }
 
   /**
@@ -481,6 +493,9 @@ export class OrangePaymentService {
     metaData?: Record<string, never> | Record<string, string>,
     currency: string = 'EUR'
   ): Promise<{ transactionId: string; status: string }> {
+
+    this.logger.info('Orange Money charge initiated', { amount, customerPhone, merchantId, merchantMobileNo, metaData, currency });
+
     const transactionId = uuidv4();
     const feePercentage = 0.02;
     const feeAmount = Math.floor(amount * feePercentage);
@@ -551,6 +566,7 @@ export class OrangePaymentService {
       // Publish status to SNS
       await this.publishTransactionStatus({
         transactionId,
+        paymentMethod: 'ORANGE',
         status: OrangePaymentStatus.PAYMENT_REQUEST_CREATED,
         type: 'CREATE',
         amount,
@@ -560,6 +576,10 @@ export class OrangePaymentService {
         fee: feeAmount,
         customerPhone,
         currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: (amount - feeAmount).toString(),
+        externalTransactionId: paymentResponse.data.txnid,
+        merchantMobileNo: merchantMobileNo
       });
 
       // Check if we're in sandbox environment
@@ -612,6 +632,7 @@ export class OrangePaymentService {
       // Publish failed status to SNS
       await this.publishTransactionStatus({
         transactionId,
+        paymentMethod: 'ORANGE',
         status: OrangePaymentStatus.PAYMENT_FAILED,
         type: 'CREATE',
         amount,
@@ -621,6 +642,10 @@ export class OrangePaymentService {
         fee: feeAmount,
         customerPhone,
         currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: amount.toString(),
+        externalTransactionId: 'N/A',
+        merchantMobileNo: merchantMobileNo
       });
 
       throw error;
@@ -679,11 +704,11 @@ export class OrangePaymentService {
         };
       }
 
-            // // Check if it's already a successful refund
+      // // Check if it's already a successful refund
       if (
         existingTransaction.transactionType === 'REFUND' &&
         existingTransaction.amount ===
-          0
+        0
       ) {
         return {
           transactionId,
@@ -750,6 +775,8 @@ export class OrangePaymentService {
       merchantMobileNo,
       currency,
     });
+
+    let merchantPayOrderId = '';
 
     try {
       // Step 1: Initialize refund cashin
@@ -834,7 +861,7 @@ export class OrangePaymentService {
 
       // Step 3: Initiate merchant payment
       const merchantPayToken = await this.initiateMerchantPayment();
-      const merchantPayOrderId = this.generateOrderId('MP'); // Using MP prefix for merchant payments
+      merchantPayOrderId = this.generateOrderId('MP'); // Using MP prefix for merchant payments
 
       // Step 4: Execute merchant payment
       const merchantPayResponse = await this.executeMerchantPayment({
@@ -909,15 +936,37 @@ export class OrangePaymentService {
       // Publish status to SNS
       await this.publishTransactionStatus({
         transactionId,
-        status: OrangePaymentStatus.MERCHANT_REFUND_SUCCESSFUL,
+        paymentMethod: 'ORANGE',
+        status: OrangePaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
+        type: 'UPDATE',
+        amount: existingTransaction.amount - amount,
+        merchantId,
+        transactionType: 'REFUND',
+        metaData: {},
+        fee: existingTransaction.fee,
+        customerPhone,
+        currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: amount.toString(),
+        merchantMobileNo: merchantMobileNo
+      });
+
+      await this.publishTransactionStatus({
+        transactionId: merchantPayOrderId,
+        originalTransactionId: transactionId,
+        paymentMethod: 'ORANGE',
+        status: OrangePaymentStatus.MERCHANT_REFUND_REQUEST_CREATED,
         type: 'UPDATE',
         amount,
         merchantId,
         transactionType: 'REFUND',
-        metaData: record.metaData,
+        metaData: {},
         fee: 0,
         customerPhone,
         currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: amount.toString(),
+        merchantMobileNo: merchantMobileNo
       });
 
       return {
@@ -947,6 +996,7 @@ export class OrangePaymentService {
       // Publish failed status to SNS
       await this.publishTransactionStatus({
         transactionId,
+        paymentMethod: 'ORANGE',
         status: OrangePaymentStatus.MERCHANT_REFUND_FAILED,
         type: 'UPDATE',
         amount,
@@ -956,6 +1006,28 @@ export class OrangePaymentService {
         fee: 0,
         customerPhone,
         currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: amount.toString(),
+        externalTransactionId: 'N/A',
+        merchantMobileNo: merchantMobileNo
+      });
+
+      await this.publishTransactionStatus({
+        transactionId: merchantPayOrderId,
+        originalTransactionId: transactionId,
+        paymentMethod: 'ORANGE',
+        status: OrangePaymentStatus.MERCHANT_REFUND_FAILED,
+        type: 'UPDATE',
+        amount,
+        merchantId,
+        transactionType: 'REFUND',
+        metaData: {},
+        fee: 0,
+        customerPhone,
+        currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: amount.toString(),
+        merchantMobileNo: merchantMobileNo
       });
 
       throw error;

@@ -10,7 +10,7 @@ import {
   TransactionRecord,
 } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-import { PaymentResponse } from '../../../../model';
+import { PaymentResponse, SNSMessage } from '../../../../model';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { PAYMENT_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
@@ -213,44 +213,53 @@ export class OrangeChargeWebhookService {
     }
   }
 
-  private async publishStatusUpdate(
-    transactionId: string,
-    status: string,
-    amount: string,
-    paymentResponse: PaymentResponse['data']
-  ): Promise<void> {
-    try {
-      const isFailedStatus = status === 'FAILED';
-      let transactionError;
-
-      if (isFailedStatus) {
-        transactionError = {
-          ErrorCode:
-            paymentResponse.inittxnstatus ||
-            paymentResponse.confirmtxnstatus ||
-            'UNKNOWN',
-          ErrorMessage: paymentResponse.inittxnmessage || 'Transaction failed',
-          ErrorType: 'payment_failed',
-          ErrorSource: 'ORANGE',
-        };
-      }
-
-      await this.snsService.publish({
-        transactionId,
-        status,
-        type: isFailedStatus ? 'FAILED' : 'UPDATE',
-        amount,
-        TransactionError: transactionError,
-        paymentMethod: 'ORANGE',
-        metadata: {
-          payToken: paymentResponse.payToken,
-          txnid: paymentResponse.txnid,
-        },
-      });
-    } catch (error) {
-      this.logger.error('Failed to publish status update', { error });
-      throw new WebhookError('Failed to publish status update', 500, error);
-    }
+  /**
+ * Publishes a transaction status update to SNS
+ */
+  private async publishTransactionStatus(params: {
+    transactionId: string;
+    paymentMethod: string;
+    status: string;
+    type: string;
+    amount: number;
+    merchantId: string;
+    transactionType: string;
+    metaData?: Record<string, string>;
+    fee: number;
+    createdOn?: string;
+    customerPhone?: string;
+    currency?: string;
+    exchangeRate?: string;
+    processingFee?: string;
+    netAmount?: string;
+    externalTransactionId?: string;
+    settlementAmount?: string;
+    merchantMobileNo?: string;
+    originalTransactionId?: string;
+  }) {
+    this.logger.info('Publishing transaction status to SNS', params);
+    const dateTime = new Date().toISOString();
+    const timestamp = Math.floor(new Date(dateTime).getTime() / 1000);
+    await this.snsService.publish({
+      transactionId: params.transactionId,
+      originalTransactionId: params.originalTransactionId,
+      paymentMethod: params.paymentMethod,
+      status: params.status,
+      amount: params.amount.toString(),
+      merchantId: params.merchantId,
+      transactionType: params.transactionType,
+      metaData: params.metaData,
+      fee: params.fee.toString(),
+      createdOn: params.createdOn || timestamp,
+      customerPhone: params.customerPhone,
+      currency: params.currency,
+      exchangeRate: params.exchangeRate,
+      processingFee: params.processingFee,
+      netAmount: params.netAmount,
+      externalTransactionId: params.externalTransactionId,
+      settlementAmount: params.settlementAmount,
+      merchantPhone: params.merchantMobileNo
+    } as SNSMessage);
   }
 
   private async getOrangeCredentials() {
@@ -417,22 +426,22 @@ export class OrangeChargeWebhookService {
           isSuccessful: disbursementResult.status === 'SUCCESSFULL',
         });
 
-              // Check if we're in sandbox environment
-      if (credentials.targetEnvironment === 'sandbox') {
-        const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
+        // Check if we're in sandbox environment
+        if (credentials.targetEnvironment === 'sandbox') {
+          const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
 
-        // Override payment status based on test phone numbers
-        const scenarioKey = Object.entries(TEST_NUMBERS.PAYMENT_SCENARIOS).find(
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          ([_, number]) => number === subscriberMsisdn
-        )?.[0];
+          // Override payment status based on test phone numbers
+          const scenarioKey = Object.entries(TEST_NUMBERS.PAYMENT_SCENARIOS).find(
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            ([_, number]) => number === subscriberMsisdn
+          )?.[0];
 
-        if (scenarioKey && scenarioKey in PAYMENT_SCENARIOS) {
-          const scenario =
-            PAYMENT_SCENARIOS[scenarioKey as keyof typeof PAYMENT_SCENARIOS];
+          if (scenarioKey && scenarioKey in PAYMENT_SCENARIOS) {
+            const scenario =
+              PAYMENT_SCENARIOS[scenarioKey as keyof typeof PAYMENT_SCENARIOS];
             disbursementResult.status = scenario.status;
+          }
         }
-      }
 
         // Only add disbursement data if we have valid results
         if (disbursementResult.status === 'SUCCESSFULL') {
@@ -459,12 +468,21 @@ export class OrangeChargeWebhookService {
       await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
       // Publish the status update using transaction data
-      await this.publishStatusUpdate(
-        transaction.transactionId,
-        status,
-        transaction.amount.toString(),
-        paymentResponse.data
-      );
+      await this.publishTransactionStatus({
+        transactionId: transaction.transactionId,
+        paymentMethod: 'ORANGE',
+        status: OrangePaymentStatus.PAYMENT_SUCCESSFUL,
+        type: 'UPDATE',
+        amount: transaction.amount,
+        merchantId: transaction.merchantId,
+        transactionType: 'CHARGE',
+        metaData: {},
+        fee: transaction.fee || 0,
+        currency: transaction.currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: transaction.settlementAmount?.toString() || '0',
+        merchantMobileNo: transaction.merchantMobileNo
+      });
 
       return {
         statusCode: 200,
