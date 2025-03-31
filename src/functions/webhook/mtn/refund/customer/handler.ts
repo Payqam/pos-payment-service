@@ -207,7 +207,7 @@ export class MTNDisbursementWebhookService {
         transactionType: 'REFUND',
         createdOn: dateTime,
         customerPhone: existingTransaction.Item?.customerPhone,
-        currency: existingTransaction.Item?.merchantId,
+        currency: existingTransaction.Item?.currency,
         originalTransactionId: existingTransaction.Item?.transactionId,
       });
       const existingResponses =
