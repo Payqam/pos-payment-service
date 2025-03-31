@@ -1,6 +1,22 @@
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SQSEvent } from 'aws-lambda';
 import { IncomingWebhook } from '@slack/webhook';
+import { registerRedactFilter } from '../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'partyId',
+  'payToken',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'body',
+];
+registerRedactFilter(sensitiveFields);
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL as string;
@@ -16,6 +32,7 @@ export class DeadLetterQueueService {
   private readonly sesClient: SESClient;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.webhook = new IncomingWebhook(SLACK_WEBHOOK_URL);
     this.sesClient = new SESClient({ region: AWS_REGION });

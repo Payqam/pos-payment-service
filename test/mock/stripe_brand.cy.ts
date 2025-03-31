@@ -96,7 +96,7 @@ describe('Successful Payment -  Cards by Brand', () => {
           );
           expect(response.body.transaction.Item).to.have.property(
             'status',
-            'CHARGE_UPDATED'
+            'CHARGE_UPDATE_SUCCEEDED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -152,10 +152,10 @@ describe('Successful Payment -  Cards by Brand', () => {
       });
 
       it(`Verify Payment on salesforce`, () => {
-        cy.wait(500);
+        cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },
@@ -163,13 +163,32 @@ describe('Successful Payment -  Cards by Brand', () => {
           expect(response.status).to.eq(200);
           expect(response.body.records[0]).to.have.property(
             'status__c',
-            'CHARGE_UPDATED'
+            'CHARGE_UPDATE_SUCCEEDED'
           );
           expect(response.body.records[0]).to.have.property('Fee__c', '12000');
-          // expect(response.body.records[0]).to.have.property('amount__c', '97.5');
+          expect(response.body.records[0]).to.have.property(
+            'amount__c',
+            '108000'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Net_Amount__c',
+            '120000'
+          );
           expect(response.body.records[0]).to.have.property(
             'MerchantId__c',
             'M123'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Merchant_Phone__c',
+            '94713579023'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Customer_Phone__c',
+            '3333'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'ServiceType__c',
+            'Stripe'
           );
           cy.task('log', response.body);
         });
@@ -217,6 +236,7 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           },
           body: {
             merchantId: 'M123',
+            merchantMobileNo: '94713579023',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
@@ -272,7 +292,7 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           );
           expect(response.body.transaction.Item).to.have.property(
             'status',
-            'CHARGE_UPDATED'
+            'CHARGE_UPDATE_SUCCEEDED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -328,9 +348,10 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
       });
 
       it(`Verify Payment on salesforce`, () => {
+        cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },
@@ -338,13 +359,32 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           expect(response.status).to.eq(200);
           expect(response.body.records[0]).to.have.property(
             'status__c',
-            'CHARGE_UPDATED'
+            'CHARGE_UPDATE_SUCCEEDED'
           );
           expect(response.body.records[0]).to.have.property('Fee__c', '12000');
-          // expect(response.body.records[0]).to.have.property('amount__c', '97.5');
+          expect(response.body.records[0]).to.have.property(
+            'amount__c',
+            '108000'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Net_Amount__c',
+            '120000'
+          );
           expect(response.body.records[0]).to.have.property(
             'MerchantId__c',
             'M123'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Merchant_Phone__c',
+            '94713579023'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Customer_Phone__c',
+            '3333'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'ServiceType__c',
+            'Stripe'
           );
           cy.task('log', response.body);
         });
@@ -352,6 +392,7 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
     });
   });
 });
+
 describe('Successful Payment -  Cards by Brand', () => {
   testData.testCardsRequiresAction.forEach((card) => {
     describe(`Verify Successful Payment -  ${card.type}`, () => {
@@ -391,6 +432,7 @@ describe('Successful Payment -  Cards by Brand', () => {
           },
           body: {
             merchantId: 'M123',
+            merchantMobileNo: '94713579023',
             amount: 120000,
             transactionType: 'CHARGE',
             paymentMethod: 'CARD',
@@ -447,7 +489,7 @@ describe('Successful Payment -  Cards by Brand', () => {
           );
           expect(response.body.transaction.Item).to.have.property(
             'status',
-            'requires_action'
+            'INTENT_REQUIRES_ACTION'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
           cy.task('log', ` ${uniqueId}`);
@@ -503,9 +545,10 @@ describe('Successful Payment -  Cards by Brand', () => {
       });
 
       it(`Verify Payment on salesforce`, () => {
+        cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },
@@ -513,13 +556,32 @@ describe('Successful Payment -  Cards by Brand', () => {
           expect(response.status).to.eq(200);
           expect(response.body.records[0]).to.have.property(
             'status__c',
-            'requires_action'
+            'INTENT_REQUIRES_ACTION'
           );
           expect(response.body.records[0]).to.have.property('Fee__c', '12000');
-          // expect(response.body.records[0]).to.have.property('amount__c', '97.5');
+          expect(response.body.records[0]).to.have.property(
+            'amount__c',
+            '108000'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Net_Amount__c',
+            '120000'
+          );
           expect(response.body.records[0]).to.have.property(
             'MerchantId__c',
             'M123'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Merchant_Phone__c',
+            '94713579023'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'Customer_Phone__c',
+            '3333'
+          );
+          expect(response.body.records[0]).to.have.property(
+            'ServiceType__c',
+            'Stripe'
           );
           cy.task('log', response.body);
         });

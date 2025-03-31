@@ -72,6 +72,7 @@ export class MtnPaymentService {
   private readonly snsService: SNSService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();
@@ -202,11 +203,26 @@ export class MtnPaymentService {
         type === TransactionType.MERCHANT_REFUND
           ? '/collection/token/'
           : '/disbursement/token/';
+      // Log the transaction type and API path being used
+      this.logger.debug('Generating MTN token', {
+        type,
+        apiPath,
+        baseURL: this.baseUrl,
+      });
+
       const creds =
         type === TransactionType.PAYMENT ||
         type === TransactionType.MERCHANT_REFUND
           ? credentials.collection
           : credentials.disbursement;
+
+      // Log credential information (without sensitive data)
+      this.logger.debug('Using credentials', {
+        apiUser: creds.apiUser,
+        hasApiKey: !!creds.apiKey,
+        hasSubscriptionKey: !!creds.subscriptionKey,
+        targetEnvironment: credentials.targetEnvironment,
+      });
 
       const config = {
         baseURL: this.baseUrl,
@@ -220,7 +236,34 @@ export class MtnPaymentService {
         },
       };
 
+      // Log the request configuration (without sensitive data)
+      this.logger.debug('Token request configuration', {
+        url: `${this.baseUrl}${apiPath}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': config.headers['Content-Type'],
+          'Ocp-Apim-Subscription-Key': config.headers[
+            'Ocp-Apim-Subscription-Key'
+          ]
+            ? '[PRESENT]'
+            : '[MISSING]',
+        },
+        auth: {
+          username: config.auth.username,
+          password: config.auth.password ? '[PRESENT]' : '[MISSING]',
+        },
+      });
+
+      // Make the token request
+      this.logger.debug('Sending token request to MTN API');
       const response = await axios.post(apiPath, {}, config);
+
+      // Log the response status and headers
+      this.logger.debug('Token response received', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
 
       // Only log scalar values from the token response
       this.logger.info('Successfully generated MTN token', {
@@ -229,14 +272,42 @@ export class MtnPaymentService {
       });
 
       return response.data;
-    } catch (error) {
-      // Only log the error message, not the full error object
-      this.logger.error('Error generating MTN token', {
+    } catch (error: any) {
+      // Enhanced error logging with more details
+      const errorObj: any = {
         error: error instanceof Error ? error.message : 'Unknown error',
         type,
         baseURL: this.baseUrl,
-      });
-      throw new Error('Failed to generate MTN token');
+      };
+
+      // Add axios error details if available
+      if (error.isAxiosError) {
+        errorObj.status = error.response?.status;
+        errorObj.statusText = error.response?.statusText;
+        errorObj.responseData = error.response?.data;
+        errorObj.responseHeaders = error.response?.headers;
+        errorObj.requestUrl = `${this.baseUrl}${error.config?.url || ''}`;
+        errorObj.requestMethod = error.config?.method;
+        errorObj.requestHeaders = {
+          'Content-Type': error.config?.headers?.['Content-Type'],
+          'Ocp-Apim-Subscription-Key': error.config?.headers?.[
+            'Ocp-Apim-Subscription-Key'
+          ]
+            ? '[PRESENT]'
+            : '[MISSING]',
+        };
+        errorObj.hasAuth = !!(
+          error.config?.auth?.username && error.config?.auth?.password
+        );
+      }
+
+      this.logger.error('Error generating MTN token', errorObj);
+      throw new EnhancedError(
+        'MTN_TOKEN_ERROR',
+        ErrorCategory.PROVIDER_ERROR,
+        'Failed to generate MTN token',
+        error
+      );
     }
   }
 
@@ -559,7 +630,7 @@ export class MtnPaymentService {
         // Get the current total customer refund amount
         const totalCustomerRefundAmount =
           Number(transactionRecord.Item.totalCustomerRefundAmount) || 0;
-        this.logger.info('[debug]validations', {
+        this.logger.info('validations', {
           transactionId,
           totalCustomerRefundAmount,
           refundAmount,

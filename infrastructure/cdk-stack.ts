@@ -37,6 +37,7 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import { BlockPublicAccess, Bucket } from 'aws-cdk-lib/aws-s3';
 
+LoggerService.setLevel('debug');
 const logger: Logger = LoggerService.named('cdk-stack');
 
 interface CDKStackProps extends cdk.StackProps {
