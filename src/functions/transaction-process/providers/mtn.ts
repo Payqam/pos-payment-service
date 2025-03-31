@@ -366,6 +366,13 @@ export class MtnPaymentService {
         headers: response.headers,
       });
 
+      // Log the response status and headers
+      this.logger.debug('Token response received', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+
       // Only log scalar values from the token response
       this.logger.info('Successfully generated MTN token', {
         tokenType: response.data.token_type,
@@ -763,7 +770,7 @@ export class MtnPaymentService {
         // Get the current total customer refund amount
         const totalCustomerRefundAmount =
           Number(transactionRecord.Item.totalCustomerRefundAmount) || 0;
-        this.logger.info('[debug]validations', {
+        this.logger.info('validations', {
           transactionId,
           totalCustomerRefundAmount,
           refundAmount,

@@ -10,6 +10,8 @@ export interface EnvConfig {
   LOG_LEVEL: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
   SLACK_WEBHOOK_URL: string;
   APP_VPC_ID: string;
+  DESTINATION_EMAIL: string;
+  SOURCE_EMAIL: string;
 }
 dotenv.config();
 
@@ -20,7 +22,10 @@ const namespace: string = app.node.tryGetContext('namespace')
   : '';
 const envConfigs: EnvConfig = app.node.tryGetContext(envName);
 const slackWebhookUrl = envConfigs.SLACK_WEBHOOK_URL;
-const appVpcId = 'vpc-02cc78e1af823536e';
+const appVpcId = envConfigs.APP_VPC_ID;
+const destinationEmail = envConfigs.DESTINATION_EMAIL;
+const sourceEmail = envConfigs.SOURCE_EMAIL;
+
 const stackName = `${process.env.CDK_STACK_NAME_PREFIX}-backend-${envName}${namespace}`;
 
 const stack = new CDKStack(app, stackName, {
@@ -33,6 +38,8 @@ const stack = new CDKStack(app, stackName, {
   envConfigs,
   slackWebhookUrl,
   appVpcId,
+  destinationEmail,
+  sourceEmail,
 });
 
 Tags.of(stack).add('Environment', envName);

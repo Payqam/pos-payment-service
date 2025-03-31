@@ -21,6 +21,20 @@ import {
   EnhancedError,
   ErrorCategory,
 } from '../../../../../utils/errorHandler';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'referenceId',
+  'uniqueId',
+  'partyId',
+  'merchantMobileNo',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'settlementAmount',
+  'settlementRetryResponse',
+];
+registerRedactFilter(sensitiveFields);
 
 class WebhookError extends Error {
   constructor(
@@ -300,8 +314,14 @@ export class MTNDisbursementWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing MTN disbursement webhook');
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
+
+      this.logger.debug('Webhook event parsed', {
+        externalId,
+        status: webhookEvent.status,
+      });
 
       // Query using uniqueId in the GSI3
       const result = await this.dbService.queryByGSI(
@@ -312,15 +332,23 @@ export class MTNDisbursementWebhookService {
       );
 
       if (!result.Items?.[0]) {
+        this.logger.debug('Transaction not found', { externalId });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
       const transactionId = result.Items[0].transactionId;
 
+      this.logger.debug('Transaction found', { externalId });
+
       const transactionStatus = await this.mtnService.checkTransactionStatus(
         externalId,
         TransactionType.TRANSFER
       );
+
+      this.logger.debug('Transaction status checked', {
+        externalId,
+        status: transactionStatus.status,
+      });
 
       await this.updateSettlementStatus(
         transactionId,
@@ -328,6 +356,11 @@ export class MTNDisbursementWebhookService {
         transactionStatus
       );
 
+      this.logger.debug('Settlement status updated', { externalId });
+
+      this.logger.debug('Webhook processing completed successfully', {
+        externalId,
+      });
       return {
         statusCode: 200,
         headers: API.DEFAULT_HEADERS,

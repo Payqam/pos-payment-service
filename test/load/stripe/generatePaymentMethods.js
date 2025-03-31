@@ -1,8 +1,8 @@
 const fs = require('fs');
 const axios = require('axios');
 
-const STRIPE_URL = 'https://api.stripe.com/v1/payment_methods';
-const STRIPE_SECRET = 'pk_test_51Qm8InLS3EJLWOAq2cddaXFyFDaeAN1e0nUCXd6sevCWMUgBWQYP56zE9A8uwqus4Ib9it4uRGXbCTCJQxpElDs300mme80dCm';
+const STRIPE_URL = 'place your stripe url here';
+const STRIPE_SECRET = 'place your stripe secret here';
 
 async function generatePaymentMethods() {
     const paymentMethods = [];

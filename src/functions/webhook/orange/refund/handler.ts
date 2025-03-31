@@ -15,6 +15,22 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { REFUND_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'payToken',
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'refundMpGetResponse',
+  'refundAmount',
+];
+registerRedactFilter(sensitiveFields);
 import {
   EnhancedError,
   ErrorCategory,
@@ -46,7 +62,6 @@ interface PaymentRecordUpdate {
   fee?: number;
 }
 
-// Keeping WebhookError for backward compatibility
 class WebhookError extends Error {
   constructor(
     message: string,
@@ -224,6 +239,7 @@ export class OrangeRefundWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing Orange refund webhook');
       const webhookEvent = await this.validateWebhook(event);
       const { payToken } = webhookEvent.data;
 
@@ -235,6 +251,7 @@ export class OrangeRefundWebhookService {
       // Get transaction using merchantRefundId (GSI4)
       const transaction = await this.getTransactionByMerchantRefundId(payToken);
       if (!transaction) {
+        this.logger.debug('Transaction not found', { payToken });
         throw new EnhancedError(
           'TRANSACTION_NOT_FOUND',
           ErrorCategory.VALIDATION_ERROR,
@@ -247,6 +264,8 @@ export class OrangeRefundWebhookService {
         );
       }
 
+      this.logger.debug('Transaction found', { payToken });
+
       // Get payment status from Orange API
       const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
 
@@ -258,6 +277,8 @@ export class OrangeRefundWebhookService {
         transaction.transactionId,
         refundMpGetResponsePayload
       );
+
+      this.logger.debug('Payment record updated', { payToken });
 
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
@@ -283,10 +304,14 @@ export class OrangeRefundWebhookService {
 
       const refundStatus = this.determineRefundStatus(paymentStatus);
 
+      this.logger.debug('Refund status determined', { refundStatus });
+
       // Update transaction record
       await this.updatePaymentRecord(transaction.transactionId, {
         status: refundStatus,
       });
+
+      this.logger.debug('Transaction record updated', { payToken });
 
       return {
         statusCode: 200,

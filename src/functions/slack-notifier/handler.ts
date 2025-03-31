@@ -3,6 +3,25 @@ import { IncomingWebhook } from '@slack/webhook';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { promisify } from 'util';
 import { unzip } from 'zlib';
+import { registerRedactFilter } from '../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'lambdaFunction',
+  'errorMessage',
+  'message',
+  'rawMessage',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'partyId',
+  'payToken',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'data',
+];
+registerRedactFilter(sensitiveFields);
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL as string;
 
@@ -20,6 +39,7 @@ export class SlackNotifierService {
 
   public async processEvent(event: CloudWatchLogsEvent): Promise<void> {
     this.logger.info('Processing CloudWatchLogsEvent', { event });
+    this.logger.debug('Processing CloudWatchLogsEvent details', { event });
 
     try {
       const buffer = Buffer.from(event.awslogs.data, 'base64');
@@ -29,6 +49,8 @@ export class SlackNotifierService {
 
       const lambdaFunction = resultObject.logGroup;
       const logEvents = resultObject.logEvents;
+
+      this.logger.debug('Processing log events', { lambdaFunction, logEvents });
 
       for (const logEvent of logEvents) {
         try {
@@ -48,6 +70,12 @@ export class SlackNotifierService {
 
           const status = parsedMessage.level || 'ERROR';
           const errorMessage = parsedMessage.err?.message || parsedMessage.msg;
+
+          this.logger.debug('Sending Slack notification', {
+            lambdaFunction,
+            status,
+            errorMessage,
+          });
 
           await this.sendSlackNotification(
             lambdaFunction,
@@ -91,8 +119,11 @@ export class SlackNotifierService {
       ],
     };
 
+    this.logger.debug('Sending Slack notification payload', { payload });
+
     await this.webhook.send(payload);
     this.logger.info('Slack message sent successfully');
+    this.logger.debug('Slack notification sent successfully');
   }
 
   private getTickedText(text: string): string {
@@ -106,5 +137,7 @@ export class SlackNotifierService {
 
 export const handler: Handler = async (event: CloudWatchLogsEvent) => {
   const service = new SlackNotifierService();
+  const logger = LoggerService.named('slack-notifier-handler');
+  logger.debug('Handler initialized');
   await service.processEvent(event);
 };
