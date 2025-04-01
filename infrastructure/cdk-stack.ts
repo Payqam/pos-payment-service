@@ -951,6 +951,14 @@ export class CDKStack extends cdk.Stack {
       namespace: props.namespace,
       resources,
       webAcl: wafConstruct.webAcl,
+      ...(process.env.DOMAIN_NAME && process.env.CERTIFICATE_ARN
+        ? {
+            customDomain: {
+              domainName: process.env.DOMAIN_NAME,
+              certificateArn: process.env.CERTIFICATE_ARN,
+            },
+          }
+        : {}),
     });
 
     // This is required to add the circular dependencies

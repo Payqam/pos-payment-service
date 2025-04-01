@@ -1,7 +1,9 @@
 import { Construct } from 'constructs';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+// import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as certificatemanager from 'aws-cdk-lib/aws-certificatemanager';
 
 /**
  * Configuration for an API Gateway resource including:
@@ -37,6 +39,10 @@ export interface ApiGatewayConstructProps {
   namespace: string;
   resources: ResourceConfig[];
   webAcl?: wafv2.CfnWebACL;
+  customDomain?: {
+    domainName: string;
+    certificateArn: string;
+  };
 }
 
 /**
@@ -47,9 +53,12 @@ export interface ApiGatewayConstructProps {
  * - Request/response validation
  * - CORS configuration
  * - CloudWatch logging
+ * - Custom domain support
  */
 export class ApiGatewayConstruct extends Construct {
   public readonly api: apigateway.RestApi;
+
+  public readonly customDomainName?: apigateway.DomainName;
 
   constructor(scope: Construct, id: string, props: ApiGatewayConstructProps) {
     super(scope, id);
@@ -92,6 +101,28 @@ export class ApiGatewayConstruct extends Construct {
     usagePlan.addApiStage({
       stage: this.api.deploymentStage,
     });
+
+    if (props.customDomain) {
+      this.customDomainName = new apigateway.DomainName(
+        this,
+        'CustomDomainName',
+        {
+          domainName: props.customDomain.domainName,
+          certificate: certificatemanager.Certificate.fromCertificateArn(
+            this,
+            'Certificate',
+            props.customDomain.certificateArn
+          ),
+          endpointType: apigateway.EndpointType.REGIONAL,
+          securityPolicy: apigateway.SecurityPolicy.TLS_1_2,
+        }
+      );
+      new apigateway.BasePathMapping(this, 'CustomDomainBasePathMapping', {
+        domainName: this.customDomainName,
+        restApi: this.api,
+        stage: this.api.deploymentStage,
+      });
+    }
 
     // Add resources and methods
     props.resources.forEach((config) => {
