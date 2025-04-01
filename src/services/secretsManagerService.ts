@@ -1,6 +1,7 @@
 import { GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { Logger, LoggerService } from '@mu-ts/logger';
 import { SMClient } from '../secretsManagerClient';
+import { EnhancedError, ErrorCategory } from '../../utils/errorHandler';
 
 export class SecretsManagerService {
   private readonly smClient: SMClient;
@@ -30,7 +31,15 @@ export class SecretsManagerService {
         return JSON.parse(response.SecretString);
       } else {
         this.logger.debug(`Secret has no string value`, { secretName });
-        throw new Error(`Secret ${secretName} has no secret string.`);
+        throw new EnhancedError(
+          'SECRET_NOT_FOUND',
+          ErrorCategory.SYSTEM_ERROR,
+          `Secret ${secretName} has no secret string.`,
+          {
+            retryable: false,
+            suggestedAction: 'Verify the secret exists and has a string value',
+          }
+        );
       }
     } catch (error: unknown) {
       this.logger.debug(`Error details for secret fetch`, {
@@ -39,7 +48,24 @@ export class SecretsManagerService {
         errorMessage: (error as Error).message,
       });
       this.logger.error(`Error fetching secret ${secretName}:`, error as Error);
-      throw error;
+
+      // If it's already an EnhancedError, just rethrow it
+      if (error instanceof EnhancedError) {
+        throw error;
+      }
+
+      // Otherwise, wrap it in an EnhancedError
+      throw new EnhancedError(
+        'SECRETS_MANAGER_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        `Failed to fetch secret: ${secretName}`,
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction:
+            'Check AWS Secrets Manager configuration and permissions',
+        }
+      );
     }
   }
 }

@@ -1,6 +1,7 @@
 import { PublishCommandInput } from '@aws-sdk/client-sns';
 import { SNSClientWrapper } from '../snsClient';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { EnhancedError, ErrorCategory } from '../../utils/errorHandler';
 
 LoggerService.setLevel('debug');
 const logger: Logger = LoggerService.named('sns-service');
@@ -29,7 +30,7 @@ export class SNSService {
    * @param message - The message to publish (will be stringified if object)
    * @param messageAttributes - Optional message attributes
    * @returns Promise<string> - The message ID if successful
-   * @throws Error if publishing fails
+   * @throws EnhancedError if publishing fails
    */
   public async publish(
     message: string | object,
@@ -77,7 +78,16 @@ export class SNSService {
         { error, topicArn: this.topicArn, message },
         'Error publishing message to SNS'
       );
-      throw error;
+      throw new EnhancedError(
+        'SNS_PUBLISH_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to publish message to SNS',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check SNS topic ARN and AWS credentials',
+        }
+      );
     }
   }
 }

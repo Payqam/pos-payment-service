@@ -6,6 +6,10 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { Readable } from 'stream';
 import { StripeWebhookService } from '../handler';
 import { StripeTransactionStatus } from '../../../../model';
+import {
+  EnhancedError,
+  ErrorCategory,
+} from '../../../../../utils/errorHandler';
 
 export class WebhookProcessor {
   private readonly logger: Logger;
@@ -49,7 +53,16 @@ export class WebhookProcessor {
       this.logger.info('Received webhook event');
       await this.initialize();
       if (!event.headers['Stripe-Signature'] || !event.body)
-        throw new Error('Invalid webhook request');
+        throw new EnhancedError(
+          'INVALID_WEBHOOK_REQUEST',
+          ErrorCategory.VALIDATION_ERROR,
+          'Invalid webhook request',
+          {
+            retryable: false,
+            suggestedAction:
+              'Ensure Stripe-Signature header and request body are present',
+          }
+        );
       const bodyBuffer = await this.getEventStream(event.body);
 
       const stripeEvent = this.stripeClient.webhooks.constructEvent(
@@ -105,12 +118,21 @@ export class WebhookProcessor {
         body: JSON.stringify({ received: true }),
       };
     } catch (error) {
-      this.logger.error('Error processing webhook', { error });
-      return {
-        statusCode: 400,
-        headers: API.DEFAULT_HEADERS,
-        body: JSON.stringify({ error: 'Webhook processing failed' }),
-      };
+      if (error instanceof EnhancedError) {
+        this.logger.error('Error processing webhook', { error });
+        return {
+          statusCode: 400,
+          headers: API.DEFAULT_HEADERS,
+          body: JSON.stringify({ error: error.message }),
+        };
+      } else {
+        this.logger.error('Error processing webhook', { error });
+        return {
+          statusCode: 400,
+          headers: API.DEFAULT_HEADERS,
+          body: JSON.stringify({ error: 'Webhook processing failed' }),
+        };
+      }
     }
   }
 }

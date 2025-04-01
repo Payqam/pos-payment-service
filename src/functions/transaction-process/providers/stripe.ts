@@ -283,7 +283,16 @@ export class CardPaymentService {
       }
 
       default:
-        throw new Error(`Unsupported transaction type: ${transactionType}`);
+        throw new EnhancedError(
+          'UNSUPPORTED_TRANSACTION_TYPE',
+          ErrorCategory.VALIDATION_ERROR,
+          `Unsupported transaction type: ${transactionType}`,
+          {
+            retryable: false,
+            suggestedAction:
+              'Use a supported transaction type (CHARGE or REFUND)',
+          }
+        );
     }
   }
 }
