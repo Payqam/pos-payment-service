@@ -29,6 +29,8 @@ servers:
     description: Staging server
   - url: https://bu2y2wsw08.execute-api.us-east-1.amazonaws.com/DEV
     description: Local development
+  - url: https://ft5ws0upt7.execute-api.us-east-1.amazonaws.com/DEV/
+    description: Demo branch
 
 tags:
   - name: Payments

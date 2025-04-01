@@ -13,6 +13,7 @@ export class KmsClient {
   private readonly kmsClient: KMSClient;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.kmsClient = new KMSClient({
       region: process.env.AWS_REGION || 'us-east-1',

@@ -15,6 +15,23 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { PAYMENT_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'payToken',
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'chargeMpGetResponse',
+  'settlementCashInResponse',
+  'settlementPayToken',
+];
+registerRedactFilter(sensitiveFields);
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -66,6 +83,7 @@ export class OrangeChargeWebhookService {
   private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
@@ -341,6 +359,7 @@ export class OrangeChargeWebhookService {
   public async handleWebhook(
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
+    this.logger.debug('Processing Orange charge webhook');
     try {
       const webhookEvent = await this.validateWebhook(event);
       const { payToken } = webhookEvent.data;
@@ -348,8 +367,13 @@ export class OrangeChargeWebhookService {
       // Get transaction using payToken from GSI3
       const transaction = await this.getTransactionByPayToken(payToken);
       if (!transaction) {
+        this.logger.debug('Transaction not found', { payToken });
         throw new WebhookError('Transaction not found for payToken', 404);
       }
+
+      this.logger.debug('Transaction found', {
+        transactionId: transaction.transactionId,
+      });
 
       // Get the current payment status from Orange API
       const paymentResponse =
@@ -363,6 +387,10 @@ export class OrangeChargeWebhookService {
         transaction.transactionId,
         getpaymentResponsePayload
       );
+
+      this.logger.debug('Payment record updated', {
+        transactionId: transaction.transactionId,
+      });
 
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
@@ -389,6 +417,8 @@ export class OrangeChargeWebhookService {
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
+      this.logger.debug('Payment status determined', { status });
+
       // Don't process disbursement for pending payments
       if (status === OrangePaymentStatus.PAYMENT_PENDING) {
         const updatePayload: PaymentRecordUpdate = {
@@ -400,6 +430,9 @@ export class OrangeChargeWebhookService {
           updatePayload
         );
 
+        this.logger.debug('Webhook processing completed successfully', {
+          transactionId: transaction.transactionId,
+        });
         return {
           statusCode: 200,
           body: JSON.stringify({ message: 'Payment is still pending' }),
@@ -420,11 +453,7 @@ export class OrangeChargeWebhookService {
           transaction.amount.toString()
         );
 
-        this.logger.debug('Checking disbursement result status', {
-          status: disbursementResult.status,
-          typeofStatus: typeof disbursementResult.status,
-          isSuccessful: disbursementResult.status === 'SUCCESSFULL',
-        });
+        this.logger.debug('Disbursement result', { disbursementResult });
 
         // Check if we're in sandbox environment
         if (credentials.targetEnvironment === 'sandbox') {
@@ -467,6 +496,10 @@ export class OrangeChargeWebhookService {
       // Update the transaction record
       await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
+      this.logger.debug('Payment record updated after disbursement', {
+        transactionId: transaction.transactionId,
+      });
+
       // Publish the status update using transaction data
       await this.publishTransactionStatus({
         transactionId: transaction.transactionId,
@@ -484,6 +517,9 @@ export class OrangeChargeWebhookService {
         merchantMobileNo: transaction.merchantMobileNo
       });
 
+      this.logger.debug('Webhook processing completed successfully', {
+        transactionId: transaction.transactionId,
+      });
       return {
         statusCode: 200,
         body: JSON.stringify({

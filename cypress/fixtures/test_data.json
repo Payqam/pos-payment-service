@@ -147,27 +147,27 @@
     {
       "type": "3DS Supported OK",
       "card_number": "4000000000003055",
-      "outcome": "CHARGE_UPDATED"
+      "outcome": "CHARGE_UPDATE_SUCCEEDED"
     },
     {
       "type": "3DS Supported Error",
       "card_number": "4000000000003097",
-      "outcome": "CHARGE_UPDATED"
+      "outcome": "CHARGE_UPDATE_SUCCEEDED"
     },
     {
       "type": "3DS Supported Unenrolled",
       "card_number": "4242424242424242",
-      "outcome": "CHARGE_UPDATED"
+      "outcome": "CHARGE_UPDATE_SUCCEEDED"
     },
     {
       "type": "3DS Not Supported",
       "card_number": "378282246310005",
-      "outcome": "CHARGE_UPDATED"
+      "outcome": "CHARGE_UPDATE_SUCCEEDED"
     }
   ],
 
   "testCardsFraudulentAndDisputes": [
-    { "type": "Fraudulent", "number": "4000000000000259" },
+    { "type": "Dispute Fraudulent", "number": "4000000000000259" },
     { "type": "Multiple disputes", "number": "4000000404000079" },
     { "type": "Visa Compelling Evidence 3.0", "number": "4000000404000038" }
   ],
@@ -321,48 +321,65 @@
     {
       "title": "Generic decline",
       "card_number": "4000000000000002",
-      "decline_reason": "Your card was declined."
+      "decline_reason": "Your card was declined.",
+      "Error_Code__c":"card_declined",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Insufficient funds decline",
       "card_number": "4000000000009995",
-      "decline_reason": "Your card has insufficient funds."
+      "decline_reason": "Your card has insufficient funds.",
+      "Error_Code__c":"card_declined",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Lost card decline",
       "card_number": "4000000000009987",
-      "decline_reason": "Your card was declined."
+      "decline_reason": "Your card was declined.",
+      "Error_Code__c":"card_declined",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Stolen card decline",
       "card_number": "4000000000009979",
-      "decline_reason": "Your card was declined."
+      "decline_reason": "Your card was declined.",
+      "Error_Code__c":"card_declined",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Expired card decline",
       "card_number": "4000000000000069",
-      "decline_reason": "Your card has expired."
+      "decline_reason": "Your card has expired.",
+      "Error_Code__c":"expired_card",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Incorrect CVC decline",
       "card_number": "4000000000000127",
-      "decline_reason": "Your card's security code is incorrect."
+      "decline_reason": "Your card's security code is incorrect.",
+      "Error_Code__c":"incorrect_cvc",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Processing error decline",
       "card_number": "4000000000000119",
-      "decline_reason": "An error occurred while processing your card. Try again in a little bit."
+      "decline_reason": "An error occurred while processing your card. Try again in a little bit.",
+      "Error_Code__c":"processing_error",
+      "Error_Type__c": "issuer_declined"
     },
-
     {
       "title": "Exceeding velocity limit decline",
       "card_number": "4000000000006975",
-      "decline_reason": "Your card was declined for making repeated attempts too frequently or exceeding its amount limit."
+      "decline_reason": "Your card was declined for making repeated attempts too frequently or exceeding its amount limit.",
+      "Error_Code__c":"card_declined",
+      "Error_Type__c": "issuer_declined"
     },
     {
       "title": "Decline after attaching",
       "card_number": "4000000000000341",
-      "decline_reason": "Your card was declined"
+      "decline_reason": "Your card was declined.",
+      "Error_Code__c":"card_declined",
+      "Error_Type__c": "issuer_declined"
     }
   ],
   "declineCardIncorrectNumber":[
@@ -374,11 +391,6 @@
   ],
 
   "fraudPrevention": [
-    {
-      "type": "Always blocked - Highest risk",
-      "number": "410000000000019",
-      "decline_details": "Your card was declined."
-    },
     {
       "type": "Elevated risk - Might be blocked",
       "number": "4000000000004954",
@@ -467,14 +479,14 @@
     {
       "title": "Invalid Payment Method",
       "paymentMethod": "Invalid_Payment_Method",
-      "status": 500,
-      "message": "No such PaymentMethod: 'Invalid_Payment_Method"
+      "status": 400,
+      "message": "Unsupported payment method: Invalid_Payment_Method"
     },
     {
       "title": "Empty Payment Method",
       "paymentMethod": " ",
-      "status": 500,
-      "message":"No such PaymentMethod: ' '"
+      "status": 400,
+      "message":"Unsupported payment method:  "
     }
   ],
   "currency":[

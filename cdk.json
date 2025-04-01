@@ -38,7 +38,9 @@
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
       "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
-      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239"
+      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239",
+      "SOURCE_EMAIL": "yasiru.rasanjaya@qriomatrix.com",
+      "DESTINATION_EMAIL": "yasiru.rasanjaya+1@qriomatrix.com"
     },
     "SQA": {
       "CDK_ACCOUNT": "061051235502",
@@ -46,7 +48,9 @@
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
       "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
-      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239"
+      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239",
+      "SOURCE_EMAIL": "yasiru.rasanjaya@qriomatrix.com",
+      "DESTINATION_EMAIL": "yasiru.rasanjaya+1@qriomatrix.com"
 
     },
     "UAT": {
@@ -55,7 +59,9 @@
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
       "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
-      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239"
+      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239",
+      "SOURCE_EMAIL": "yasiru.rasanjaya@qriomatrix.com",
+      "DESTINATION_EMAIL": "yasiru.rasanjaya+1@qriomatrix.com"
 
     },
     "PROD": {
@@ -64,7 +70,9 @@
       "LOG_LEVEL": "INFO",
       "CDK_STACK_NAME_PREFIX": "pos-payment-service",
       "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/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",
-      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239"
+      "APP_VPC_ID": "vpc-0a804ac9ae5d4b239",
+      "SOURCE_EMAIL": "yasiru.rasanjaya@qriomatrix.com",
+      "DESTINATION_EMAIL": "yasiru.rasanjaya+1@qriomatrix.com"
 
     }
   }

@@ -56,6 +56,7 @@ export class OrangePaymentService {
   private credentials: OrangeCredentials | null;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.secretsManagerService = new SecretsManagerService();
     this.dbService = new DynamoDBService();

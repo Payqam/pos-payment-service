@@ -16,6 +16,7 @@ export class SMClient {
     this.SecretsManagerClient = new SecretsManagerClient({
       region: process.env.AWS_REGION,
     });
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.logger.info('init()');
   }
