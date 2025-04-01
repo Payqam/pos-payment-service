@@ -1,5 +1,6 @@
 import { CacheClient } from '../cacheClient';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { EnhancedError, ErrorCategory } from '../../utils/errorHandler';
 
 export class CacheService {
   private readonly cacheClient: CacheClient;
@@ -27,7 +28,16 @@ export class CacheService {
       this.logger.debug('Value set in cache successfully', { key });
     } catch (error) {
       this.logger.error('Error setting value in Redis', error);
-      throw error;
+      throw new EnhancedError(
+        'CACHE_SET_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        `Failed to set cache value for key: ${key}`,
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check Redis connectivity and configuration',
+        }
+      );
     }
   }
 
@@ -42,7 +52,16 @@ export class CacheService {
       return result;
     } catch (error) {
       this.logger.error('Error retrieving value from Redis', error);
-      throw error;
+      throw new EnhancedError(
+        'CACHE_GET_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        `Failed to get cache value for key: ${key}`,
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check Redis connectivity and configuration',
+        }
+      );
     }
   }
 
@@ -53,7 +72,16 @@ export class CacheService {
       this.logger.debug('Value deleted from cache successfully', { key });
     } catch (error) {
       this.logger.error('Error deleting value from Redis', error);
-      throw error;
+      throw new EnhancedError(
+        'CACHE_DELETE_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        `Failed to delete cache value for key: ${key}`,
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check Redis connectivity and configuration',
+        }
+      );
     }
   }
 }

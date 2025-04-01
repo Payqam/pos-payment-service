@@ -177,8 +177,22 @@ export class MTNDisbursementWebhookService {
         },
       };
     } catch (error) {
-      this.logger.error('Failed to handle the failed payment');
-      throw new Error('Failed to handle the failed transfer');
+      this.logger.error('Failed to handle the failed transfer', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        reason: transactionStatus.reason,
+      });
+      throw new EnhancedError(
+        'FAILED_TRANSFER_HANDLING_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to handle the failed transfer',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check logs for detailed error information',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -216,8 +230,23 @@ export class MTNDisbursementWebhookService {
 
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
     } catch (error) {
-      this.logger.error('Failed to update the settlement status');
-      throw new Error('Failed to update the settlement status');
+      this.logger.error('Failed to update the settlement status', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        status: transactionStatusResponse.status,
+      });
+      throw new EnhancedError(
+        'SETTLEMENT_STATUS_UPDATE_FAILED',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to update the settlement status',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction:
+            'Check database connectivity and transaction record existence',
+          transactionId,
+        }
+      );
     }
   }
 

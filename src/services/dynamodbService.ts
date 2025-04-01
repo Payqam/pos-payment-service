@@ -15,6 +15,7 @@ import { buildUpdateExpression } from '../../utils/updateUtils';
 import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { EnhancedError, ErrorCategory } from '../../utils/errorHandler';
 
 interface AdditionalTransactionFields {
   paymentMethod?: string;
@@ -138,7 +139,16 @@ export class DynamoDBService {
           attempt === this.maxRetries - 1
         ) {
           this.logger.error('Error inserting record to DynamoDB', error);
-          throw error;
+          throw new EnhancedError(
+            'DYNAMODB_INSERT_ERROR',
+            ErrorCategory.SYSTEM_ERROR,
+            'Failed to insert record into DynamoDB',
+            {
+              originalError: error,
+              retryable: this.isRetryableError((error as Error).name),
+              suggestedAction: 'Check DynamoDB connectivity and permissions',
+            }
+          );
         }
 
         const delay = this.calculateBackoffDelay(attempt);
@@ -199,7 +209,16 @@ export class DynamoDBService {
           attempt === this.maxRetries - 1
         ) {
           this.logger.error('Error updating record in DynamoDB', error);
-          throw error;
+          throw new EnhancedError(
+            'DYNAMODB_UPDATE_ERROR',
+            ErrorCategory.SYSTEM_ERROR,
+            'Failed to update record in DynamoDB',
+            {
+              originalError: error,
+              retryable: this.isRetryableError((error as Error).name),
+              suggestedAction: 'Check DynamoDB connectivity and permissions',
+            }
+          );
         }
 
         const delay = this.calculateBackoffDelay(attempt);
@@ -250,7 +269,16 @@ export class DynamoDBService {
       return result as GetCommandOutput;
     } catch (error) {
       this.logger.error('Error retrieving record from DynamoDB', error);
-      throw error;
+      throw new EnhancedError(
+        'DYNAMODB_GET_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to retrieve record from DynamoDB',
+        {
+          originalError: error,
+          retryable: false,
+          suggestedAction: 'Check DynamoDB connectivity and permissions',
+        }
+      );
     }
   }
 
@@ -304,7 +332,16 @@ export class DynamoDBService {
         key,
         indexName,
       });
-      throw error;
+      throw new EnhancedError(
+        'DYNAMODB_QUERY_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to query record from DynamoDB using GSI',
+        {
+          originalError: error,
+          retryable: false,
+          suggestedAction: 'Check DynamoDB connectivity and permissions',
+        }
+      );
     }
   }
 
@@ -375,7 +412,16 @@ export class DynamoDBService {
             attempt,
             maxRetries: this.maxRetries,
           });
-          throw error;
+          throw new EnhancedError(
+            'DYNAMODB_DELETE_ERROR',
+            ErrorCategory.SYSTEM_ERROR,
+            'Failed to delete record from DynamoDB',
+            {
+              originalError: error,
+              retryable: this.isRetryableError((error as Error).name),
+              suggestedAction: 'Check DynamoDB connectivity and permissions',
+            }
+          );
         }
 
         const delay = this.calculateBackoffDelay(attempt);

@@ -13,6 +13,7 @@ import {
 } from '../../../model';
 import { OrangePaymentStatus } from 'src/types/orange';
 import { PAYMENT_SCENARIOS, TEST_NUMBERS } from 'configurations/sandbox/orange';
+import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 
 /**
  * Orange API credentials structure
@@ -146,7 +147,16 @@ export class OrangePaymentService {
         error: error instanceof Error ? error.message : 'Unknown error',
         tokenUrl: (await this.getOrangeCredentials()).tokenUrl,
       });
-      throw new Error('Failed to generate Orange token');
+      throw new EnhancedError(
+        'ORANGE_TOKEN_ERROR',
+        ErrorCategory.PROVIDER_ERROR,
+        'Failed to generate Orange token',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check Orange API credentials and connectivity',
+        }
+      );
     }
   }
 
@@ -276,7 +286,16 @@ export class OrangePaymentService {
         this.logger.error('Error initiating merchant payment', {
           error: error instanceof Error ? error.message : 'Unknown error',
         });
-        throw new Error('Failed to initiate merchant payment');
+        throw new EnhancedError(
+          'MERCHANT_PAYMENT_INIT_FAILED',
+          ErrorCategory.PROVIDER_ERROR,
+          'Failed to initiate merchant payment',
+          {
+            originalError: error,
+            retryable: true,
+            suggestedAction: 'Check Orange API connectivity and credentials',
+          }
+        );
       }
     });
   }
@@ -299,7 +318,16 @@ export class OrangePaymentService {
         return response.data;
       } catch (error) {
         this.logger.error('Error initiating cashin transaction', { error });
-        // throw new Error('Failed to initiate cashin transaction');
+        throw new EnhancedError(
+          'CASHIN_INIT_FAILED',
+          ErrorCategory.PROVIDER_ERROR,
+          'Failed to initiate cashin transaction',
+          {
+            originalError: error,
+            retryable: true,
+            suggestedAction: 'Check Orange API connectivity and credentials',
+          }
+        );
       }
     });
   }
@@ -332,8 +360,23 @@ export class OrangePaymentService {
 
         return response.data;
       } catch (error) {
-        this.logger.error('Error executing cashin payment', { error });
-        throw new Error('Failed to execute cashin payment');
+        this.logger.error('Error executing cashin payment', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          params: {
+            ...params,
+            pin: '[REDACTED]',
+          },
+        });
+        throw new EnhancedError(
+          'CASHIN_PAYMENT_FAILED',
+          ErrorCategory.PROVIDER_ERROR,
+          'Failed to execute cashin payment',
+          {
+            originalError: error,
+            retryable: true,
+            suggestedAction: 'Check payment parameters and try again',
+          }
+        );
       }
     });
   }
@@ -1090,7 +1133,16 @@ export class OrangePaymentService {
       }
 
       default: {
-        throw new Error(`Unsupported transaction type: ${transactionType}`);
+        throw new EnhancedError(
+          'UNSUPPORTED_TRANSACTION_TYPE',
+          ErrorCategory.VALIDATION_ERROR,
+          `Unsupported transaction type: ${transactionType}`,
+          {
+            retryable: false,
+            suggestedAction:
+              'Use a supported transaction type (CHARGE or REFUND)',
+          }
+        );
       }
     }
   }
