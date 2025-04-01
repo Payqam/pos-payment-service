@@ -1038,26 +1038,32 @@ export class CDKStack extends cdk.Stack {
       slackNotifierLambda.lambda.functionName,
       salesforceSyncLambda.lambda.functionName,
     ];
-    new LambdaDashboard(this, 'LambdaMonitoringDashboard', {
-      envName: props.envName,
-      namespace: props.namespace,
-      lambdaFunctionNames: lambdaFunctionNames,
-    });
-    new DynamoDBDashboard(this, 'DynamoDBMonitoringDashboard', {
-      envName: props.envName,
-      namespace: props.namespace,
-      dynamoTableName: dynamoDBConstruct.table.tableName,
-    });
-    new SNSDashboard(this, 'SnsMonitoringDashboard', {
-      envName: props.envName,
-      namespace: props.namespace,
-      snsTopicName: snsConstruct.eventTopic.topicName,
-    });
-    new ApiGatewayDashboard(this, 'ApiGatewayMonitoringDashboard', {
-      envName: props.envName,
-      namespace: props.namespace,
-      apiGatewayName: apiGateway.api.restApiName,
-    });
+
+    if (process.env.ENABLE_CLOUDWATCH_DASHBOARDS === 'true') {
+      logger.info('Creating CloudWatch dashboards');
+      new LambdaDashboard(this, 'LambdaMonitoringDashboard', {
+        envName: props.envName,
+        namespace: props.namespace,
+        lambdaFunctionNames: lambdaFunctionNames,
+      });
+      new DynamoDBDashboard(this, 'DynamoDBMonitoringDashboard', {
+        envName: props.envName,
+        namespace: props.namespace,
+        dynamoTableName: dynamoDBConstruct.table.tableName,
+      });
+      new SNSDashboard(this, 'SnsMonitoringDashboard', {
+        envName: props.envName,
+        namespace: props.namespace,
+        snsTopicName: snsConstruct.eventTopic.topicName,
+      });
+      new ApiGatewayDashboard(this, 'ApiGatewayMonitoringDashboard', {
+        envName: props.envName,
+        namespace: props.namespace,
+        apiGatewayName: apiGateway.api.restApiName,
+      });
+    } else {
+      logger.info('Dashboards are disabled');
+    }
 
     /**
      * Swagger UI Deployment
