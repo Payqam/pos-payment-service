@@ -15,6 +15,7 @@ export class CacheClient {
       tls: {}, // Add necessary TLS configuration if required
     });
 
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.logger.info('CacheClient initialized');
 

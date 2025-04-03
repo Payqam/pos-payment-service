@@ -21,6 +21,20 @@ import {
   EnhancedError,
   ErrorCategory,
 } from '../../../../../utils/errorHandler';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'referenceId',
+  'uniqueId',
+  'partyId',
+  'merchantMobileNo',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'settlementAmount',
+  'settlementRetryResponse',
+];
+registerRedactFilter(sensitiveFields);
 
 class WebhookError extends Error {
   constructor(
@@ -43,6 +57,7 @@ export class MTNDisbursementWebhookService {
   private readonly mtnService: MtnPaymentService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
@@ -56,6 +71,7 @@ export class MTNDisbursementWebhookService {
    */
   private async handleFailedTransfer(
     transactionId: string,
+    merchantId: string,
     transactionStatus: WebhookEvent
   ): Promise<Record<string, unknown>> {
     try {
@@ -63,12 +79,15 @@ export class MTNDisbursementWebhookService {
       const errorReason = transactionStatus.reason;
       const errorMapping =
         MTN_TRANSFER_ERROR_MAPPINGS[errorReason as MTNTransferErrorReason];
+      const dateTime = new Date().toISOString();
       await this.snsService.publish({
         transactionId,
+        merchantId,
+        createdOn: dateTime,
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
         type: 'CREATE',
         TransactionError: {
-          ErrorCode: errorMapping.statusCode,
+          ErrorCode: `${errorMapping.statusCode}`,
           ErrorMessage: errorReason,
           ErrorType: errorMapping.label,
           ErrorSource: 'pos',
@@ -133,7 +152,7 @@ export class MTNDisbursementWebhookService {
       }
       // Create enhanced error for logging and tracking
       const enhancedError = new EnhancedError(
-        errorMapping.statusCode as unknown as string,
+        `${errorMapping.statusCode}`,
         ErrorCategory.PROVIDER_ERROR,
         errorMapping.message,
         {
@@ -146,6 +165,7 @@ export class MTNDisbursementWebhookService {
 
       return {
         status: MTNPaymentStatus.DISBURSEMENT_FAILED,
+        updatedOn: dateTime,
         disbursementResponse: {
           ...transactionStatus,
           errorMessage: enhancedError.message,
@@ -157,8 +177,22 @@ export class MTNDisbursementWebhookService {
         },
       };
     } catch (error) {
-      this.logger.error('Failed to handle the failed payment');
-      throw new Error('Failed to handle the failed transfer');
+      this.logger.error('Failed to handle the failed transfer', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        reason: transactionStatus.reason,
+      });
+      throw new EnhancedError(
+        'FAILED_TRANSFER_HANDLING_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to handle the failed transfer',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check logs for detailed error information',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -168,6 +202,7 @@ export class MTNDisbursementWebhookService {
    */
   private async updateSettlementStatus(
     transactionId: string,
+    merchantId: string,
     transactionStatusResponse: WebhookEvent
   ): Promise<void> {
     try {
@@ -181,6 +216,7 @@ export class MTNDisbursementWebhookService {
             }
           : await this.handleFailedTransfer(
               transactionId,
+              merchantId,
               transactionStatusResponse
             );
       if (transactionStatusResponse.status === 'SUCCESSFUL') {
@@ -194,8 +230,23 @@ export class MTNDisbursementWebhookService {
 
       await this.dbService.updatePaymentRecord({ transactionId }, updateData);
     } catch (error) {
-      this.logger.error('Failed to update the settlement status');
-      throw new Error('Failed to update the settlement status');
+      this.logger.error('Failed to update the settlement status', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionId,
+        status: transactionStatusResponse.status,
+      });
+      throw new EnhancedError(
+        'SETTLEMENT_STATUS_UPDATE_FAILED',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to update the settlement status',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction:
+            'Check database connectivity and transaction record existence',
+          transactionId,
+        }
+      );
     }
   }
 
@@ -263,8 +314,14 @@ export class MTNDisbursementWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing MTN disbursement webhook');
       const webhookEvent = this.parseWebhookEvent(event.body);
       const { externalId } = webhookEvent;
+
+      this.logger.debug('Webhook event parsed', {
+        externalId,
+        status: webhookEvent.status,
+      });
 
       // Query using uniqueId in the GSI3
       const result = await this.dbService.queryByGSI(
@@ -275,18 +332,35 @@ export class MTNDisbursementWebhookService {
       );
 
       if (!result.Items?.[0]) {
+        this.logger.debug('Transaction not found', { externalId });
         throw new WebhookError(`Transaction not found: ${externalId}`, 404);
       }
 
       const transactionId = result.Items[0].transactionId;
+
+      this.logger.debug('Transaction found', { externalId });
 
       const transactionStatus = await this.mtnService.checkTransactionStatus(
         externalId,
         TransactionType.TRANSFER
       );
 
-      await this.updateSettlementStatus(transactionId, transactionStatus);
+      this.logger.debug('Transaction status checked', {
+        externalId,
+        status: transactionStatus.status,
+      });
 
+      await this.updateSettlementStatus(
+        transactionId,
+        result.Items?.[0].merchantId,
+        transactionStatus
+      );
+
+      this.logger.debug('Settlement status updated', { externalId });
+
+      this.logger.debug('Webhook processing completed successfully', {
+        externalId,
+      });
       return {
         statusCode: 200,
         headers: API.DEFAULT_HEADERS,

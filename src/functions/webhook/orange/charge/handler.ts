@@ -10,11 +10,32 @@ import {
   TransactionRecord,
 } from '../../../../services/dynamodbService';
 import { SNSService } from '../../../../services/snsService';
-import { PaymentResponse } from '../../../../model';
+import { PaymentResponse, SNSMessage } from '../../../../model';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { PAYMENT_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'payToken',
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'chargeMpGetResponse',
+  'settlementCashInResponse',
+  'settlementPayToken',
+];
+registerRedactFilter(sensitiveFields);
+import {
+  EnhancedError,
+  ErrorCategory,
+} from '../../../../../utils/errorHandler';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -66,6 +87,7 @@ export class OrangeChargeWebhookService {
   private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
@@ -194,8 +216,15 @@ export class OrangeChargeWebhookService {
       const cleanedUpdate = this.removeUndefined(update);
 
       if (!cleanedUpdate) {
-        throw new Error(
-          'Update payload is empty after cleaning undefined values'
+        throw new EnhancedError(
+          'EMPTY_UPDATE_PAYLOAD',
+          ErrorCategory.VALIDATION_ERROR,
+          'Update payload is empty after cleaning undefined values',
+          {
+            retryable: false,
+            suggestedAction: 'Verify the update payload contains valid data',
+            transactionId,
+          }
         );
       }
 
@@ -213,44 +242,53 @@ export class OrangeChargeWebhookService {
     }
   }
 
-  private async publishStatusUpdate(
-    transactionId: string,
-    status: string,
-    amount: string,
-    paymentResponse: PaymentResponse['data']
-  ): Promise<void> {
-    try {
-      const isFailedStatus = status === 'FAILED';
-      let transactionError;
-
-      if (isFailedStatus) {
-        transactionError = {
-          ErrorCode:
-            paymentResponse.inittxnstatus ||
-            paymentResponse.confirmtxnstatus ||
-            'UNKNOWN',
-          ErrorMessage: paymentResponse.inittxnmessage || 'Transaction failed',
-          ErrorType: 'payment_failed',
-          ErrorSource: 'ORANGE',
-        };
-      }
-
-      await this.snsService.publish({
-        transactionId,
-        status,
-        type: isFailedStatus ? 'FAILED' : 'UPDATE',
-        amount,
-        TransactionError: transactionError,
-        paymentMethod: 'ORANGE',
-        metadata: {
-          payToken: paymentResponse.payToken,
-          txnid: paymentResponse.txnid,
-        },
-      });
-    } catch (error) {
-      this.logger.error('Failed to publish status update', { error });
-      throw new WebhookError('Failed to publish status update', 500, error);
-    }
+  /**
+ * Publishes a transaction status update to SNS
+ */
+  private async publishTransactionStatus(params: {
+    transactionId: string;
+    paymentMethod: string;
+    status: string;
+    type: string;
+    amount: number;
+    merchantId: string;
+    transactionType: string;
+    metaData?: Record<string, string>;
+    fee: number;
+    createdOn?: string;
+    customerPhone?: string;
+    currency?: string;
+    exchangeRate?: string;
+    processingFee?: string;
+    netAmount?: string;
+    externalTransactionId?: string;
+    settlementAmount?: string;
+    merchantMobileNo?: string;
+    originalTransactionId?: string;
+  }) {
+    this.logger.info('Publishing transaction status to SNS', params);
+    const dateTime = new Date().toISOString();
+    const timestamp = Math.floor(new Date(dateTime).getTime() / 1000);
+    await this.snsService.publish({
+      transactionId: params.transactionId,
+      originalTransactionId: params.originalTransactionId,
+      paymentMethod: params.paymentMethod,
+      status: params.status,
+      amount: params.amount.toString(),
+      merchantId: params.merchantId,
+      transactionType: params.transactionType,
+      metaData: params.metaData,
+      fee: params.fee.toString(),
+      createdOn: params.createdOn || timestamp,
+      customerPhone: params.customerPhone,
+      currency: params.currency,
+      exchangeRate: params.exchangeRate,
+      processingFee: params.processingFee,
+      netAmount: params.netAmount,
+      externalTransactionId: params.externalTransactionId,
+      settlementAmount: params.settlementAmount,
+      merchantPhone: params.merchantMobileNo
+    } as SNSMessage);
   }
 
   private async getOrangeCredentials() {
@@ -269,7 +307,20 @@ export class OrangeChargeWebhookService {
   }> {
     try {
       if (!transaction.merchantMobileNo) {
-        throw new Error('Merchant mobile number not found');
+        this.logger.error('Merchant mobile number not found', {
+          transactionId: transaction.transactionId,
+        });
+        throw new EnhancedError(
+          'MERCHANT_MOBILE_MISSING',
+          ErrorCategory.VALIDATION_ERROR,
+          'Merchant mobile number not found',
+          {
+            retryable: false,
+            suggestedAction:
+              'Verify merchant information is correctly stored in the transaction record',
+            transactionId: transaction.transactionId,
+          }
+        );
       }
 
       // Get Orange credentials from Secrets Manager
@@ -284,7 +335,20 @@ export class OrangeChargeWebhookService {
       const initResponse = await this.orangeService.initiateCashinTransaction();
 
       if (!initResponse.data?.payToken) {
-        throw new Error('Failed to get payToken for disbursement');
+        this.logger.error('Failed to get payToken for disbursement', {
+          transactionId: transaction.transactionId,
+          merchantMobileNo: transaction.merchantMobileNo,
+        });
+        throw new EnhancedError(
+          'DISBURSEMENT_PAYTOKEN_FAILED',
+          ErrorCategory.PROVIDER_ERROR,
+          'Failed to get payToken for disbursement',
+          {
+            retryable: true,
+            suggestedAction: 'Check Orange API connectivity and credentials',
+            transactionId: transaction.transactionId,
+          }
+        );
       }
 
       // Execute disbursement
@@ -332,6 +396,7 @@ export class OrangeChargeWebhookService {
   public async handleWebhook(
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
+    this.logger.debug('Processing Orange charge webhook');
     try {
       const webhookEvent = await this.validateWebhook(event);
       const { payToken } = webhookEvent.data;
@@ -339,8 +404,13 @@ export class OrangeChargeWebhookService {
       // Get transaction using payToken from GSI3
       const transaction = await this.getTransactionByPayToken(payToken);
       if (!transaction) {
+        this.logger.debug('Transaction not found', { payToken });
         throw new WebhookError('Transaction not found for payToken', 404);
       }
+
+      this.logger.debug('Transaction found', {
+        transactionId: transaction.transactionId,
+      });
 
       // Get the current payment status from Orange API
       const paymentResponse =
@@ -354,6 +424,10 @@ export class OrangeChargeWebhookService {
         transaction.transactionId,
         getpaymentResponsePayload
       );
+
+      this.logger.debug('Payment record updated', {
+        transactionId: transaction.transactionId,
+      });
 
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
@@ -380,6 +454,8 @@ export class OrangeChargeWebhookService {
       // Determine final payment status from the API response
       const status = this.determinePaymentStatus(paymentResponse);
 
+      this.logger.debug('Payment status determined', { status });
+
       // Don't process disbursement for pending payments
       if (status === OrangePaymentStatus.PAYMENT_PENDING) {
         const updatePayload: PaymentRecordUpdate = {
@@ -391,6 +467,9 @@ export class OrangeChargeWebhookService {
           updatePayload
         );
 
+        this.logger.debug('Webhook processing completed successfully', {
+          transactionId: transaction.transactionId,
+        });
         return {
           statusCode: 200,
           body: JSON.stringify({ message: 'Payment is still pending' }),
@@ -411,11 +490,24 @@ export class OrangeChargeWebhookService {
           transaction.amount.toString()
         );
 
-        this.logger.debug('Checking disbursement result status', {
-          status: disbursementResult.status,
-          typeofStatus: typeof disbursementResult.status,
-          isSuccessful: disbursementResult.status === 'SUCCESSFULL',
-        });
+        this.logger.debug('Disbursement result', { disbursementResult });
+
+        // Check if we're in sandbox environment
+        if (credentials.targetEnvironment === 'sandbox') {
+          const subscriberMsisdn = paymentResponse.data.subscriberMsisdn;
+
+          // Override payment status based on test phone numbers
+          const scenarioKey = Object.entries(TEST_NUMBERS.PAYMENT_SCENARIOS).find(
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            ([_, number]) => number === subscriberMsisdn
+          )?.[0];
+
+          if (scenarioKey && scenarioKey in PAYMENT_SCENARIOS) {
+            const scenario =
+              PAYMENT_SCENARIOS[scenarioKey as keyof typeof PAYMENT_SCENARIOS];
+            disbursementResult.status = scenario.status;
+          }
+        }
 
         // Only add disbursement data if we have valid results
         if (disbursementResult.status === 'SUCCESSFULL') {
@@ -441,14 +533,30 @@ export class OrangeChargeWebhookService {
       // Update the transaction record
       await this.updatePaymentRecord(transaction.transactionId, updatePayload);
 
-      // Publish the status update using transaction data
-      await this.publishStatusUpdate(
-        transaction.transactionId,
-        status,
-        transaction.amount.toString(),
-        paymentResponse.data
-      );
+      this.logger.debug('Payment record updated after disbursement', {
+        transactionId: transaction.transactionId,
+      });
 
+      // Publish the status update using transaction data
+      await this.publishTransactionStatus({
+        transactionId: transaction.transactionId,
+        paymentMethod: 'ORANGE',
+        status: OrangePaymentStatus.PAYMENT_SUCCESSFUL,
+        type: 'UPDATE',
+        amount: transaction.amount,
+        merchantId: transaction.merchantId,
+        transactionType: 'CHARGE',
+        metaData: {},
+        fee: transaction.fee || 0,
+        currency: transaction.currency,
+        createdOn: new Date().toISOString(),
+        settlementAmount: transaction.settlementAmount?.toString() || '0',
+        merchantMobileNo: transaction.merchantMobileNo
+      });
+
+      this.logger.debug('Webhook processing completed successfully', {
+        transactionId: transaction.transactionId,
+      });
       return {
         statusCode: 200,
         body: JSON.stringify({

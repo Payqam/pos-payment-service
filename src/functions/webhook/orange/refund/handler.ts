@@ -15,6 +15,26 @@ import { SecretsManagerService } from '../../../../services/secretsManagerServic
 import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
 import { REFUND_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
 import { OrangePaymentStatus } from 'src/types/orange';
+import { registerRedactFilter } from '../../../../../utils/redactUtil';
+
+const sensitiveFields = [
+  'payToken',
+  'uniqueId',
+  'merchantMobileNo',
+  'customerMobileNo',
+  'txnid',
+  'orderId',
+  'subscriptionKey',
+  'apiKey',
+  'apiUser',
+  'refundMpGetResponse',
+  'refundAmount',
+];
+registerRedactFilter(sensitiveFields);
+import {
+  EnhancedError,
+  ErrorCategory,
+} from '../../../../../utils/errorHandler';
 
 // Webhook event interface for Orange payment notifications
 interface WebhookEvent {
@@ -65,6 +85,7 @@ export class OrangeRefundWebhookService {
   private readonly secretsManagerService: SecretsManagerService;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.dbService = new DynamoDBService();
     this.snsService = SNSService.getInstance();
@@ -76,7 +97,14 @@ export class OrangeRefundWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<WebhookEvent> {
     if (!event.body) {
-      throw new WebhookError('Missing request body', 400);
+      throw new EnhancedError(
+        'WEBHOOK_VALIDATION_ERROR',
+        ErrorCategory.VALIDATION_ERROR,
+        'Missing request body',
+        {
+          httpStatus: 400,
+        }
+      );
     }
 
     try {
@@ -86,19 +114,28 @@ export class OrangeRefundWebhookService {
         webhookEvent.type !== 'payment_notification' ||
         !webhookEvent.data?.payToken
       ) {
-        throw new WebhookError(
+        throw new EnhancedError(
+          'WEBHOOK_VALIDATION_ERROR',
+          ErrorCategory.VALIDATION_ERROR,
           'Invalid webhook payload structure',
-          400,
-          webhookEvent
+          {
+            httpStatus: 400,
+            originalError: webhookEvent,
+          }
         );
       }
 
       return webhookEvent;
     } catch (error) {
-      throw new WebhookError(
+      throw new EnhancedError(
+        'WEBHOOK_PARSING_ERROR',
+        ErrorCategory.VALIDATION_ERROR,
         'Failed to parse webhook payload',
-        400,
-        error instanceof Error ? error.message : 'Unknown error'
+        {
+          httpStatus: 400,
+          originalError: error,
+          suggestedAction: 'Check the webhook payload format',
+        }
       );
     }
   }
@@ -122,7 +159,17 @@ export class OrangeRefundWebhookService {
         payToken,
         error,
       });
-      throw new WebhookError('Failed to get transaction', 500, error);
+      throw new EnhancedError(
+        'TRANSACTION_RETRIEVAL_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to get transaction by merchant refund ID',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check database connectivity and GSI configuration',
+          httpStatus: 500,
+        }
+      );
     }
   }
 
@@ -167,7 +214,18 @@ export class OrangeRefundWebhookService {
         transactionId,
         error,
       });
-      throw new WebhookError('Failed to update payment record', 500, error);
+      throw new EnhancedError(
+        'PAYMENT_RECORD_UPDATE_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to update payment record',
+        {
+          originalError: error,
+          retryable: true,
+          suggestedAction: 'Check database connectivity and record existence',
+          httpStatus: 500,
+          transactionId,
+        }
+      );
     }
   }
 
@@ -181,6 +239,7 @@ export class OrangeRefundWebhookService {
     event: APIGatewayProxyEvent
   ): Promise<APIGatewayProxyResult> {
     try {
+      this.logger.debug('Processing Orange refund webhook');
       const webhookEvent = await this.validateWebhook(event);
       const { payToken } = webhookEvent.data;
 
@@ -192,8 +251,20 @@ export class OrangeRefundWebhookService {
       // Get transaction using merchantRefundId (GSI4)
       const transaction = await this.getTransactionByMerchantRefundId(payToken);
       if (!transaction) {
-        throw new WebhookError('Transaction not found', 404, { payToken });
+        this.logger.debug('Transaction not found', { payToken });
+        throw new EnhancedError(
+          'TRANSACTION_NOT_FOUND',
+          ErrorCategory.VALIDATION_ERROR,
+          'Transaction not found',
+          {
+            httpStatus: 404,
+            suggestedAction: 'Verify the payToken is correct',
+            originalError: { payToken },
+          }
+        );
       }
+
+      this.logger.debug('Transaction found', { payToken });
 
       // Get payment status from Orange API
       const paymentStatus = await this.orangeService.getPaymentStatus(payToken);
@@ -206,6 +277,8 @@ export class OrangeRefundWebhookService {
         transaction.transactionId,
         refundMpGetResponsePayload
       );
+
+      this.logger.debug('Payment record updated', { payToken });
 
       // Get Orange credentials
       const credentials = await this.getOrangeCredentials();
@@ -231,10 +304,14 @@ export class OrangeRefundWebhookService {
 
       const refundStatus = this.determineRefundStatus(paymentStatus);
 
+      this.logger.debug('Refund status determined', { refundStatus });
+
       // Update transaction record
       await this.updatePaymentRecord(transaction.transactionId, {
         status: refundStatus,
       });
+
+      this.logger.debug('Transaction record updated', { payToken });
 
       return {
         statusCode: 200,
@@ -245,6 +322,18 @@ export class OrangeRefundWebhookService {
         }),
       };
     } catch (error) {
+      if (error instanceof EnhancedError) {
+        return {
+          statusCode: error.httpStatus || 500,
+          body: JSON.stringify({
+            error: error.message,
+            errorCode: error.errorCode,
+            category: error.category,
+            details: error.originalError,
+          }),
+        };
+      }
+
       if (error instanceof WebhookError) {
         return {
           statusCode: error.statusCode,
@@ -259,10 +348,25 @@ export class OrangeRefundWebhookService {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
 
+      // Convert unknown errors to EnhancedError
+      const enhancedError = new EnhancedError(
+        'WEBHOOK_UNHANDLED_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Internal server error',
+        {
+          originalError: error instanceof Error ? error : 'Unknown error',
+          httpStatus: 500,
+          retryable: false,
+          suggestedAction: 'Check logs for detailed error information',
+        }
+      );
+
       return {
         statusCode: 500,
         body: JSON.stringify({
           error: 'Internal server error',
+          errorCode: enhancedError.errorCode,
+          category: enhancedError.category,
         }),
       };
     }

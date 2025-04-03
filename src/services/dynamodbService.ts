@@ -15,6 +15,7 @@ import { buildUpdateExpression } from '../../utils/updateUtils';
 import { removeNullValues } from '../../utils/removeNullValues';
 import { ReturnValue } from '@aws-sdk/client-dynamodb';
 import { Logger, LoggerService } from '@mu-ts/logger';
+import { EnhancedError, ErrorCategory } from '../../utils/errorHandler';
 
 interface AdditionalTransactionFields {
   paymentMethod?: string;
@@ -65,6 +66,7 @@ export class DynamoDBService {
   private readonly baseDelayMS: number;
 
   constructor() {
+    LoggerService.setLevel('debug');
     this.logger = LoggerService.named(this.constructor.name);
     this.tableName = process.env.TRANSACTIONS_TABLE as string;
     this.dbClient = DynamoDBDocClient.getInstance();
@@ -116,11 +118,20 @@ export class DynamoDBService {
       Item: record,
     };
 
+    this.logger.debug('Creating payment record', {
+      transactionId: (record as any).transactionId || (record as any).refundId,
+      tableName: this.tableName,
+    });
+
     let attempt = 0;
 
     while (attempt < this.maxRetries) {
       try {
         await this.dbClient.sendCommand(new PutCommand(params));
+        this.logger.debug('Payment record created successfully', {
+          transactionId:
+            (record as any).transactionId || (record as any).refundId,
+        });
         return;
       } catch (error: unknown) {
         if (
@@ -128,7 +139,16 @@ export class DynamoDBService {
           attempt === this.maxRetries - 1
         ) {
           this.logger.error('Error inserting record to DynamoDB', error);
-          throw error;
+          throw new EnhancedError(
+            'DYNAMODB_INSERT_ERROR',
+            ErrorCategory.SYSTEM_ERROR,
+            'Failed to insert record into DynamoDB',
+            {
+              originalError: error,
+              retryable: this.isRetryableError((error as Error).name),
+              suggestedAction: 'Check DynamoDB connectivity and permissions',
+            }
+          );
         }
 
         const delay = this.calculateBackoffDelay(attempt);
@@ -152,6 +172,11 @@ export class DynamoDBService {
     key: T,
     updateFields: U
   ): Promise<void> {
+    this.logger.debug('Updating payment record', {
+      key,
+      updateFieldsKeys: Object.keys(updateFields || {}),
+    });
+
     const cleanedFields = removeNullValues({
       ...updateFields,
       updatedOn: Math.floor(Date.now() / 1000),
@@ -176,6 +201,7 @@ export class DynamoDBService {
     while (attempt < this.maxRetries) {
       try {
         await this.dbClient.updateCommandAsync(new UpdateCommand(params));
+        this.logger.debug('Payment record updated successfully', { key });
         return;
       } catch (error: unknown) {
         if (
@@ -183,7 +209,16 @@ export class DynamoDBService {
           attempt === this.maxRetries - 1
         ) {
           this.logger.error('Error updating record in DynamoDB', error);
-          throw error;
+          throw new EnhancedError(
+            'DYNAMODB_UPDATE_ERROR',
+            ErrorCategory.SYSTEM_ERROR,
+            'Failed to update record in DynamoDB',
+            {
+              originalError: error,
+              retryable: this.isRetryableError((error as Error).name),
+              suggestedAction: 'Check DynamoDB connectivity and permissions',
+            }
+          );
         }
 
         const delay = this.calculateBackoffDelay(attempt);
@@ -207,6 +242,11 @@ export class DynamoDBService {
     key: T,
     indexName?: string
   ): Promise<GetCommandOutput> {
+    this.logger.debug('Getting item from DynamoDB', {
+      key,
+      indexName: indexName || 'primary',
+    });
+
     const params: {
       TableName: string;
       IndexName?: string;
@@ -222,10 +262,23 @@ export class DynamoDBService {
 
     try {
       const result = await this.dbClient.getItem(new GetCommand(params));
+      this.logger.debug('Item retrieved from DynamoDB', {
+        key,
+        found: !!result.Item,
+      });
       return result as GetCommandOutput;
     } catch (error) {
       this.logger.error('Error retrieving record from DynamoDB', error);
-      throw error;
+      throw new EnhancedError(
+        'DYNAMODB_GET_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to retrieve record from DynamoDB',
+        {
+          originalError: error,
+          retryable: false,
+          suggestedAction: 'Check DynamoDB connectivity and permissions',
+        }
+      );
     }
   }
 
@@ -244,6 +297,11 @@ export class DynamoDBService {
       | { merchantRefundId: string },
     indexName: string
   ): Promise<QueryCommandOutput> {
+    this.logger.debug('Querying DynamoDB by GSI', {
+      key,
+      indexName,
+    });
+
     try {
       const attributeName = Object.keys(key)[0];
       const attributeValue = (key as Record<string, string>)[attributeName];
@@ -261,14 +319,29 @@ export class DynamoDBService {
         Limit: 1, // We only need one item
       });
 
-      return await this.dbClient.queryCommand(params);
+      const result = await this.dbClient.queryCommand(params);
+      this.logger.debug('Query by GSI completed', {
+        key,
+        indexName,
+        itemsFound: result.Items?.length || 0,
+      });
+      return result;
     } catch (error) {
       this.logger.error('Error querying record from DynamoDB using GSI', {
         error,
         key,
         indexName,
       });
-      throw error;
+      throw new EnhancedError(
+        'DYNAMODB_QUERY_ERROR',
+        ErrorCategory.SYSTEM_ERROR,
+        'Failed to query record from DynamoDB using GSI',
+        {
+          originalError: error,
+          retryable: false,
+          suggestedAction: 'Check DynamoDB connectivity and permissions',
+        }
+      );
     }
   }
 
@@ -288,6 +361,11 @@ export class DynamoDBService {
     expressionAttributeValues?: Record<string, unknown>,
     expressionAttributeNames?: Record<string, string>
   ): Promise<void> {
+    this.logger.debug('Deleting payment record', {
+      key,
+      hasCondition: !!conditionExpression,
+    });
+
     const params: DeleteCommandInput = {
       TableName: this.tableName,
       Key: key as Record<string, NativeAttributeValue>,
@@ -320,6 +398,7 @@ export class DynamoDBService {
     while (attempt < this.maxRetries) {
       try {
         await this.dbClient.deleteItem(new DeleteCommand(params));
+        this.logger.debug('Successfully deleted record from DynamoDB', { key });
         this.logger.info('Successfully deleted record from DynamoDB', { key });
         return;
       } catch (error: unknown) {
@@ -333,7 +412,16 @@ export class DynamoDBService {
             attempt,
             maxRetries: this.maxRetries,
           });
-          throw error;
+          throw new EnhancedError(
+            'DYNAMODB_DELETE_ERROR',
+            ErrorCategory.SYSTEM_ERROR,
+            'Failed to delete record from DynamoDB',
+            {
+              originalError: error,
+              retryable: this.isRetryableError((error as Error).name),
+              suggestedAction: 'Check DynamoDB connectivity and permissions',
+            }
+          );
         }
 
         const delay = this.calculateBackoffDelay(attempt);
