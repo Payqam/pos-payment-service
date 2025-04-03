@@ -23,8 +23,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -73,7 +71,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -99,7 +96,6 @@ describe('Successful Payment -  Cards by Brand', () => {
             'CHARGE_UPDATE_SUCCEEDED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -114,7 +110,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
 
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
@@ -143,9 +138,7 @@ describe('Successful Payment -  Cards by Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -190,7 +183,6 @@ describe('Successful Payment -  Cards by Brand', () => {
             'ServiceType__c',
             'Stripe'
           );
-          cy.task('log', response.body);
         });
       });
     });
@@ -219,8 +211,6 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -269,7 +259,6 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -295,7 +284,6 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
             'CHARGE_UPDATE_SUCCEEDED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -310,7 +298,6 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
 
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
@@ -339,9 +326,7 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -386,7 +371,6 @@ describe('Successful Payment -  Cards by CO-Brand', () => {
             'ServiceType__c',
             'Stripe'
           );
-          cy.task('log', response.body);
         });
       });
     });
@@ -415,8 +399,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -465,7 +447,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -482,7 +463,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
@@ -492,7 +472,6 @@ describe('Successful Payment -  Cards by Brand', () => {
             'INTENT_REQUIRES_ACTION'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -507,7 +486,6 @@ describe('Successful Payment -  Cards by Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
 
           expect(response.body).to.have.property('status', 'requires_action');
           expect(response.body).to.have.property('amount', 120000);
@@ -536,9 +514,7 @@ describe('Successful Payment -  Cards by Brand', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -583,7 +559,6 @@ describe('Successful Payment -  Cards by Brand', () => {
             'ServiceType__c',
             'Stripe'
           );
-          cy.task('log', response.body);
         });
       });
     });
