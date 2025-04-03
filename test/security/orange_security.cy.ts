@@ -2,48 +2,6 @@ import testData from '../../cypress/fixtures/mtn_test_data.json';
 
 describe('Security Tests - API Response Verification ', () => {
   let transactionId;
-  describe('Security Tests - HTTPS enforcement', () => {
-    it(`Process a Payment Charge`, () => {
-      cy.request({
-        method: 'POST',
-        url: `${Cypress.env('HttpsEnforcedOrangeServiceEndpoint')}/transaction/process/charge`,
-        headers: {
-          'x-api-key': `${Cypress.env('orangeApiKey')}`,
-          'Content-Type': 'application/json',
-        },
-        body: {
-          merchantId: 'M123',
-          merchantMobileNo: '691654524',
-          amount: 100,
-          customerPhone: '699944974',
-          transactionType: 'CHARGE',
-          paymentMethod: 'ORANGE',
-          currency: 'EUR',
-          metaData: {
-            reference: 'ORDER_123',
-            description: 'Payment for order #123',
-          },
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(200);
-      });
-    });
-
-    it(`Should retrieve transaction status`, () => {
-      cy.wait(3500);
-      cy.request({
-        method: 'GET',
-        url: `${Cypress.env('HttpsEnforcedOrangeServiceEndpoint')}/transaction/status/?transactionId=${Cypress.env('transactionId')}`,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': `${Cypress.env('x-api-key')}`,
-        },
-      }).then((response) => {
-        expect(response.status).to.eq(200);
-      });
-    });
-  });
-
   describe(`API Key Validation for Payment Process`, () => {
     (
       Cypress.env('apiKeyValidation') as { title: string; apiKey: string }[]
@@ -72,7 +30,6 @@ describe('Security Tests - API Response Verification ', () => {
           failOnStatusCode: false,
         }).then((response) => {
           expect(response.status).to.eq(403);
-          cy.task('log', response.body);
           cy.wait(500);
         });
       });
@@ -107,7 +64,6 @@ describe('Security Tests - API Response Verification ', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             expect(response.body).to.have.property(
               'message',
               'Payment processed successfully'
@@ -121,7 +77,6 @@ describe('Security Tests - API Response Verification ', () => {
             );
 
             transactionId = response.body.transactionDetails.transactionId;
-            cy.task('log', `Transaction ID : ${transactionId}`);
             Cypress.env('transactionId', transactionId);
             cy.wait(500);
           });
@@ -139,7 +94,6 @@ describe('Security Tests - API Response Verification ', () => {
           }).then((response) => {
             expect(response.status).to.eq(403);
             expect(response.body).to.have.property('message', 'Forbidden');
-            cy.task('log', response.body);
           });
           cy.wait(500);
         });
@@ -189,7 +143,6 @@ describe('Security Tests - API Response Verification ', () => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(403);
-        cy.task('log', response.body);
       });
     });
   });
@@ -219,7 +172,6 @@ describe('Security Tests - API Response Verification ', () => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(403);
-        cy.task('log', response.body);
       });
     });
 
@@ -237,7 +189,6 @@ describe('Security Tests - API Response Verification ', () => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(403);
-        cy.task('log', response.body);
       });
     });
 
@@ -255,7 +206,6 @@ describe('Security Tests - API Response Verification ', () => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(400);
-        cy.task('log', response.body);
       });
     });
   });

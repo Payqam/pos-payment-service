@@ -23,8 +23,6 @@ describe('Stripe Payment Processing Tests', () => {
         expect(response.status).to.eq(200);
         expect(response.body).to.have.property('id');
         paymentMethodId = response.body.id;
-        cy.task('log', response.body);
-        cy.task('log', paymentMethodId);
         Cypress.env('paymentMethodId', paymentMethodId);
         cy.wait(500);
       });
@@ -59,7 +57,6 @@ describe('Stripe Payment Processing Tests', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Payment processed successfully'
@@ -74,7 +71,6 @@ describe('Stripe Payment Processing Tests', () => {
         );
 
         transactionId = response.body.transactionDetails.transactionId;
-        cy.task('log', `Transaction ID : ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(500);
       });
@@ -91,7 +87,6 @@ describe('Stripe Payment Processing Tests', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Transaction retrieved successfully'
@@ -110,7 +105,6 @@ describe('Stripe Payment Processing Tests', () => {
         ).to.have.property('amount', 108000);
 
         uniqueId = response.body.transaction.Item.uniqueId;
-        cy.task('log', ` ${uniqueId}`);
         Cypress.env('uniqueId', uniqueId);
       });
       cy.wait(500);
@@ -125,7 +119,6 @@ describe('Stripe Payment Processing Tests', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property('status', 'succeeded');
         expect(response.body).to.have.property('amount', 120000);
         expect(response.body).to.have.property('currency', 'eur');
@@ -149,15 +142,14 @@ describe('Stripe Payment Processing Tests', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         accessToken = response.body.access_token;
-        cy.task('log', `accessToken : ${accessToken}`);
         Cypress.env('accessToken', accessToken);
         cy.wait(500);
       });
     });
 
     it(`Verify Payment on salesforce for  payment`, () => {
+      cy.wait(4000);
       cy.request({
         method: 'GET',
         url: `${Cypress.env('salesforceServiceUrl')}status__c,Net_Amount__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
@@ -195,7 +187,6 @@ describe('Stripe Payment Processing Tests', () => {
           'ServiceType__c',
           'Stripe'
         );
-        cy.task('log', response.body);
       });
     });
   });
@@ -224,8 +215,6 @@ describe('Validate Duplicate Requests Payment Processing', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -290,7 +279,6 @@ describe('Validate Duplicate Requests Payment Processing', () => {
             failOnStatusCode: false,
           }).then((duplicateResponse) => {
             expect(duplicateResponse.status).to.eq(502);
-            cy.task('log', duplicateResponse.body);
             expect(duplicateResponse.body).to.have.property(
               'error',
               'PROVIDER_ERROR'
@@ -306,6 +294,67 @@ describe('Validate Duplicate Requests Payment Processing', () => {
           });
         });
       });
+    });
+  });
+});
+
+describe('Validate Request with Invalid API Token', () => {
+  it('Create a Payment Method', () => {
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('paymentApiUrl')}payment_methods`,
+      headers: {
+        Authorization: `Bearer ${Cypress.env('stripeApiKey')}`,
+      },
+      form: true,
+      body: {
+        type: 'card',
+        'card[number]': '4242424242424242',
+        'card[exp_month]': '12',
+        'card[exp_year]': '2025',
+        'card[cvc]': '123',
+      },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(200);
+      expect(response.body).to.have.property('id');
+      paymentMethodId = response.body.id;
+      Cypress.env('paymentMethodId', paymentMethodId);
+      cy.wait(500);
+    });
+  });
+
+  it('should return 403 for invalid API token', () => {
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('MTNServiceEndpoint')}/transaction/process/charge`,
+      headers: {
+        'x-api-key': `${Cypress.env('InvalidXApiKey')}`,
+        'Content-Type': 'application/json',
+      },
+      failOnStatusCode: false,
+      body: {
+        merchantId: 'M123',
+        amount: 120000,
+        merchantMobileNo: '94713579023',
+        transactionType: 'CHARGE',
+        paymentMethod: 'CARD',
+        customerPhone: '3333',
+        currency: 'EUR',
+        cardData: {
+          paymentMethodId: Cypress.env('paymentMethodId'),
+          cardName: 'visa',
+          destinationId: 'acct_1QmXUNPsBq4jlflt',
+        },
+        metaData: {
+          deviceId: 'device_identifier',
+          location: 'transaction_location',
+          timestamp: 'transaction_timestamp',
+        },
+      },
+    }).then((response) => {
+      expect(response.status).to.eq(403);
+      expect(response.body).to.have.property('message', 'Forbidden');
     });
   });
 });
