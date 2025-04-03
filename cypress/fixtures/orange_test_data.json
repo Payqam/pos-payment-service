@@ -88,5 +88,62 @@
       "expectedMessage": "Invalid request body"
 
     }
+  ],
+
+  "RefundTestData":[
+    {
+      "title": "full amount refund",
+      "amount": 12000,
+      "status": "SUCCESSFUL",
+      "payer": "94713579067",
+      "merchant": "94760000000"
+    },
+    {
+      "title": "partial amount refund",
+      "amount": 10000,
+      "status": "SUCCESSFUL",
+      "payer": "94713579067",
+      "merchant": "94760000000"
+    }
+  ],
+
+  "RefundTestsData":[
+    {
+      "title": "full amount refund",
+      "amount": 12000,
+      "status": "SUCCESSFUL",
+      "payer": "94713579067",
+      "merchant": "94760000000"
+    }
+  ],
+
+  "RefundsTestData":[
+    {
+      "title": "partial amount refund",
+      "amount": 10000,
+      "status": "SUCCESSFUL",
+      "payer": "94713579067",
+      "merchant": "94760000000"
+    }
+  ],
+  "invalidRefundData": [
+    {
+      "title": "Invalid transactionId",
+      "body": { "mtn[transactionId]": "INVALID_TRANSACTION_ID"},
+      "expectedStatus":500,
+      "expectedMessage": "Transaction not found for refund"
+    },
+    {
+      "title": "Empty payment Type",
+      "body": { "mtn[paymentMethod]": " "},
+      "expectedStatus":400,
+      "expectedMessage": "Unsupported payment method"
+    },
+    {
+      "title": "Empty transactionId",
+      "body": { "mtn[transactionId]": " "},
+      "expectedStatus":500,
+      "expectedMessage": "Transaction not found for refund"
+    }
   ]
 }

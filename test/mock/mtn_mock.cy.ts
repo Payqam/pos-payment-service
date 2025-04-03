@@ -33,7 +33,6 @@ describe('MTN Payment Processing Tests', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Payment processed successfully'
@@ -47,7 +46,6 @@ describe('MTN Payment Processing Tests', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -63,7 +61,6 @@ describe('MTN Payment Processing Tests', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
@@ -73,16 +70,14 @@ describe('MTN Payment Processing Tests', () => {
             'PAYMENT_REQUEST_CREATED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
-          cy.task('log', response.body);
         });
       });
 
       it('Generates an Access Token', () => {
         cy.request({
           method: 'POST',
-          url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
+          url: `${Cypress.env('mtnSandboxUrl')}/collection/token/`,
           headers: {
             'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNCollectionSubscriptionKey')}`,
             Authorization:
@@ -94,7 +89,6 @@ describe('MTN Payment Processing Tests', () => {
         }).then((response) => {
           expect(response.status).to.eq(200);
           accessToken = response.body.access_token;
-          cy.task('log', accessToken);
           Cypress.env('accessToken', accessToken);
         });
       });
@@ -102,7 +96,7 @@ describe('MTN Payment Processing Tests', () => {
       it('Checks Transaction Status', () => {
         cy.request({
           method: 'GET',
-          url: `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${Cypress.env('transactionId')}`,
+          url: `${Cypress.env('mtnSandboxUrl')}/collection/v1_0/requesttopay/${Cypress.env('transactionId')}`,
           headers: {
             'X-Target-Environment': 'sandbox',
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
@@ -110,7 +104,6 @@ describe('MTN Payment Processing Tests', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property('status', 'PENDING');
         });
       });
@@ -132,9 +125,7 @@ describe('MTN Payment Processing Tests', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -179,7 +170,6 @@ describe('MTN Payment Processing Tests', () => {
             'ServiceType__c',
             'MTN MOMO'
           );
-          cy.task('log', response.body);
         });
       });
     });
@@ -213,7 +203,6 @@ describe('Validate Refund Scenario', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Payment processed successfully'
@@ -226,7 +215,6 @@ describe('Validate Refund Scenario', () => {
             response.body.transactionDetails.status
           );
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(1000);
         });
@@ -248,7 +236,6 @@ describe('Validate Refund Scenario', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Refund processed successfully'
@@ -287,7 +274,6 @@ describe('Validate Refund Scenario', () => {
           });
           externalId1 =
             response.body.transaction.Item.customerRefundResponse[0].externalId;
-          cy.task('log', `External ID 1: ${externalId1}`);
           Cypress.env('externalId1', externalId1);
 
           expect(response.body.transaction.Item.merchantRefundResponse)
@@ -309,9 +295,7 @@ describe('Validate Refund Scenario', () => {
           ).to.equal(test.amount);
           MerchantExternalId1 =
             response.body.transaction.Item.merchantRefundResponse[0].externalId;
-          cy.task('log', `MerchantExternal ID 1: ${MerchantExternalId1}`);
           Cypress.env('MerchantExternalId1', MerchantExternalId1);
-          cy.task('log', response.body);
         });
       });
 
@@ -332,9 +316,7 @@ describe('Validate Refund Scenario', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -358,7 +340,6 @@ describe('Validate Refund Scenario', () => {
             'MerchantId__c',
             'M123'
           );
-          cy.task('log', response.body);
         });
       });
 
@@ -379,7 +360,6 @@ describe('Validate Refund Scenario', () => {
             'Net_Amount__c',
             String(test.amount)
           );
-          cy.task('log', response.body);
         });
       });
 
@@ -400,7 +380,6 @@ describe('Validate Refund Scenario', () => {
             'Net_Amount__c',
             String(test.amount)
           );
-          cy.task('log', response.body);
         });
       });
     });
@@ -430,7 +409,6 @@ describe('Validate Refund Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Payment processed successfully'
@@ -444,7 +422,6 @@ describe('Validate Refund Scenario', () => {
         );
 
         transactionId = response.body.transactionDetails.transactionId;
-        cy.task('log', `Transaction ID : ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(1000);
       });
@@ -466,7 +443,6 @@ describe('Validate Refund Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Refund processed successfully'
@@ -495,7 +471,6 @@ describe('Validate Refund Scenario', () => {
         expect(response.body.transaction.Item.status).to.eq(
           'MERCHANT_REFUND_SUCCESSFUL'
         );
-        cy.task('log', response.body);
       });
     });
 
@@ -515,7 +490,6 @@ describe('Validate Refund Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Refund processed successfully'
@@ -554,9 +528,7 @@ describe('Validate Refund Scenario', () => {
         });
         externalId1 =
           response.body.transaction.Item.customerRefundResponse[0].externalId;
-        cy.task('log', `External ID 1: ${externalId1}`);
         Cypress.env('externalId1', externalId1);
-
         expect(
           response.body.transaction.Item.customerRefundResponse[1]
         ).to.deep.include({
@@ -566,16 +538,14 @@ describe('Validate Refund Scenario', () => {
         });
         externalId2 =
           response.body.transaction.Item.customerRefundResponse[1].externalId;
-        cy.task('log', `External ID 2: ${externalId2}`);
-        Cypress.env('externalId2', externalId2); // Store in Cypress.env
-        cy.task('log', response.body);
+        Cypress.env('externalId2', externalId2);
       });
     });
 
     it('Generates an Access Token', () => {
       cy.request({
         method: 'POST',
-        url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
+        url: `${Cypress.env('mtnSandboxUrl')}/collection/token/`,
         headers: {
           'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNCollectionSubscriptionKey')}`,
           Authorization:
@@ -587,7 +557,6 @@ describe('Validate Refund Scenario', () => {
       }).then((response) => {
         expect(response.status).to.eq(200);
         accessToken = response.body.access_token;
-        cy.task('log', accessToken);
         Cypress.env('accessToken', accessToken);
       });
     });
@@ -595,7 +564,7 @@ describe('Validate Refund Scenario', () => {
     it('Checks Transaction Status from merchant to PayQam', () => {
       cy.request({
         method: 'GET',
-        url: `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${Cypress.env('transactionId')}`,
+        url: `${Cypress.env('mtnSandboxUrl')}/collection/v1_0/requesttopay/${Cypress.env('transactionId')}`,
         headers: {
           'X-Target-Environment': 'sandbox',
           Authorization: `Bearer ${Cypress.env('accessToken')}`,
@@ -603,7 +572,6 @@ describe('Validate Refund Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property('status', 'SUCCESSFUL');
       });
     });
@@ -625,9 +593,7 @@ describe('Validate Refund Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         accessToken = response.body.access_token;
-        cy.task('log', `access_token : ${accessToken}`);
         Cypress.env('accessToken', accessToken);
         cy.wait(500);
       });
@@ -650,7 +616,6 @@ describe('Validate Refund Scenario', () => {
           'MerchantId__c',
           'M123'
         );
-        cy.task('log', response.body);
       });
     });
 
@@ -671,7 +636,6 @@ describe('Validate Refund Scenario', () => {
           'Net_Amount__c',
           '500'
         );
-        cy.task('log', response.body);
       });
     });
 
@@ -692,7 +656,6 @@ describe('Validate Refund Scenario', () => {
           'Net_Amount__c',
           '500'
         );
-        cy.task('log', response.body);
       });
     });
   });

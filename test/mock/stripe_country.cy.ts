@@ -24,8 +24,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -60,7 +58,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Payment processed successfully'
@@ -75,7 +72,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -92,7 +88,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
@@ -102,7 +97,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             'CHARGE_UPDATE_SUCCEEDED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -117,7 +111,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
           expect(response.body).to.have.property('currency', 'eur');
@@ -145,9 +138,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -157,7 +148,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
         cy.wait(2000);
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+          url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Net_Amount__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
           headers: {
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
           },
@@ -192,7 +183,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             'ServiceType__c',
             'Stripe'
           );
-          cy.task('log', response.body);
         });
       });
     });
@@ -220,8 +210,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             expect(response.status).to.eq(200);
             expect(response.body).to.have.property('id');
             paymentMethodId = response.body.id;
-            cy.task('log', response.body);
-            cy.task('log', paymentMethodId);
             Cypress.env('paymentMethodId', paymentMethodId);
             cy.wait(500);
           });
@@ -256,7 +244,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             expect(response.body).to.have.property(
               'message',
               'Payment processed successfully'
@@ -270,7 +257,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'succeeded'
             );
             transactionId = response.body.transactionDetails.transactionId;
-            cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
             Cypress.env('transactionId', transactionId);
             cy.wait(500);
           });
@@ -287,7 +273,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             expect(response.body).to.have.property(
               'message',
               'Transaction retrieved successfully'
@@ -297,7 +282,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'CHARGE_UPDATE_SUCCEEDED'
             );
             uniqueId = response.body.transaction.Item.uniqueId;
-            cy.task('log', ` ${uniqueId}`);
             Cypress.env('uniqueId', uniqueId);
           });
           cy.wait(500);
@@ -312,7 +296,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
 
             expect(response.body).to.have.property('status', 'succeeded');
             expect(response.body).to.have.property('amount', 120000);
@@ -341,9 +324,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             accessToken = response.body.access_token;
-            cy.task('log', `access_token : ${accessToken}`);
             Cypress.env('accessToken', accessToken);
             cy.wait(500);
           });
@@ -353,7 +334,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           cy.wait(2000);
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+            url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Net_Amount__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
             headers: {
               Authorization: `Bearer ${Cypress.env('accessToken')}`,
             },
@@ -391,7 +372,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'ServiceType__c',
               'Stripe'
             );
-            cy.task('log', response.body);
           });
         });
       });
@@ -420,8 +400,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             expect(response.status).to.eq(200);
             expect(response.body).to.have.property('id');
             paymentMethodId = response.body.id;
-            cy.task('log', response.body);
-            cy.task('log', paymentMethodId);
             Cypress.env('paymentMethodId', paymentMethodId);
             cy.wait(500);
           });
@@ -456,7 +434,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             expect(response.body).to.have.property(
               'message',
               'Payment processed successfully'
@@ -471,7 +448,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             );
 
             transactionId = response.body.transactionDetails.transactionId;
-            cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
             Cypress.env('transactionId', transactionId);
             cy.wait(500);
           });
@@ -488,7 +464,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             expect(response.body).to.have.property(
               'message',
               'Transaction retrieved successfully'
@@ -498,7 +473,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'CHARGE_UPDATE_SUCCEEDED'
             );
             uniqueId = response.body.transaction.Item.uniqueId;
-            cy.task('log', ` ${uniqueId}`);
             Cypress.env('uniqueId', uniqueId);
           });
           cy.wait(500);
@@ -513,7 +487,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
 
             expect(response.body).to.have.property('status', 'succeeded');
             expect(response.body).to.have.property('amount', 120000);
@@ -542,9 +515,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             accessToken = response.body.access_token;
-            cy.task('log', `access_token : ${accessToken}`);
             Cypress.env('accessToken', accessToken);
             cy.wait(500);
           });
@@ -554,7 +525,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           cy.wait(2000);
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+            url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Net_Amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
             headers: {
               Authorization: `Bearer ${Cypress.env('accessToken')}`,
             },
@@ -592,7 +563,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'ServiceType__c',
               'Stripe'
             );
-            cy.task('log', response.body);
           });
         });
       });
@@ -621,8 +591,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             expect(response.status).to.eq(200);
             expect(response.body).to.have.property('id');
             paymentMethodId = response.body.id;
-            cy.task('log', response.body);
-            cy.task('log', paymentMethodId);
             Cypress.env('paymentMethodId', paymentMethodId);
             cy.wait(500);
           });
@@ -669,10 +637,8 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'status',
               'requires_action'
             );
-            cy.task('log', response.body);
             expect(response.body).not.to.have.property('uniqueId');
             transactionId = response.body.transactionDetails.transactionId;
-            cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
             Cypress.env('transactionId', transactionId);
             cy.wait(500);
           });
@@ -689,7 +655,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             expect(response.body).to.have.property(
               'message',
               'Transaction retrieved successfully'
@@ -699,7 +664,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'INTENT_REQUIRES_ACTION'
             );
             uniqueId = response.body.transaction.Item.uniqueId;
-            cy.task('log', ` ${uniqueId}`);
             Cypress.env('uniqueId', uniqueId);
           });
           cy.wait(500);
@@ -714,7 +678,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
 
             expect(response.body).to.have.property('status', 'requires_action');
             expect(response.body).to.have.property('amount', 120000);
@@ -743,9 +706,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
             },
           }).then((response) => {
             expect(response.status).to.eq(200);
-            cy.task('log', response.body);
             accessToken = response.body.access_token;
-            cy.task('log', `access_token : ${accessToken}`);
             Cypress.env('accessToken', accessToken);
             cy.wait(500);
           });
@@ -755,7 +716,7 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
           cy.wait(2000);
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
+            url: `${Cypress.env('salesforceServiceUrl')}status__c,ServiceType__c,Merchant_Phone__c,Customer_Phone__c,amount__c,Fee__c,Currency__c,MerchantId__c,Net_Amount__c,Name+FROM+Transaction__c+WHERE+transactionId__c='${Cypress.env('transactionId')}'`,
             headers: {
               Authorization: `Bearer ${Cypress.env('accessToken')}`,
             },
@@ -793,7 +754,6 @@ describe('Successful Payment -  Cards by Country-Americas', () => {
               'ServiceType__c',
               'Stripe'
             );
-            cy.task('log', response.body);
           });
         });
       });

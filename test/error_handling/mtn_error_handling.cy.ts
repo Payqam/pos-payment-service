@@ -29,9 +29,7 @@ describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -47,7 +45,6 @@ describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body.transaction.Item).to.have.property(
             'status',
             'PAYMENT_FAILED'
@@ -55,7 +52,6 @@ describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
           expect(
             response.body.transaction.Item.paymentResponse
           ).to.have.property('reason', test.reason);
-          cy.task('log', response.body);
         });
       });
 
@@ -76,9 +72,7 @@ describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -99,9 +93,7 @@ describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
             'PAYMENT_FAILED'
           );
           Id = response.body.records[0].Id;
-          cy.task('log', `Id : ${Id}`);
           Cypress.env('Id', Id);
-          cy.task('log', response.body);
         });
       });
 
@@ -114,7 +106,6 @@ describe('MTN Request to Pay Payer Tests - Negative Scenarios', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body.records[0]).to.have.property(
             'Error_Code__c',
             test.Error_Code__c
@@ -159,7 +150,6 @@ describe('Validate Refund Negative Scenario', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Payment processed successfully'
@@ -173,7 +163,6 @@ describe('Validate Refund Negative Scenario', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(1000);
         });
@@ -195,7 +184,6 @@ describe('Validate Refund Negative Scenario', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Refund processed successfully'
@@ -225,7 +213,6 @@ describe('Validate Refund Negative Scenario', () => {
           failOnStatusCode: false,
         }).then((response) => {
           expect(response.status).to.eq(400);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Refund amount exceeds the original transaction amount'
@@ -264,7 +251,6 @@ describe('Validate Refund Negative Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Payment processed successfully'
@@ -278,7 +264,6 @@ describe('Validate Refund Negative Scenario', () => {
         );
 
         transactionId = response.body.transactionDetails.transactionId;
-        cy.task('log', `Transaction ID : ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(1000);
       });
@@ -300,7 +285,6 @@ describe('Validate Refund Negative Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Refund processed successfully'
@@ -329,7 +313,6 @@ describe('Validate Refund Negative Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Refund processed successfully'
@@ -359,7 +342,6 @@ describe('Validate Refund Negative Scenario', () => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(400);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Refund amount exceeds the original transaction amount'
@@ -397,7 +379,6 @@ describe('Validate Refund Negative Scenario', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Payment processed successfully'
@@ -411,7 +392,6 @@ describe('Validate Refund Negative Scenario', () => {
         );
 
         transactionId = response.body.transactionDetails.transactionId;
-        cy.task('log', `Transaction ID : ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(1000);
       });
@@ -434,7 +414,6 @@ describe('Validate Refund Negative Scenario', () => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(400);
-        cy.task('log', response.body);
         expect(response.body).to.have.property(
           'message',
           'Refund amount exceeds the original transaction amount'
@@ -473,7 +452,6 @@ describe(`Verify error for refunding failure for an invalid transaction ID`, () 
       },
     }).then((response) => {
       expect(response.status).to.eq(200);
-      cy.task('log', response.body);
       expect(response.body).to.have.property(
         'message',
         'Payment processed successfully'
@@ -487,7 +465,6 @@ describe(`Verify error for refunding failure for an invalid transaction ID`, () 
       );
 
       transactionId = response.body.transactionDetails.transactionId;
-      cy.task('log', `Transaction ID : ${transactionId}`);
       Cypress.env('transactionId', transactionId);
       cy.wait(1000);
     });
@@ -509,13 +486,15 @@ describe(`Verify error for refunding failure for an invalid transaction ID`, () 
       },
       failOnStatusCode: false,
     }).then((response) => {
-      expect(response.status).to.eq(500);
+      expect(response.status).to.eq(400);
       expect(response.body).to.have.property(
         'message',
         'Transaction not found for refund'
       );
-      expect(response.body).to.have.property('errorCode', 'UNEXPECTED_ERROR');
-      cy.task('log', response.body);
+      expect(response.body).to.have.property(
+        'errorCode',
+        'TRANSACTION_NOT_FOUND'
+      );
       cy.wait(500);
     });
   });
@@ -547,7 +526,6 @@ describe('MTN Payment Processing Tests - Negative Scenarios', () => {
         },
       }).then((response) => {
         expect(response.status).to.eq(403);
-        cy.task('log', response.body);
         expect(response.body).to.have.property('message');
         expect(response.body.message).to.include('Forbidden');
       });
@@ -579,7 +557,6 @@ describe('MTN Payment Processing Tests - Negative Scenarios', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(test.expectedStatus);
-          cy.task('log', response.body);
           expect(response.body).to.have.property('message');
           expect(response.body.message).to.include(test.expectedMessage);
         });
@@ -599,7 +576,6 @@ describe('MTN Payment Processing Tests - Negative Scenarios', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
         });
       });
     });
@@ -619,7 +595,6 @@ describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () =
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
@@ -630,7 +605,7 @@ describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () =
       it('Generates an Access Token', () => {
         cy.request({
           method: 'POST',
-          url: 'https://sandbox.momodeveloper.mtn.com/collection/token/',
+          url: `${Cypress.env('mtnSandboxUrl')}/collection/token/`,
           headers: {
             'Ocp-Apim-Subscription-Key': `${Cypress.env('MTNCollectionSubscriptionKey')}`,
             Authorization:
@@ -642,7 +617,6 @@ describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () =
         }).then((response) => {
           expect(response.status).to.eq(200);
           accessToken = response.body.access_token;
-          cy.task('log', accessToken);
           Cypress.env('accessToken', accessToken);
         });
       });
@@ -650,7 +624,7 @@ describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () =
       it(`Checks Transaction Status for ${test.title}`, () => {
         cy.request({
           method: 'GET',
-          url: `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${test.transactionId}`,
+          url: `${Cypress.env('mtnSandboxUrl')}/collection/v1_0/requesttopay/${test.transactionId}`,
           headers: {
             'X-Target-Environment': 'sandbox',
             Authorization: `Bearer ${Cypress.env('accessToken')}`,
@@ -659,7 +633,6 @@ describe('MTN Account Holder Active Party Code Tests - Negative Scenarios', () =
           failOnStatusCode: false,
         }).then((response) => {
           expect(response.status).to.eq(404);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Requested resource was not found.'

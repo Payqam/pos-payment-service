@@ -28,8 +28,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -64,7 +62,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Payment processed successfully'
@@ -79,7 +76,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           );
 
           transactionId = response.body.transactionDetails.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -96,7 +92,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property(
             'message',
             'Transaction retrieved successfully'
@@ -106,7 +101,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
             'CHARGE_UPDATE_SUCCEEDED'
           );
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -121,7 +115,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body).to.have.property('status', 'succeeded');
           expect(response.body).to.have.property('amount', 120000);
           expect(response.body).to.have.property('currency', 'eur');
@@ -149,9 +142,7 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -192,7 +183,6 @@ describe('Edge Cases Payment Scenarios - Card Validation', () => {
             'ServiceType__c',
             'Stripe'
           );
-          cy.task('log', response.body);
         });
       });
     });
@@ -221,8 +211,6 @@ describe('Decline Card Payment', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -257,11 +245,9 @@ describe('Decline Card Payment', () => {
           },
           failOnStatusCode: false,
         }).then((response) => {
-          cy.task('log', response.body);
           expect(response.status).to.eq(502);
           expect(response.body.message).to.include(card.decline_reason);
           transactionId = response.body.details.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -283,7 +269,6 @@ describe('Decline Card Payment', () => {
             .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
 
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -298,7 +283,6 @@ describe('Decline Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body.last_payment_error).to.have.property(
             'code',
             card.Error_Code__c
@@ -327,9 +311,7 @@ describe('Decline Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -349,9 +331,7 @@ describe('Decline Card Payment', () => {
             .to.have.property('status__c')
             .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
           Id = response.body.records[0].Id;
-          cy.task('log', `Id : ${Id}`);
           Cypress.env('Id', Id);
-          cy.task('log', response.body);
         });
       });
 
@@ -364,7 +344,6 @@ describe('Decline Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body.records[0]).to.have.property(
             'Error_Code__c',
             card.Error_Code__c
@@ -405,8 +384,6 @@ describe('Fraud Prevention Card Payment', () => {
           expect(response.status).to.eq(200);
           expect(response.body).to.have.property('id');
           paymentMethodId = response.body.id;
-          cy.task('log', response.body);
-          cy.task('log', paymentMethodId);
           Cypress.env('paymentMethodId', paymentMethodId);
           cy.wait(500);
         });
@@ -442,11 +419,9 @@ describe('Fraud Prevention Card Payment', () => {
           },
           failOnStatusCode: false,
         }).then((response) => {
-          cy.task('log', response.body);
           expect(response.status).to.eq(502);
           expect(response.body.message).to.include(card.decline_details);
           transactionId = response.body.details.transactionId;
-          cy.task('log', `Transaction ID : ${transactionId}`);
           Cypress.env('transactionId', transactionId);
           cy.wait(500);
         });
@@ -468,7 +443,6 @@ describe('Fraud Prevention Card Payment', () => {
             .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
 
           uniqueId = response.body.transaction.Item.uniqueId;
-          cy.task('log', ` ${uniqueId}`);
           Cypress.env('uniqueId', uniqueId);
         });
         cy.wait(500);
@@ -483,7 +457,6 @@ describe('Fraud Prevention Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body.last_payment_error).to.have.property(
             'code',
             'card_declined'
@@ -512,9 +485,7 @@ describe('Fraud Prevention Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           accessToken = response.body.access_token;
-          cy.task('log', `access_token : ${accessToken}`);
           Cypress.env('accessToken', accessToken);
           cy.wait(500);
         });
@@ -530,13 +501,11 @@ describe('Fraud Prevention Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          // expect(response.body.records[0])
-          //   .to.have.property('status__c')
-          //   .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
+          expect(response.body.records[0])
+            .to.have.property('status__c')
+            .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
           Id = response.body.records[0].Id;
-          cy.task('log', `Id : ${Id}`);
           Cypress.env('Id', Id);
-          cy.task('log', response.body);
         });
       });
 
@@ -549,7 +518,6 @@ describe('Fraud Prevention Card Payment', () => {
           },
         }).then((response) => {
           expect(response.status).to.eq(200);
-          cy.task('log', response.body);
           expect(response.body.records[0]).to.have.property(
             'Error_Code__c',
             'card_declined'
@@ -589,8 +557,6 @@ testData.CVCCheckFails.forEach((card) => {
         expect(response.status).to.eq(200);
         expect(response.body).to.have.property('id');
         paymentMethodId = response.body.id;
-        cy.task('log', response.body);
-        cy.task('log', paymentMethodId);
         Cypress.env('paymentMethodId', paymentMethodId);
         cy.wait(500);
       });
@@ -626,11 +592,9 @@ testData.CVCCheckFails.forEach((card) => {
         },
         failOnStatusCode: false,
       }).then((response) => {
-        cy.task('log', response.body);
         expect(response.status).to.eq(502);
         expect(response.body.message).to.include(card.decline_details);
         transactionId = response.body.details.transactionId;
-        cy.task('log', `Transaction ID : ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(500);
       });
@@ -652,7 +616,6 @@ testData.CVCCheckFails.forEach((card) => {
           .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
 
         uniqueId = response.body.transaction.Item.uniqueId;
-        cy.task('log', ` ${uniqueId}`);
         Cypress.env('uniqueId', uniqueId);
       });
       cy.wait(500);
@@ -667,7 +630,6 @@ testData.CVCCheckFails.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body.last_payment_error).to.have.property(
           'code',
           'incorrect_cvc'
@@ -696,9 +658,7 @@ testData.CVCCheckFails.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         accessToken = response.body.access_token;
-        cy.task('log', `access_token : ${accessToken}`);
         Cypress.env('accessToken', accessToken);
         cy.wait(500);
       });
@@ -718,9 +678,7 @@ testData.CVCCheckFails.forEach((card) => {
           .to.have.property('status__c')
           .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
         Id = response.body.records[0].Id;
-        cy.task('log', `Id : ${Id}`);
         Cypress.env('Id', Id);
-        cy.task('log', response.body);
       });
     });
 
@@ -733,7 +691,6 @@ testData.CVCCheckFails.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body.records[0]).to.have.property(
           'Error_Code__c',
           'incorrect_cvc'
@@ -772,8 +729,6 @@ testData.elevatedRisk.forEach((card) => {
         expect(response.status).to.eq(200);
         expect(response.body).to.have.property('id');
         paymentMethodId = response.body.id;
-        cy.task('log', response.body);
-        cy.task('log', paymentMethodId);
         Cypress.env('paymentMethodId', paymentMethodId);
         cy.wait(500);
       });
@@ -807,7 +762,6 @@ testData.elevatedRisk.forEach((card) => {
           },
         },
       }).then((response) => {
-        cy.task('log', response.body);
         expect(response.status).to.eq(200);
         expect(response.body).to.have.property(
           'message',
@@ -823,7 +777,6 @@ testData.elevatedRisk.forEach((card) => {
         );
 
         transactionId = response.body.transactionDetails.transactionId;
-        cy.task('log', `Transaction ID for ${card.type}: ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(500);
       });
@@ -839,7 +792,6 @@ testData.elevatedRisk.forEach((card) => {
           'x-api-key': Cypress.env('x-api-key'),
         },
       }).then((response) => {
-        cy.task('log', response.body);
         expect(response.status).to.eq(200);
         expect(response.body).to.have.property(
           'message',
@@ -856,7 +808,6 @@ testData.elevatedRisk.forEach((card) => {
           response.body.transaction.Item.chargeResponse.outcome
         ).to.have.property('reason', 'elevated_risk_level');
         uniqueId = response.body.transaction.Item.uniqueId;
-        cy.task('log', ` ${uniqueId}`);
         Cypress.env('uniqueId', uniqueId);
       });
       cy.wait(500);
@@ -871,7 +822,6 @@ testData.elevatedRisk.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
 
         expect(response.body).to.have.property('status', 'succeeded');
         expect(response.body).to.have.property('amount', 120000);
@@ -897,9 +847,7 @@ testData.elevatedRisk.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         accessToken = response.body.access_token;
-        cy.task('log', `access_token : ${accessToken}`);
         Cypress.env('accessToken', accessToken);
         cy.wait(500);
       });
@@ -945,9 +893,7 @@ testData.elevatedRisk.forEach((card) => {
           'Stripe'
         );
         Id = response.body.records[0].Id;
-        cy.task('log', `Id : ${Id}`);
         Cypress.env('Id', Id);
-        cy.task('log', response.body);
       });
     });
   });
@@ -974,8 +920,6 @@ testData.CVCCheckFails.forEach((card) => {
         expect(response.status).to.eq(200);
         expect(response.body).to.have.property('id');
         paymentMethodId = response.body.id;
-        cy.task('log', response.body);
-        cy.task('log', paymentMethodId);
         Cypress.env('paymentMethodId', paymentMethodId);
         cy.wait(500);
       });
@@ -1010,13 +954,11 @@ testData.CVCCheckFails.forEach((card) => {
         },
         failOnStatusCode: false,
       }).then((response) => {
-        cy.task('log', response.body);
         expect(response.status).to.not.eq(200);
         expect(response.status).to.eq(502);
         expect(response.body).to.have.property('error');
         expect(response.body.message).to.include(card.decline_details);
         transactionId = response.body.details.transactionId;
-        cy.task('log', `Transaction ID : ${transactionId}`);
         Cypress.env('transactionId', transactionId);
         cy.wait(500);
       });
@@ -1038,7 +980,6 @@ testData.CVCCheckFails.forEach((card) => {
           .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
 
         uniqueId = response.body.transaction.Item.uniqueId;
-        cy.task('log', ` ${uniqueId}`);
         Cypress.env('uniqueId', uniqueId);
       });
       cy.wait(500);
@@ -1053,7 +994,6 @@ testData.CVCCheckFails.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body.last_payment_error).to.have.property(
           'code',
           'incorrect_cvc'
@@ -1082,9 +1022,7 @@ testData.CVCCheckFails.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         accessToken = response.body.access_token;
-        cy.task('log', `access_token : ${accessToken}`);
         Cypress.env('accessToken', accessToken);
         cy.wait(500);
       });
@@ -1104,9 +1042,7 @@ testData.CVCCheckFails.forEach((card) => {
           .to.have.property('status__c')
           .oneOf(['CHARGE_FAILED', 'INTENT_REQUIRES_PAYMENT_METHOD']);
         Id = response.body.records[0].Id;
-        cy.task('log', `Id : ${Id}`);
         Cypress.env('Id', Id);
-        cy.task('log', response.body);
       });
     });
 
@@ -1119,7 +1055,6 @@ testData.CVCCheckFails.forEach((card) => {
         },
       }).then((response) => {
         expect(response.status).to.eq(200);
-        cy.task('log', response.body);
         expect(response.body.records[0]).to.have.property(
           'Error_Code__c',
           'incorrect_cvc'
@@ -1166,7 +1101,6 @@ testData.fraud_Address.forEach((card) => {
         );
         expect(response.body.error.message).to.include('address_line1');
         expect(response.body.error.message).to.include('address_zip');
-        cy.task('log', response.body);
       });
     });
   });
@@ -1199,10 +1133,6 @@ describe('Negative Payment Scenarios - Card Validation', () => {
         expect(response.body).to.have.property('error');
         expect(response.body.error).to.have.property('code', test.code);
         expect(response.body.error).to.have.property('message', test.message);
-        cy.task(
-          'log',
-          `${test.title} - Response: ${JSON.stringify(response.body)}`
-        );
       });
     });
   });
@@ -1228,7 +1158,6 @@ testData.declineCardIncorrectNumber.forEach((card) => {
         failOnStatusCode: false,
       }).then((response) => {
         expect(response.status).to.eq(402);
-        cy.task('log', response.body);
         cy.wait(500);
       });
     });
@@ -1260,10 +1189,6 @@ describe('Empty fields and unsupported Payment Scenarios - Card Validation', () 
         expect(response.status).to.not.eq(200);
         expect(response.status).to.eq(400);
         expect(response.body).to.have.property('error');
-        cy.task(
-          'log',
-          `${test.title} - Response: ${JSON.stringify(response.body)}`
-        );
       });
     });
   });
