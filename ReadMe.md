@@ -8,7 +8,8 @@ The **PayQAM Android POS Payment Service** is a secure and scalable payment proc
 
 The architecture illustrates the end-to-end flow of payment processing, incorporating security, scalability, and fault tolerance.
 
-## ![Architecture Diagram](./Architecture_Diagram.png)
+## ![PayQam Architecture](https://github.com/user-attachments/assets/1d2e7838-d3f8-4a8f-bf08-a604c0fc94b1)
+
 
 ## **Key Features**
 
