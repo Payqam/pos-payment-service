@@ -1,17 +1,20 @@
 import { expect } from '@jest/globals';
-import { PaymentService } from '../../../../src/functions/transaction-process/paymentService';
-import { KmsService } from '../../../../src/services/kmsService';
-import { DynamoDBService } from '../../../../src/services/dynamodbService';
-import { TransactionProcessService } from '../../../../src/functions/transaction-process/handler';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { Logger } from '@mu-ts/logger';
+import { TransactionProcessService } from '../../../../src/functions/transaction-process/handler';
 
+// Mock the LoggerService first
 const mockLogger = {
   info: jest.fn(),
-  error: jest.fn(), // This prevents console.error output
+  error: jest.fn(),
   debug: jest.fn(),
   warn: jest.fn(),
 } as unknown as Logger;
+
+// Then import and mock other dependencies
+import { PaymentService } from '../../../../src/functions/transaction-process/paymentService';
+import { KmsService } from '../../../../src/services/kmsService';
+import { DynamoDBService } from '../../../../src/services/dynamodbService';
 
 jest.mock('../../../../src/functions/transaction-process/paymentService');
 jest.mock('../../../../src/services/kmsService');
@@ -25,6 +28,7 @@ describe('TransactionProcessService', () => {
   let service: TransactionProcessService;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     (PaymentService as jest.Mock).mockImplementation(() => mockPaymentService);
     (KmsService as jest.Mock).mockImplementation(() => mockKmsService);
     (DynamoDBService as jest.Mock).mockImplementation(() => mockDbService);
@@ -129,5 +133,50 @@ describe('TransactionProcessService', () => {
     expect(response.body).toContain(
       'Missing required fields: merchantId or merchantMobileNo'
     );
+  });
+
+  test('should process Orange Money payment successfully', async () => {
+    const mockTransactionId = 'orange-123';
+    (mockPaymentService.processPayment as jest.Mock).mockResolvedValue(mockTransactionId);
+    
+    const event = {
+      httpMethod: 'POST',
+      body: JSON.stringify({
+        amount: 1000,
+        paymentMethod: 'ORANGE',
+        customerPhone: '22501234567',
+        currency: 'XOF'
+      }),
+    } as APIGatewayProxyEvent;
+
+    const response = await service.processTransaction(event);
+    
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Payment processed successfully');
+    expect(response.body).toContain(mockTransactionId);
+    expect(mockPaymentService.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 1000,
+        paymentMethod: 'ORANGE',
+        customerPhone: '22501234567',
+        currency: 'XOF'
+      })
+    );
+  });
+
+  test('should return error when customer phone is missing for Orange Money', async () => {
+    const event = {
+      httpMethod: 'POST',
+      body: JSON.stringify({
+        amount: 1000,
+        paymentMethod: 'ORANGE',
+        currency: 'XOF'
+      }),
+    } as APIGatewayProxyEvent;
+
+    const response = await service.processTransaction(event);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain('Missing required field: customerPhone for Orange Money payment');
   });
 });

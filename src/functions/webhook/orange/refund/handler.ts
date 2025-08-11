@@ -12,9 +12,9 @@ import {
 import { SNSService } from '../../../../services/snsService';
 import { PaymentResponse } from '../../../../model';
 import { SecretsManagerService } from '../../../../services/secretsManagerService';
-import { TEST_NUMBERS } from 'configurations/sandbox/orange/testNumbers';
-import { REFUND_SCENARIOS } from 'configurations/sandbox/orange/scenarios';
-import { OrangePaymentStatus } from 'src/types/orange';
+import { TEST_NUMBERS } from '../../../../../configurations/sandbox/orange/testNumbers';
+import { REFUND_SCENARIOS } from '../../../../../configurations/sandbox/orange/scenarios';
+import { OrangePaymentStatus } from '../../../../types/orange';
 import { registerRedactFilter } from '../../../../../utils/redactUtil';
 
 const sensitiveFields = [

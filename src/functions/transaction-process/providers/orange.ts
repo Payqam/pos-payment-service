@@ -11,8 +11,8 @@ import {
   PaymentInitResponse,
   PaymentResponse,
 } from '../../../model';
-import { OrangePaymentStatus } from 'src/types/orange';
-import { PAYMENT_SCENARIOS, TEST_NUMBERS } from 'configurations/sandbox/orange';
+import { OrangePaymentStatus } from '../../../types/orange';
+import { TEST_NUMBERS, PAYMENT_SCENARIOS } from '../../../../configurations/sandbox/orange';
 import { EnhancedError, ErrorCategory } from '../../../../utils/errorHandler';
 
 /**
